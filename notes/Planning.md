@@ -10,6 +10,7 @@ The compilers and build tools for these languages targetting WASM necessarily in
  * the language itself,
  * the interface with "all" systems or compilation outputs it can produce,
  * the WASM specification/format.
+
 By corresponding and compiling directly to the semantics of WASM, complexity in wallrs is reduced to the bare minimum in all of the above categories.
 
 1. Each wallrs source code file can be deterministically converted into a single WASM module.
