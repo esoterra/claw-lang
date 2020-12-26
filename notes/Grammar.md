@@ -2,6 +2,8 @@
 
 **Note:** This is in an early work in progress state and is likely incomplete and inconsistent.
 
+**Note:** Work on the grammar has halted in favor of high-level language design.
+
 ```abnf
 identifier = /[_a-zA-Z][_a-zA-Z0-9]*/
 number = //
