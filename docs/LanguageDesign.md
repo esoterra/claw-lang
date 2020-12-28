@@ -6,20 +6,31 @@ The integer types in WebAssembly are the following
  * Unsigned Integers (u*nn*): `u32`, `u64`
  * Integers (i*nn*): `i32`, `i64` (no sign information)
 
+Some arithmetic operators or comparators work the same whether they are operating on unsigned integers or twos-compliment signed integers, and some work differently.
+ * Same - Add, Subtract, Multiply, Shift Left, Rotate Left, Rotate Right, Bitwise-And, Bitwise-Or, Bitwise-XOR
+ * Different - Divide, Remainder, Shift Right, Less-than, Greter-than, Less-than or equal, Greater-than or equal
+ 
+Instead of using the signedness of the input data (which isn't preserved),
+WebAssembly simply treats all numbers the same and has different instructions for treating the inputs as signed or unsigned.
 
-Standard arithmetic operations on integers tend to operate on `i32` or `i63` as signedness does not impact the way that they operate.
-
-Conventional programming language models all track signedness information for integers statically, because it is common for programmers to expect a specific signedness. Wallrs would follow this convention and store, propagate, and validate signed integer types in expressions.
+Conventional programming language models all track signedness information for integers statically,
+because programmers are used to the language choosing the right operation based on the type and signedness of the values.
+Wallrs would follow this convention and store, propagate, and validate signed integer types in expressions.
 
 A programming model for this system should
  * allow casting from s*nn* or u*nn* integers to i*nn* integers implicitly,
  * allow casting between s*nn* and u*nn* integers explicitly,
  * validate that the type inputs of arithmetic expressions match,
 
+## Boolean Values
+
+WASM does not have support for a boolean type, instead all comparison or "rel" operators yield an integer that is 1 if the condition is true and 0 otherwise.
+Additionally, there are only bitwise boolean operators which when applied to integers 1 or 0, fill the role of logical operators.
+
 # Floating-Point Types
 
-WebAssembly provides a 32 and 64 bit floating point type.
-These types support all of the standard operations.
+WebAssembly provides a 32 and 64 bit floating point type, which support the operations you would expect.
+Floating-point numbers can be converted to or from integers, which will be supported as an explicit cast (e.g. `fval as i32`).
 
 # Variables
 
@@ -186,3 +197,11 @@ struct Slice[T,...] {
 In WebAssembly 
 
 
+
+
+# Appendix
+```rust
+fnType ::= fn(valType*) -> valType
+valtype ::= i32 | i64 | f32 | f64 | Pointer[pointable, o, a, m] | Slice[pointable, o, a, m]
+pointable ::= i8 | i16 | i32 | i64 | f32 | f64 | Ptr[pointable, o, a, m] | Slice[pointable, o, a, m]
+```

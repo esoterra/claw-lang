@@ -72,6 +72,14 @@ pub enum Token {
     #[token("for")]
     For,
     
+    /// The In Keyword
+    #[token("in")]
+    In,
+
+    /// The as Keyword
+    #[token("as")]
+    As,
+    
     /// The Let Keyword
     #[token("let")]
     Let,
@@ -182,32 +190,53 @@ pub enum Token {
     #[token("+")]
     Add,
 
+    /// Add and Assign Operator "+="
+    #[token("+=")]
+    AddAssign,
+
     /// Subtraction Operator "-"
     #[token("-")]
     Sub,
+
+    /// Subtract and Assign Operator "-="
+    #[token("-=")]
+    SubAssign,
 
     /// Star Operator "*" (used for dereference and multiply)
     #[token("*")]
     Star,
 
+    /// Star Operator "*=" (used for multiply)
+    #[token("*=")]
+    StarAssign,
+
     /// Division Operator "/"
     #[token("/")]
     Div,
 
+    /// Division Operator "/"
+    #[token("/=")]
+    DivAssign,
+
     /// The Period or Dot Operator "."
     #[token(".")]
     Dot,
+
+    /// The Range Operator ".."
+    #[token("..")]
+    Range,
     
     /// Colon Symbol ":"
     #[token(":")]
     Colon,
     
+    /// Double Colon Symbol "::"
+    #[token("::")]
+    DoubleColon,
+
     /// Semicolon Symbol ";"
     #[token(";")]
     Semicolon,
-
-    // add += and related operators
-    // add 
 }
 
 /// The ID for a Token
