@@ -25,7 +25,7 @@ pub enum Token {
     CharLiteral,
 
     /// A Decimal number literal
-    #[regex(r"[1-9]\d*(\.\d+)")]
+    #[regex(r"[1-9]\d*(\.\d+)?")]
     DecLiteral,
 
     /// A Binary number literal
@@ -43,6 +43,10 @@ pub enum Token {
     Identifier,
 
     // Keywords -----------------------------------------
+    
+    /// The Export Keyword
+    #[token("export")]
+    Export,
 
     /// The Import Keyword
     #[token("import")]
@@ -51,10 +55,6 @@ pub enum Token {
     /// The From Keyword
     #[token("from")]
     From,
-    
-    /// The Export Keyword
-    #[token("export")]
-    Export,
     
     /// The Function "fn" Keyword
     #[token("fn")]

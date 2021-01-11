@@ -1,5 +1,5 @@
 [package]
-name = "wallrs"
+name = "wrought"
 version = "0.1.0"
 authors = ["Kyle Brown <kylebrw@gmail.com>"]
 edition = "2018"
