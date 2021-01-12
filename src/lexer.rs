@@ -57,7 +57,7 @@ pub enum Token {
 
     /// A Decimal number literal
     #[regex(r"[0-9][_0-9]*", |lex| parse_decint_literal(lex.slice()))]
-    DecIntLiteral(u32),
+    DecIntLiteral(u64),
 
     /// A Decimal floating point literal
     #[regex(r"[0-9][_0-9]*\.[0-9][_0-9]*", |lex| parse_decfloat_literal(lex.slice()))]
@@ -65,11 +65,11 @@ pub enum Token {
 
     /// A Binary number literal
     #[regex(r"0b[01][_01]*", |lex| parse_bin_literal(lex.slice()))]
-    BinLiteral(u32),
+    BinLiteral(u64),
 
     /// A Hexadecimal number literal
     #[regex(r"0x[0-9a-fA-F][_0-9a-fA-F]*", |lex| parse_hex_literal(lex.slice()))]
-    HexLiteral(u32),
+    HexLiteral(u64),
 
     /// An Identifier
     #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| String::from(lex.slice()))]
@@ -93,13 +93,17 @@ pub enum Token {
     #[token("fn")]
     Fn,
     
+    /// The Table Keyword
+    #[token("table")]
+    Table,
+    
+    /// The Memory "mem" Keyword
+    #[token("mem")]
+    Memory,
+    
     /// The If Keyword
     #[token("if")]
     If,
-    
-    /// The Loop Keyword
-    #[token("loop")]
-    Loop,
     
     /// The For Keyword
     #[token("for")]
@@ -108,10 +112,86 @@ pub enum Token {
     /// The In Keyword
     #[token("in")]
     In,
+    
+    /// The Loop Keyword
+    #[token("loop")]
+    Loop,
+    
+    /// The Break Keyword
+    #[token("break")]
+    Break,
+    
+    /// The Continue Keyword
+    #[token("continue")]
+    Continue,
+    
+    /// The Return Keyword
+    #[token("return")]
+    Return,
 
-    /// The as Keyword
+    /// The Pointer Type Keyword
+    #[token("Ptr")]
+    Ptr,
+    
+    /// The Slice Type Keyword
+    #[token("Slice")]
+    Slice,
+
+    /// The Unsigned 8-bit Integer Type Keyword 
+    #[token("u8")]
+    U8,
+
+    /// The Unsigned 16-bit Integer Type Keyword 
+    #[token("u16")]
+    U16,
+
+    /// The Unsigned 32-bit Integer Type Keyword 
+    #[token("u32")]
+    U32,
+
+    /// The Unsigned 64-bit Integer Type Keyword 
+    #[token("u64")]
+    U64,
+
+    /// The Signed 8-bit Integer Type Keyword 
+    #[token("s8")]
+    S8,
+
+    /// The Signed 16-bit Integer Type Keyword 
+    #[token("s16")]
+    S16,
+
+    /// The Signed 32-bit Integer Type Keyword 
+    #[token("s32")]
+    S32,
+
+    /// The Signed 32-bit Integer Type Keyword 
+    #[token("s64")]
+    S64,
+
+    /// The 32-bit Integer Type Keyword 
+    #[token("i32")]
+    I32,
+
+    /// The 32-bit Integer Type Keyword 
+    #[token("i64")]
+    I64,
+
+    /// The 32-bit Floating-point Type Keyword
+    #[token("f32")]
+    F32,
+
+    /// The 64-bit Floating-point Type Keyword
+    #[token("f64")]
+    F64,
+
+    /// The As Keyword
     #[token("as")]
     As,
+
+    /// The At Keyword
+    #[token("at")]
+    At,
     
     /// The Let Keyword
     #[token("let")]
@@ -121,45 +201,17 @@ pub enum Token {
     #[token("mut")]
     Mut,
     
-    /// The Unsigned 32-bit Integer Type Keyword 
-    #[token("u32")]
-    U32,
+    /// The Bool Keyword
+    #[token("bool")]
+    Bool,
     
-    /// The Unsigned 64-bit Integer Type Keyword 
-    #[token("u64")]
-    U64,
+    /// The True Keyword
+    #[token("true")]
+    True,
     
-    /// The Signed 32-bit Integer Type Keyword 
-    #[token("s32")]
-    S32,
-    
-    /// The Signed 32-bit Integer Type Keyword 
-    #[token("s64")]
-    S64,
-    
-    /// The 32-bit Integer Type Keyword 
-    #[token("i32")]
-    I32,
-    
-    /// The 32-bit Integer Type Keyword 
-    #[token("i64")]
-    I64,
-    
-    /// The 32-bit Floating-point Type Keyword
-    #[token("f32")]
-    F32,
-    
-    /// The 64-bit Floating-point Type Keyword
-    #[token("f64")]
-    F64,
-
-    /// The Pointer Type Keyword
-    #[token("Ptr")]
-    Ptr,
-    
-    /// The Slice Type Keyword
-    #[token("Slice")]
-    Slice,
+    /// The False Keyword
+    #[token("false")]
+    False,
 
     // Symbols -----------------------------------------
 
@@ -187,6 +239,30 @@ pub enum Token {
     #[token("]")]
     RBracket,
 
+    /// The Comma Delimiter ","
+    #[token(",")]
+    Comma,
+
+    /// The Period or Dot Operator "."
+    #[token(".")]
+    Dot,
+
+    /// The Range Operator ".."
+    #[token("..")]
+    Range,
+    
+    /// Colon Symbol ":"
+    #[token(":")]
+    Colon,
+    
+    /// Double Colon Symbol "::"
+    #[token("::")]
+    DoubleColon,
+
+    /// Semicolon Symbol ";"
+    #[token(";")]
+    Semicolon,
+
     /// Assignment Operator "="
     #[token("=")]
     Assign,
@@ -194,6 +270,90 @@ pub enum Token {
     /// The Right Arrow Symbol "->"
     #[token("->")]
     Arrow,
+
+    /// Addition Operator "+"
+    #[token("+")]
+    Add,
+
+    /// Subtraction Operator "-"
+    #[token("-")]
+    Sub,
+
+    /// Star Operator "*" (used for dereference and multiply)
+    #[token("*")]
+    Star,
+
+    /// Division Operator "/"
+    #[token("/")]
+    Div,
+
+    /// Modulo Operator "%"
+    #[token("%")]
+    Mod,
+
+    /// Invert Operator "!"
+    #[token("!")]
+    Invert,
+
+    /// Logical And Operator
+    #[token("and")]
+    LogicalAnd,
+
+    /// Logical Or Operator
+    #[token("or")]
+    LogicalOr,
+
+    /// Modulo Operator "|"
+    #[token("|")]
+    BitOr,
+
+    /// Modulo Operator "&"
+    #[token("&")]
+    BitAnd,
+
+    /// Modulo Operator "^"
+    #[token("^")]
+    BitXor,
+
+    /// Bit Shift Left Operator "<<"
+    #[token("<<")]
+    BitShiftL,
+
+    /// Bit Shift Right Operator ">>"
+    #[token(">>")]
+    BitShiftR,
+
+    /// Arithmetic Shift Right Operator ">>>"
+    #[token(">>>")]
+    ArithShiftR,
+
+    /// Bitwise-Or and Assign Operator "+="
+    #[token("|=")]
+    BitOrAssign,
+
+    /// Bitwise-And and Assign Operator "+="
+    #[token("&=")]
+    BitAndAssign,
+
+    /// Bitwsie-Xor and Assign Operator "+="
+    #[token("^=")]
+    BitXorAssign,
+
+    /// Add and Assign Operator "+="
+    #[token("+=")]
+    AddAssign,
+
+    /// Subtract and Assign Operator "-="
+    #[token("-=")]
+    SubAssign,
+
+    /// Star Operator "*=" (used for multiply)
+    #[token("*=")]
+    StarAssign,
+
+    /// Division Operator "/"
+    #[token("/=")]
+    DivAssign,
 
     /// Less-than Operator "<"
     #[token("<")]
@@ -217,59 +377,7 @@ pub enum Token {
 
     // Not Equals Operator "!="
     #[token("!=")]
-    NEQ,
-
-    /// Addition Operator "+"
-    #[token("+")]
-    Add,
-
-    /// Add and Assign Operator "+="
-    #[token("+=")]
-    AddAssign,
-
-    /// Subtraction Operator "-"
-    #[token("-")]
-    Sub,
-
-    /// Subtract and Assign Operator "-="
-    #[token("-=")]
-    SubAssign,
-
-    /// Star Operator "*" (used for dereference and multiply)
-    #[token("*")]
-    Star,
-
-    /// Star Operator "*=" (used for multiply)
-    #[token("*=")]
-    StarAssign,
-
-    /// Division Operator "/"
-    #[token("/")]
-    Div,
-
-    /// Division Operator "/"
-    #[token("/=")]
-    DivAssign,
-
-    /// The Period or Dot Operator "."
-    #[token(".")]
-    Dot,
-
-    /// The Range Operator ".."
-    #[token("..")]
-    Range,
-    
-    /// Colon Symbol ":"
-    #[token(":")]
-    Colon,
-    
-    /// Double Colon Symbol "::"
-    #[token("::")]
-    DoubleColon,
-
-    /// Semicolon Symbol ";"
-    #[token(";")]
-    Semicolon,
+    NEQ
 }
 
 
@@ -395,7 +503,7 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
     None
 }
 
-fn parse_decint_literal(s: &str) -> Option<u32> {
+fn parse_decint_literal(s: &str) -> Option<u64> {
     s.replace("_", "").parse().ok()
 }
 
@@ -403,12 +511,12 @@ fn parse_decfloat_literal(s: &str) -> Option<f64> {
     s.replace("_", "").parse().ok()
 }
 
-fn parse_bin_literal(s: &str) -> Option<u32> {
-    u32::from_str_radix(&s[2..].replace("_", ""),  2).ok()   
+fn parse_bin_literal(s: &str) -> Option<u64> {
+    u64::from_str_radix(&s[2..].replace("_", ""),  2).ok()   
 }
 
-fn parse_hex_literal(s: &str) -> Option<u32> {
-    u32::from_str_radix(&s[2..].replace("_", ""),  16).ok()
+fn parse_hex_literal(s: &str) -> Option<u64> {
+    u64::from_str_radix(&s[2..].replace("_", ""),  16).ok()
 }
 
 #[cfg(test)]
