@@ -338,9 +338,14 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
     let mut buf = String::new();
 
     let mut starting_hashes = 0;
+    let mut starting_quote = false;
 
     while let Some(c) = c_iter.next() {
-        if c == '"' { break; }
+        lex.bump(c.len_utf8());
+        if c == '"' {
+            starting_quote = true;
+            break;
+        }
         if c == '#' {
             starting_hashes += 1;
         } else {
@@ -348,13 +353,17 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
         }
     }
 
+    if !starting_quote {
+        return None;
+    }
+
     let mut seen_quote = false;
     let mut hash_count = 0;
 
     while let Some(c) = c_iter.next() {
+        lex.bump(c.len_utf8());
         if seen_quote && c == '#' {
             hash_count += 1;
-            lex.bump(1);
 
             if hash_count == starting_hashes {
                 return Some(buf);
@@ -364,14 +373,12 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
         
         // Append the unused marker quote
         if seen_quote {
-            lex.bump(1);
             buf.push('"');
         }
         // Reset the seen quote flag
         seen_quote = false;
 
         // Append the unused marker hashes
-        lex.bump(hash_count);
         for _ in 0..hash_count {
             buf.push('#');
         }
@@ -381,7 +388,6 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
         if c == '"' {
             seen_quote = true;
         } else {
-            lex.bump(c.len_utf8());
             buf.push(c);
         }
     }
@@ -390,99 +396,19 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
 }
 
 fn parse_decint_literal(s: &str) -> Option<u32> {
-    let mut acc: u32 = 0;
-
-    for c in s.chars() {
-        if c == '_' {
-            continue;
-        }
-
-        let digit = c as u32 - ('0' as u32);
-
-        acc = acc.checked_mul(10)?;
-        acc = acc.checked_add(digit as u32)?;
-    }
-
-    Some(acc)
+    s.replace("_", "").parse().ok()
 }
 
 fn parse_decfloat_literal(s: &str) -> Option<f64> {
-    let mut chars = s.chars();
-
-    let mut integral: u128 = 0;
-    let mut frac:     u128 = 0;
-    let mut frac_len: u32 = 0;
-
-    while let Some(c) = chars.next() {
-        if c == '.' { break; }
-        if c == '_' { continue; }
-
-        let digit = c as u32 - '0' as u32;
-        integral = integral.checked_mul(10)?;
-        integral = integral.checked_add(digit as u128)?;
-    }
-
-    for c in s.chars() {
-        if c == '_' {
-            continue;
-        }
-
-        let digit = c as u32 - '0' as u32;
-
-        frac = frac.checked_mul(10)?;
-        frac = frac.checked_add(digit as u128)?;
-        frac_len += 1;
-    }
-
-    let int_float: f64 = integral as f64;
-    let mut frac_float: f64 = frac as f64;
-    for _ in 0..frac_len {
-        frac_float /= 10.0;
-    }
-
-    let res = int_float + frac_float;
-    if res.is_nan() {
-        Some(res)
-    } else {
-        None
-    }
+    s.replace("_", "").parse().ok()
 }
 
 fn parse_bin_literal(s: &str) -> Option<u32> {
-    let mut acc: u32 = 0;
-
-    for c in s[2..].chars() {
-        if c == '_' {
-            continue;
-        }
-
-        let digit = c as u32 - ('0' as u32);
-
-        acc = acc.checked_mul(2)?;
-        acc = acc.checked_add(digit as u32)?;
-    }
-
-    Some(acc)
-    
+    u32::from_str_radix(&s[2..].replace("_", ""),  2).ok()   
 }
 
 fn parse_hex_literal(s: &str) -> Option<u32> {
-    let mut acc: u32 = 0;
-
-    for c in s[2..].chars() {
-        if c == '_' {
-            continue;
-        }
-
-        let c_str = format!("{}", c);
-        let digit = u32::from_str_radix(&c_str,  16).ok()?;
-
-        acc = acc.checked_mul(16)?;
-        acc = acc.checked_add(digit)?;
-    }
-
-    Some(acc)
-    
+    u32::from_str_radix(&s[2..].replace("_", ""),  16).ok()
 }
 
 #[cfg(test)]

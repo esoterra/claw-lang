@@ -1,0 +1,10 @@
+// This file is not intended to be parseable, and exists for validating the lexer
+let a = 0;
+let b = 1.5;
+let c = 0b101;
+let d = 0xF;
+let e = "This is a string";
+let e = "This string has a newline between the next two words, APPLE\nORANGE";
+let f = r#"This is a raw string"#;
+let g = r#"This raw string has a quote (") character"#;
+let h = r##"This raw string has a quote-hash ("#) sequence"##;
