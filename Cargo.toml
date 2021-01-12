@@ -2,7 +2,12 @@
 name = "wrought"
 version = "0.1.0"
 authors = ["Kyle Brown <kylebrw@gmail.com>"]
+license = "MIT OR Apache-2.0"
 edition = "2018"
+description = "A Rust implementation of the Wrought compiler"
+homepage = "https://github.com/wrought-lang/wrought-rs"
+repository = "https://github.com/wrought-lang/wrought-rs"
+readme = "README.md"
 
 [dependencies]
 clap = "3.0.0-beta.2"
