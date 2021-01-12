@@ -56,7 +56,14 @@ fn compile(args: Compile) -> Option<()> {
 
     match tokenize(simple_file) {
         Ok(token_data) => {
-            println!("Parsed Tokens:\n{:?}", token_data);
+            for token_m in token_data.tokens {
+                let diagnostic = Diagnostic::help()
+                    .with_message(format!("Interpretted as {:?}", token_m.value))
+                    .with_labels(vec![
+                        Label::primary((), token_m.span).with_message("matched input")
+                    ]);
+                print_diagnostic(&token_data.file, diagnostic);
+            }
         },
         Err(token_errors) => {
             for error_span in token_errors.errors {
