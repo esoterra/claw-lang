@@ -24,7 +24,8 @@ struct Arguments {
 
 #[derive(Clap, Debug)]
 enum Command {
-    Compile(Compile)
+    Compile(Compile),
+    CheckLex(CheckLex)
 }
 
 #[derive(Clap, Debug)]
@@ -34,12 +35,22 @@ struct Compile {
 
 }
 
+#[derive(Clap, Debug)]
+struct CheckLex {
+    #[clap(long)]
+    input_path: PathBuf
+
+}
+
 fn main() {
     let args = Arguments::parse();
 
     match args.command {
-        Command::Compile(compile_command) => {
-            if let Some(_) = compile(compile_command) {
+        Command::Compile(_) => {
+            println!("Not yet implemented!");
+        },
+        Command::CheckLex(checklex_command) => {
+            if let Some(_) = check_lex(checklex_command) {
                 println!("Finished");
             } else {
                 println!("Ended before finishing");
@@ -48,7 +59,7 @@ fn main() {
     }
 }
 
-fn compile(args: Compile) -> Option<()> {
+fn check_lex(args: CheckLex) -> Option<()> {
     let file_name = args.input_path.file_name()?.to_string_lossy().to_string();
     let file_string = std::fs::read_to_string(args.input_path).ok()?;
 
