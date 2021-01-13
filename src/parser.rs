@@ -1,7 +1,7 @@
 
 use codespan_reporting::files::SimpleFile;
 
-use crate::lexer::{ Token, TokenData, TokenErrors };
+use crate::lexer::{ Token, TokenData };
 use crate::ast::{ M, Module };
 
 struct ParserData {

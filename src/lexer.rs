@@ -3,13 +3,11 @@ use logos::{Logos};
 use codespan::Span;
 use codespan_reporting::files::SimpleFile;
 
-use crate::ast::M;
-
 /// The tokens from a successful parse
 #[derive(Debug, Clone)]
 pub struct TokenData {
     pub file: SimpleFile<String, String>,
-    pub tokens: Vec<M<Token>>
+    pub tokens: Vec<(Token, Span)>
 }
 
 /// A collection of locations where the tokenizer failed to match a token
@@ -20,19 +18,19 @@ pub struct TokenErrors {
 }
 
 pub fn tokenize(file: SimpleFile<String, String>) -> Result<TokenData, TokenErrors> {
-    let tokens: Vec<M<Token>> = Token::lexer(file.source())
+    let tokens: Vec<(Token, Span)> = Token::lexer(file.source())
         .spanned()
         .map(|(token, span)| 
-            M {
-                value: token,
-                span: Span::new(span.start as u32, span.end as u32)
-            }
+            (
+                token,
+                Span::new(span.start as u32, span.end as u32) 
+            )
         )
         .collect();
     
     let errors: Vec<Span> = tokens.iter()
-        .filter(|token_m| token_m.value == Token::Error)
-        .map(|token_m| token_m.span)
+        .filter(|(token, _span)| token == &Token::Error)
+        .map(|(_token, span)| *span)
         .collect();
 
     if errors.is_empty() {
@@ -426,7 +424,7 @@ fn parse_escaped_char<'src>(lex: &mut std::str::Chars<'src>) -> Option<(char, us
         'u'  => {
             // Combine next for characters together, fail if they can't be found
             let next_4: [Option<char>; 4] = [lex.next(), lex.next(), lex.next(), lex.next()];
-            let next_4: Option<Vec<char>> = next_4.into_iter().map(|c| *c).collect();
+            let next_4: Option<Vec<char>> = next_4.iter().map(|c| *c).collect();
             let next_4: String            = next_4?.into_iter().collect();
 
             let code_point = u32::from_str_radix(&next_4, 16).ok()?;
@@ -532,15 +530,15 @@ mod test {
         let ident_test = Token::Identifier(String::from("test"));
         let ident_a = Token::Identifier(String::from("a"));
         let output = vec![
-            M { value: Token::Fn,      span: Span::new(0, 2) },
-            M { value: ident_test,     span: Span::new(3, 7) },
-            M { value: Token::LParen,  span: Span::new(7, 8) },
-            M { value: ident_a,        span: Span::new(8, 9) },
-            M { value: Token::Colon,   span: Span::new(9, 10) },
-            M { value: Token::U32,     span: Span::new(11, 14) },
-            M { value: Token::RParen,  span: Span::new(14, 15) },
-            M { value: Token::Arrow,   span: Span::new(16, 18) },
-            M { value: Token::U32,     span: Span::new(19, 22) }
+            ( Token::Fn,      Span::new(0, 2) ),
+            ( ident_test,     Span::new(3, 7) ),
+            ( Token::LParen,  Span::new(7, 8) ),
+            ( ident_a,        Span::new(8, 9) ),
+            ( Token::Colon,   Span::new(9, 10) ),
+            ( Token::U32,     Span::new(11, 14) ),
+            ( Token::RParen,  Span::new(14, 15) ),
+            ( Token::Arrow,   Span::new(16, 18) ),
+            ( Token::U32,     Span::new(19, 22) )
         ];
 
         match tokenize(input) {
@@ -556,13 +554,13 @@ mod test {
             r#"let a = "asdf\"";"#.into()
         );
         let ident_a = Token::Identifier(String::from("a"));
-        let string_asdf = Token::StringLiteral(String::from("asdf\\\";"));
+        let string_asdf = Token::StringLiteral(String::from(r#"asdf""#));
         let output = vec![
-            M { value: Token::Let,       span: Span::new(0, 3) },
-            M { value: ident_a,          span: Span::new(4, 5) },
-            M { value: Token::Assign,    span: Span::new(6, 7) },
-            M { value: string_asdf,      span: Span::new(8, 16) },
-            M { value: Token::Semicolon, span: Span::new(16, 17) }
+            ( Token::Let,       Span::new(0, 3) ),
+            ( ident_a,          Span::new(4, 5) ),
+            ( Token::Assign,    Span::new(6, 7) ),
+            ( string_asdf,      Span::new(8, 16) ),
+            ( Token::Semicolon, Span::new(16, 17) )
         ];
 
         match tokenize(input) {

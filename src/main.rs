@@ -67,11 +67,11 @@ fn check_lex(args: CheckLex) -> Option<()> {
 
     match tokenize(simple_file) {
         Ok(token_data) => {
-            for token_m in token_data.tokens {
+            for (token, span) in token_data.tokens {
                 let diagnostic = Diagnostic::help()
-                    .with_message(format!("Interpretted as {:?}", token_m.value))
+                    .with_message(format!("Interpretted as {:?}", token))
                     .with_labels(vec![
-                        Label::primary((), token_m.span).with_message("matched input")
+                        Label::primary((), span).with_message("matched input")
                     ]);
                 print_diagnostic(&token_data.file, diagnostic);
             }
