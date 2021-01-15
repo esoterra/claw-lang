@@ -25,7 +25,7 @@ struct Arguments {
 #[derive(Clap, Debug)]
 enum Command {
     Compile(Compile),
-    CheckLex(CheckLex)
+    Check(Check)
 }
 
 #[derive(Clap, Debug)]
@@ -36,32 +36,37 @@ struct Compile {
 }
 
 #[derive(Clap, Debug)]
-struct CheckLex {
+struct Check {
     #[clap(long)]
-    input_path: PathBuf
+    input_path: PathBuf,
+    #[clap(long, arg_enum)]
+    phase: Phase
+}
 
+#[derive(Clap, Debug)]
+enum Phase {
+    Lex,
+    Parse
 }
 
 fn main() {
     let args = Arguments::parse();
 
     match args.command {
-        Command::Compile(_) => {
-            println!("Not yet implemented!");
-        },
-        Command::CheckLex(checklex_command) => {
-            if let Some(_) = check_lex(checklex_command) {
+        Command::Check(Check { input_path, phase: Phase::Lex }) => {
+            if let Some(_) = check_lex(input_path) {
                 println!("Finished");
             } else {
                 println!("Ended before finishing");
             }
         }
+        _ => println!("Not yet implemented!")
     }
 }
 
-fn check_lex(args: CheckLex) -> Option<()> {
-    let file_name = args.input_path.file_name()?.to_string_lossy().to_string();
-    let file_string = std::fs::read_to_string(args.input_path).ok()?;
+fn check_lex(input_path: PathBuf) -> Option<()> {
+    let file_name = input_path.file_name()?.to_string_lossy().to_string();
+    let file_string = std::fs::read_to_string(input_path).ok()?;
 
     let simple_file = SimpleFile::new(file_name, file_string);
 

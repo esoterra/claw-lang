@@ -6,6 +6,7 @@ pub struct M<T> {
     pub span: Span,
     pub value: T
 }
+
 /// The metadata wrapper type
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MBox<T> {
