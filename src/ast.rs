@@ -1,4 +1,6 @@
-use codespan::Span;
+use miette::SourceSpan;
+
+type Span = SourceSpan;
 
 /// The metadata wrapper type
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -16,6 +18,7 @@ pub struct MBox<T> {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct ResultType {
+    pub parensthesis: Option<(Span, Span)>,
     pub results: Vec<M<ValType>>
 }
 
@@ -28,7 +31,7 @@ pub enum ValType {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BasicVal {
-    I32, I64, U32, U64, S32, S64, F32, F64
+    I32, I64, U32, U64, S32, S64, F32, F64, Bool
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -69,15 +72,16 @@ pub enum Item {
     Table(Table),
     Memory(Memory),
     Global(Global),
+    Struct(Struct)
 }
 
 /// 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Import {
-    pub import_kwd: Span,
-    pub import_name: M<String>,
     pub from_kwd: Span,
     pub module_name: M<String>,
+    pub import_kwd: Span,
+    pub import_name: M<String>,
     pub external_type: M<ExternalType>
 }
 
@@ -87,46 +91,20 @@ pub enum ExternalType {
     Function(FnType),
     Memory(MemType),
     MutGlobal {
-        mutability: Span,
+        mut_kwd: Span,
         value_type: M<ValType>
     },
     ConstGlobal {
-        mutability: Span,
+        const_kwd: Span,
         value_type: M<ValType>
     }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MemType {
+    mem_kwd: Span,
     min_pages: M<u64>,
     max_pages: Option<M<u64>>
-}
-
-/// 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Memory {
-    pub export: Option<Span>,
-    pub name: M<String>,
-    pub min_size: M<u64>,
-    pub max_size: Option<M<u64>>
-}
-
-/// 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Table {
-    pub export: Option<Span>,
-    pub name: M<String>,
-    pub min_size: M<u64>,
-    pub max_size: M<u64>
-}
-
-/// 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Global {
-    pub export: Option<Span>,
-    pub mutable: Option<Span>,
-    pub name: M<String>,
-    pub init_value: M<Expression>
 }
 
 /// 
@@ -141,8 +119,52 @@ pub struct Function {
 pub struct FunctionSignature {
     pub name: M<String>,
     pub arguments: Vec<(M<String>, M<ValType>)>,
-    pub result_type: M<ResultType>
+    pub result_type: ResultType
 }
+
+/// 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Table {
+    pub export: Option<Span>,
+    pub name: M<String>,
+    pub min_size: M<u64>,
+    pub max_size: M<u64>
+}
+
+/// 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Memory {
+    pub export: Option<Span>,
+    pub name: M<String>,
+    pub min_size: M<u64>,
+    pub max_size: Option<M<u64>>
+}
+
+/// 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Global {
+    pub export: Option<Span>,
+    pub mutable: Option<Span>,
+    pub name: M<String>,
+    pub init_value: M<Expression>
+}
+
+/// 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Struct {
+    pub struct_kwd: Span,
+    pub name: M<String>,
+    pub braces: (Span, Span),
+    pub members: Vec<StructMember>
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct StructMember {
+    pub name: M<String>,
+    pub colon: Span,
+    pub value_type: M<ValType>
+}
+
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block {
@@ -151,7 +173,6 @@ pub struct Block {
     pub end: Option<MBox<StatementEnd>>,
     pub end_brace: Span
 }
-
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Statement {
@@ -164,6 +185,10 @@ pub enum Statement {
         condition: M<Expression>,
         then_block: M<Block>,
         else_block: Option<M<ElseBlock>>
+    },
+    Loop {
+        kwd: Span,
+        body: Block
     },
     ForSlice {
         for_kwd: Span,
@@ -178,10 +203,6 @@ pub enum Statement {
         in_kwd: Span,
         lower_expr: M<Expression>,
         upper_expr: M<Expression>,
-        body: Block
-    },
-    Loop {
-        kwd: Span,
         body: Block
     },
     LetMut {
@@ -203,6 +224,24 @@ pub enum Statement {
     OpAssign {
         lvalue: M<LValue>,
         op_assign: M<OpAssign>,
+        expression: M<Expression>
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum StatementEnd {
+    Break {
+        kwd: Span,
+        result: Option<M<Expression>>
+    },
+    Return {
+        kwd: Span,
+        result: Option<M<Expression>>
+    },
+    Continue {
+        kwd: Span
+    },
+    Experssion {
         expression: M<Expression>
     }
 }
@@ -237,21 +276,6 @@ pub enum OpAssign {
 pub struct ElseBlock {
     pub kwd: Span,
     pub body: Block
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum StatementEnd {
-    Break {
-        kwd: Span,
-        result: Option<M<Expression>>
-    },
-    Return {
-        kwd: Span,
-        result: Option<M<Expression>>
-    },
-    Continue {
-        kwd: Span
-    }
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

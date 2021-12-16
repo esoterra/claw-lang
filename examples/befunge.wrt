@@ -10,7 +10,7 @@ struct Cell {
     counter: u16,
 }
 
-let mut grid: Slice[Cell];
+let mut grid: Slice[Cell] = memory[:];
 
 export fn init_grid(width: u32, height: u32) {
     grid_width = width;

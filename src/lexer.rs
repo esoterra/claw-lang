@@ -1,42 +1,55 @@
+
+use std::rc::Rc;
+
 use logos::{Logos};
 
-use codespan::Span;
-use codespan_reporting::files::SimpleFile;
+use miette::{NamedSource, Diagnostic, SourceSpan};
+use thiserror::Error;
 
-/// The tokens from a successful parse
-#[derive(Debug, Clone)]
+
+#[derive(Debug, PartialEq)]
 pub struct TokenData {
-    pub file: SimpleFile<String, String>,
-    pub tokens: Vec<(Token, Span)>
+    pub token: Token,
+    pub span: SourceSpan
 }
 
-/// A collection of locations where the tokenizer failed to match a token
-#[derive(Debug, Clone)]
-pub struct TokenErrors {
-    pub file: SimpleFile<String, String>,
-    pub errors: Vec<Span>
+
+#[derive(Error, Debug, Diagnostic)]
+#[error("The input did not match a token rule")]
+pub struct LexerError {
+    #[source_code]
+    src: Rc<NamedSource>,
+    #[label("This text was not recognized")]
+    span: SourceSpan,
 }
 
-pub fn tokenize(file: SimpleFile<String, String>) -> Result<TokenData, TokenErrors> {
-    let tokens: Vec<(Token, Span)> = Token::lexer(file.source())
+
+
+pub fn tokenize(src: Rc<NamedSource>, contents: String) -> Result<Vec<TokenData>, Vec<LexerError>> {
+    let tokens: Vec<TokenData> = Token::lexer(&contents)
         .spanned()
         .map(|(token, span)| 
-            (
+            TokenData {
                 token,
-                Span::new(span.start as u32, span.end as u32) 
-            )
+                span: SourceSpan::from(span)
+            }
         )
         .collect();
-    
-    let errors: Vec<Span> = tokens.iter()
-        .filter(|(token, _span)| token == &Token::Error)
-        .map(|(_token, span)| *span)
+
+    let errors: Vec<LexerError> = tokens.iter()
+        .filter(|token_data| token_data.token == Token::Error)
+        .map(|token_data|
+            LexerError {
+                src: src.clone(),
+                span: token_data.span.clone()
+            }
+        )
         .collect();
 
     if errors.is_empty() {
-        Ok(TokenData { file, tokens })
+        Ok(tokens)
     } else {
-        Err(TokenErrors { file, errors })
+        Err(errors)
     }
 }
 
@@ -523,49 +536,52 @@ mod test {
 
     #[test]
     fn tokenize_fn_declaration() {
-        let input = SimpleFile::new(
-            "test".into(),
-            "fn test(a: u32) -> u32".into()
-        );
+        let contents: String = "fn test(a: u32) -> u32".into();
+        let src = NamedSource::new("test", contents.clone());
         let ident_test = Token::Identifier(String::from("test"));
         let ident_a = Token::Identifier(String::from("a"));
         let output = vec![
-            ( Token::Fn,      Span::new(0, 2) ),
-            ( ident_test,     Span::new(3, 7) ),
-            ( Token::LParen,  Span::new(7, 8) ),
-            ( ident_a,        Span::new(8, 9) ),
-            ( Token::Colon,   Span::new(9, 10) ),
-            ( Token::U32,     Span::new(11, 14) ),
-            ( Token::RParen,  Span::new(14, 15) ),
-            ( Token::Arrow,   Span::new(16, 18) ),
-            ( Token::U32,     Span::new(19, 22) )
-        ];
+            ( Token::Fn,      SourceSpan::from(0..2) ),
+            ( ident_test,     SourceSpan::from(3..7) ),
+            ( Token::LParen,  SourceSpan::from(7..8) ),
+            ( ident_a,        SourceSpan::from(8..9) ),
+            ( Token::Colon,   SourceSpan::from(9..10) ),
+            ( Token::U32,     SourceSpan::from(11..14) ),
+            ( Token::RParen,  SourceSpan::from(14..15) ),
+            ( Token::Arrow,   SourceSpan::from(16..18) ),
+            ( Token::U32,     SourceSpan::from(19..22) )
+        ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
 
-        match tokenize(input) {
-            Ok(TokenData { file: _, tokens }) => assert_eq!(output, tokens),
+        match tokenize(Rc::new(src), contents) {
+            Ok(tokens) => assert_eq!(output, tokens),
             Err(_) => panic!("Should not have failed")
         }
     }
 
     #[test]
     fn tokenize_let() {
-        let input = SimpleFile::new(
-            "test".into(),
-            r#"let a = "asdf\"";"#.into()
-        );
+        let contents: String = r#"let a = "asdf\"";"#.into();
+        let src = NamedSource::new("test", contents.clone());
         let ident_a = Token::Identifier(String::from("a"));
         let string_asdf = Token::StringLiteral(String::from(r#"asdf""#));
         let output = vec![
-            ( Token::Let,       Span::new(0, 3) ),
-            ( ident_a,          Span::new(4, 5) ),
-            ( Token::Assign,    Span::new(6, 7) ),
-            ( string_asdf,      Span::new(8, 16) ),
-            ( Token::Semicolon, Span::new(16, 17) )
-        ];
+            ( Token::Let,       SourceSpan::from(0..3) ),
+            ( ident_a,          SourceSpan::from(4..5) ),
+            ( Token::Assign,    SourceSpan::from(6..7) ),
+            ( string_asdf,      SourceSpan::from(8..16) ),
+            ( Token::Semicolon, SourceSpan::from(16..17) )
+        ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
 
-        match tokenize(input) {
-            Ok(TokenData { file: _, tokens }) => assert_eq!(output, tokens),
+        match tokenize(Rc::new(src), contents) {
+            Ok(tokens) => assert_eq!(output, tokens),
             Err(_) => panic!("Should not have failed")
+        }
+    }
+
+    fn to_token_data(d: (Token, SourceSpan)) -> TokenData {
+        TokenData {
+            token: d.0,
+            span: d.1
         }
     }
 }
