@@ -1,10 +1,9 @@
-
-use std::rc::Rc;
-
 use logos::{Logos};
 
-use miette::{NamedSource, Diagnostic, SourceSpan};
+use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
+
+use crate::source::ArcSource;
 
 
 #[derive(Debug, PartialEq)]
@@ -16,16 +15,17 @@ pub struct TokenData {
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("The input did not match a token rule")]
+#[diagnostic()]
 pub struct LexerError {
     #[source_code]
-    src: Rc<NamedSource>,
+    src: ArcSource,
     #[label("This text was not recognized")]
     span: SourceSpan,
 }
 
 
 
-pub fn tokenize(src: Rc<NamedSource>, contents: String) -> Result<Vec<TokenData>, Vec<LexerError>> {
+pub fn tokenize(src: ArcSource, contents: String) -> Result<Vec<TokenData>, Vec<LexerError>> {
     let tokens: Vec<TokenData> = Token::lexer(&contents)
         .spanned()
         .map(|(token, span)| 
@@ -87,7 +87,7 @@ pub enum Token {
     Identifier(String),
 
     // Keywords -----------------------------------------
-    
+
     /// The Export Keyword
     #[token("export")]
     Export,
@@ -95,47 +95,47 @@ pub enum Token {
     /// The Import Keyword
     #[token("import")]
     Import,
-    
+
     /// The From Keyword
     #[token("from")]
     From,
-    
+
     /// The Function "fn" Keyword
     #[token("fn")]
     Fn,
-    
+
     /// The Table Keyword
     #[token("table")]
     Table,
-    
+
     /// The Memory "mem" Keyword
     #[token("mem")]
     Memory,
-    
+
     /// The If Keyword
     #[token("if")]
     If,
-    
+
     /// The For Keyword
     #[token("for")]
     For,
-    
+
     /// The In Keyword
     #[token("in")]
     In,
-    
+
     /// The Loop Keyword
     #[token("loop")]
     Loop,
-    
+
     /// The Break Keyword
     #[token("break")]
     Break,
-    
+
     /// The Continue Keyword
     #[token("continue")]
     Continue,
-    
+
     /// The Return Keyword
     #[token("return")]
     Return,
@@ -143,7 +143,7 @@ pub enum Token {
     /// The Pointer Type Keyword
     #[token("Ptr")]
     Ptr,
-    
+
     /// The Slice Type Keyword
     #[token("Slice")]
     Slice,
@@ -203,19 +203,19 @@ pub enum Token {
     /// The At Keyword
     #[token("at")]
     At,
-    
+
     /// The Let Keyword
     #[token("let")]
     Let,
-    
+
     /// The Mut Keyword
     #[token("mut")]
     Mut,
-    
+
     /// The Bool Keyword
     #[token("bool")]
     Bool,
-    
+
     /// The True Keyword
     #[token("true")]
     True,
@@ -261,11 +261,11 @@ pub enum Token {
     /// The Range Operator ".."
     #[token("..")]
     Range,
-    
+
     /// Colon Symbol ":"
     #[token(":")]
     Colon,
-    
+
     /// Double Colon Symbol "::"
     #[token("::")]
     DoubleColon,
@@ -489,7 +489,7 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
             }
             continue;
         }
-        
+
         // Append the unused marker quote
         if seen_quote {
             buf.push('"');
@@ -537,7 +537,7 @@ mod test {
     #[test]
     fn tokenize_fn_declaration() {
         let contents: String = "fn test(a: u32) -> u32".into();
-        let src = NamedSource::new("test", contents.clone());
+        let src = ArcSource::from_owned("test".into(), contents.clone());
         let ident_test = Token::Identifier(String::from("test"));
         let ident_a = Token::Identifier(String::from("a"));
         let output = vec![
@@ -552,7 +552,7 @@ mod test {
             ( Token::U32,     SourceSpan::from(19..22) )
         ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
 
-        match tokenize(Rc::new(src), contents) {
+        match tokenize(src, contents) {
             Ok(tokens) => assert_eq!(output, tokens),
             Err(_) => panic!("Should not have failed")
         }
@@ -561,7 +561,7 @@ mod test {
     #[test]
     fn tokenize_let() {
         let contents: String = r#"let a = "asdf\"";"#.into();
-        let src = NamedSource::new("test", contents.clone());
+        let src = ArcSource::from_owned("test".into(), contents.clone());
         let ident_a = Token::Identifier(String::from("a"));
         let string_asdf = Token::StringLiteral(String::from(r#"asdf""#));
         let output = vec![
@@ -572,7 +572,7 @@ mod test {
             ( Token::Semicolon, SourceSpan::from(16..17) )
         ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
 
-        match tokenize(Rc::new(src), contents) {
+        match tokenize(src, contents) {
             Ok(tokens) => assert_eq!(output, tokens),
             Err(_) => panic!("Should not have failed")
         }

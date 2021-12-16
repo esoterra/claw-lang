@@ -1,35 +1,36 @@
+use std::{path::PathBuf};
 
-use std::{path::PathBuf, rc::Rc};
-
-use clap::Clap;
+use clap::{Parser, ArgEnum};
 
 pub mod ast;
 pub mod lexer;
 pub mod parser;
+pub mod source;
 
 use lexer::tokenize;
-use miette::NamedSource;
+use source::ArcSource;
+use miette::{Report};
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct Arguments {
     #[clap(subcommand)]
     command: Command
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 enum Command {
     Compile(Compile),
     Check(Check)
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct Compile {
     #[clap(long)]
     input_path: PathBuf
 
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 struct Check {
     #[clap(long)]
     input_path: PathBuf,
@@ -37,7 +38,7 @@ struct Check {
     phase: Phase
 }
 
-#[derive(Clap, Debug)]
+#[derive(ArgEnum, Clone, Debug)]
 enum Phase {
     Lex,
     Parse
@@ -61,9 +62,9 @@ fn main() {
 fn check_lex(input_path: PathBuf) -> Option<()> {
     let file_name = input_path.file_name()?.to_string_lossy().to_string();
     let file_string = std::fs::read_to_string(input_path).ok()?;
-    let src: NamedSource = NamedSource::new(file_name, file_string.clone());
+    let src = ArcSource::from_owned(file_name, file_string.clone());
 
-    match tokenize(Rc::new(src), file_string) {
+    match tokenize(src, file_string) {
         Ok(tokens) => {
             for token_data in tokens {
                 println!("At {} matched {:?}", token_data.span.offset(), token_data.token);
@@ -71,7 +72,8 @@ fn check_lex(input_path: PathBuf) -> Option<()> {
         },
         Err(errors) => {
             for error in errors {
-                println!("{}", error);
+                println!("{:?}", error);
+                println!("{:?}", Report::new(error));
             }
         }
     }
