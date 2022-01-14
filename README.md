@@ -20,6 +20,5 @@ Until then, additions will be incrementally be added to the check command which 
 Wrought's tooling is implemented using the following libraries. It would not have been made without them.
 
 * `clap` - command line parsing
-* `codespan` and codespan-reporting - pretty error messages
+* `miette` - for formatting diagnostics
 * `logos` - the lexer / tokenizer generator
-* `parity-wasm` - a libary for interacting with the low-level WebAssembly formats
