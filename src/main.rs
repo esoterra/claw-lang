@@ -1,15 +1,13 @@
-use std::{path::PathBuf};
+use std::{path::PathBuf, sync::Arc};
 
 use clap::{Parser, ArgEnum};
 
 pub mod ast;
 pub mod lexer;
 pub mod parser;
-pub mod source;
 
 use lexer::tokenize;
-use source::ArcSource;
-use miette::{Report};
+use miette::{Report, NamedSource};
 
 #[derive(Parser, Debug)]
 struct Arguments {
@@ -62,7 +60,7 @@ fn main() {
 fn check_lex(input_path: PathBuf) -> Option<()> {
     let file_name = input_path.file_name()?.to_string_lossy().to_string();
     let file_string = std::fs::read_to_string(input_path).ok()?;
-    let src = ArcSource::from_owned(file_name, file_string.clone());
+    let src = Arc::new(NamedSource::new(file_name, file_string.clone()));
 
     match tokenize(src, file_string) {
         Ok(tokens) => {
@@ -72,7 +70,6 @@ fn check_lex(input_path: PathBuf) -> Option<()> {
         },
         Err(errors) => {
             for error in errors {
-                println!("{:?}", error);
                 println!("{:?}", Report::new(error));
             }
         }

@@ -1,9 +1,9 @@
+use std::sync::Arc;
+
 use logos::{Logos};
 
-use miette::{Diagnostic, SourceSpan};
+use miette::{Diagnostic, SourceSpan, NamedSource};
 use thiserror::Error;
-
-use crate::source::ArcSource;
 
 
 #[derive(Debug, PartialEq)]
@@ -18,14 +18,14 @@ pub struct TokenData {
 #[diagnostic()]
 pub struct LexerError {
     #[source_code]
-    src: ArcSource,
+    src: Arc<NamedSource>,
     #[label("This text was not recognized")]
     span: SourceSpan,
 }
 
 
 
-pub fn tokenize(src: ArcSource, contents: String) -> Result<Vec<TokenData>, Vec<LexerError>> {
+pub fn tokenize(src: Arc<NamedSource>, contents: String) -> Result<Vec<TokenData>, Vec<LexerError>> {
     let tokens: Vec<TokenData> = Token::lexer(&contents)
         .spanned()
         .map(|(token, span)| 
@@ -537,7 +537,7 @@ mod test {
     #[test]
     fn tokenize_fn_declaration() {
         let contents: String = "fn test(a: u32) -> u32".into();
-        let src = ArcSource::from_owned("test".into(), contents.clone());
+        let src = Arc::new(NamedSource::new(String::from("test"), contents.clone()));
         let ident_test = Token::Identifier(String::from("test"));
         let ident_a = Token::Identifier(String::from("a"));
         let output = vec![
@@ -561,7 +561,7 @@ mod test {
     #[test]
     fn tokenize_let() {
         let contents: String = r#"let a = "asdf\"";"#.into();
-        let src = ArcSource::from_owned("test".into(), contents.clone());
+        let src = Arc::new(NamedSource::new(String::from("test"), contents.clone()));
         let ident_a = Token::Identifier(String::from("a"));
         let string_asdf = Token::StringLiteral(String::from(r#"asdf""#));
         let output = vec![
