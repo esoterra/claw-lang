@@ -1,11 +1,11 @@
-use crate::ast::module::FunctionSignature;
-use crate::ast::types::ValType;
 use crate::lexer::Token;
 use crate::ast::{
     M, Span,
     module::{
-        Module, Item, Global, Function
-    }
+        Module, Item, Global,
+        Function, FunctionSignature 
+    },
+    types::ValType
 };
 use crate::parser::{
     ParserError, ParseInput,

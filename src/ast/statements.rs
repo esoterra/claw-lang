@@ -1,6 +1,6 @@
 use super::{
-    Span, MBox, Place,
-    expressions::Expression, M
+    Span, M, MBox, Place,
+    expressions::Expression
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -1,6 +1,9 @@
-use super::{ParserError, ParseInput};
-
-use crate::{ast::{expressions::{Expression, Literal, BinaryOp}, M, MBox, Place}, lexer::Token};
+use crate::lexer::Token;
+use crate::ast::{
+    M, MBox, Place,
+    expressions::{Expression, Literal, BinaryOp}
+};
+use crate::parser::{ParserError, ParseInput};
 
 pub fn parse_expression(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
     let mut root = parse_leaf(input)?;
