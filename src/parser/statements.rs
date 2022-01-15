@@ -50,12 +50,20 @@ fn parse_assign(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> 
     let expression = parse_expression(input)?;
     let semicolon = input.assert_next(Token::Semicolon)?;
 
+    let checkpoint = input.checkpoint();
+    let next = if let Ok(next) = parse_statement(input) {
+        Some(next)
+    } else {
+        input.restore(checkpoint);
+        None
+    };
+
     let span = place.span.clone();
     let statement = Statement {
         inner: StatementType::Assign {
             place, assign_op, expression
         },
-        next: None
+        next
     };
     Ok(MBox::new_range(statement, span, semicolon))
 }
