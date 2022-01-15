@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use logos::{Logos};
+use logos::Logos;
 
 use miette::{Diagnostic, SourceSpan, NamedSource};
 use thiserror::Error;

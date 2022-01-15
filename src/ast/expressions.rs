@@ -1,4 +1,4 @@
-use super::{M, MBox};
+use super::{M, MBox, Place};
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Expression {
@@ -11,8 +11,11 @@ pub enum Expression {
         operator: M<BinaryOp>,
         right: MBox<Expression>
     },
-    Variable {
-        ident: M<String>,
+    Place {
+        ident: M<Place>,
+    },
+    Literal {
+        value: M<Literal>,
     },
 }
 
@@ -26,11 +29,10 @@ pub enum UnaryOp {
 /// The supported binary operators
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum BinaryOp {
-    // 
+    // Arithmetic Operations
     Mult,
     Div,
     Mod,
-    //
     Add,
     Sub,
     // Shifting Operations
@@ -51,4 +53,9 @@ pub enum BinaryOp {
     // Logical Operations
     LogicalAnd,
     LogicalOr
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub enum Literal {
+    Integer(u64)
 }
