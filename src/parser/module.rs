@@ -1,13 +1,19 @@
-use crate::ast::M;
+use crate::ast::module::FunctionSignature;
+use crate::ast::types::ValType;
 use crate::lexer::Token;
 use crate::ast::{
-    Span,
+    M, Span,
     module::{
         Module, Item, Global, Function
     }
 };
-use super::expressions::parse_expression;
-use super::{ParserError, ParseInput};
+use crate::parser::{
+    ParserError, ParseInput,
+    expressions::parse_expression
+};
+
+use super::statements::parse_block;
+use super::types::parse_valtype;
 
 
 pub fn parse_module(input: &mut ParseInput) -> Result<Module, ParserError> {
@@ -62,5 +68,51 @@ fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Glob
 }
 
 fn parse_fn(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Function, ParserError> {
-    unreachable!()
+    let signature = parse_fn_signature(input)?;
+    let body = parse_block(input)?;
+
+    Ok(Function {
+        export_kwd,
+        signature,
+        body
+    })
+}
+
+fn parse_fn_signature(input: &mut ParseInput) -> Result<FunctionSignature, ParserError> {
+    let next = input.next()?;
+    let name = if let Token::Identifier(name) = &next.token {
+        let span = next.span.clone();
+        M::new(name.clone(), span)
+    } else { return Err(ParserError::UnexpectedToken) };
+
+    let _lparen = input.assert_next(Token::LParen)?;
+    let arguments = parse_arguments(input)?;
+    let _rparen = input.assert_next(Token::RParen)?;
+    let arrow = input.assert_next(Token::Arrow)?;
+    let result_type = parse_valtype(input)?;
+
+    Ok(FunctionSignature {
+        name,
+        arguments,
+        arrow,
+        result_type
+    })
+}
+
+fn parse_arguments(input: &mut ParseInput) -> Result<Vec<(M<String>, M<ValType>)>, ParserError> {
+    let mut arguments = Vec::new();
+    while input.peek()?.token != Token::RParen {
+        let next = input.next()?;
+        let name = if let Token::Identifier(name) = &next.token {
+            let span = next.span.clone();
+            M::new(name.clone(), span)
+        } else { return Err(ParserError::UnexpectedToken) };
+
+        let _colon = input.assert_next(Token::Colon)?;
+
+        let valtype = parse_valtype(input)?;
+
+        arguments.push((name, valtype));
+    }
+    Ok(arguments)
 }

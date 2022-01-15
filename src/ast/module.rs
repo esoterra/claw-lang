@@ -60,7 +60,7 @@ pub struct MemType {
 /// 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Function {
-    pub export: Option<Span>,
+    pub export_kwd: Option<Span>,
     pub signature: FunctionSignature,
     pub body: Block
 }
@@ -69,7 +69,8 @@ pub struct Function {
 pub struct FunctionSignature {
     pub name: M<String>,
     pub arguments: Vec<(M<String>, M<ValType>)>,
-    pub result_type: ValType
+    pub arrow: Span,
+    pub result_type: M<ValType>
 }
 
 /// 

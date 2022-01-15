@@ -48,7 +48,7 @@ fn parse_parenthetical(input: &mut ParseInput) -> Result<MBox<Expression>, Parse
 /// A place expression describes a memory location
 /// e.g. foobar, foobar[0], foobar[10][0]
 /// For now, ony plain identifiers are supported
-fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
+pub fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
     let next = input.next()?;
     if let Token::Identifier(ident) = &next.token {
         let ident_m = M::new(ident.clone(), next.span.clone());

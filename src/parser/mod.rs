@@ -1,6 +1,7 @@
 mod expressions;
 mod module;
 mod statements;
+mod types;
 
 use std::sync::Arc;
 
@@ -18,10 +19,10 @@ use self::module::parse_module;
 #[diagnostic()]
 pub enum ParserError{
     Base {
-        // #[source_code]
-        // src: Arc<NamedSource>,
-        // #[label("Unable to parse this code")]
-        // span: SourceSpan,
+        #[source_code]
+        src: Arc<NamedSource>,
+        #[label("Unable to parse this code")]
+        span: SourceSpan,
     },
     UnexpectedToken,
     EndOfInput,

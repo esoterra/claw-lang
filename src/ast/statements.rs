@@ -1,6 +1,6 @@
 use super::{
-    Span, M, MBox, Place,
-    expressions::Expression
+    Span, MBox, Place,
+    expressions::Expression, M
 };
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -13,14 +13,14 @@ pub struct Block {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Statement {
     pub inner: StatementType,
-    pub next: MBox<Statement>
+    pub next: Option<MBox<Statement>>
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum StatementType {
     Assign {
-        place: Place,
-        equals_op: Span,
+        place: M<Place>,
+        assign_op: Span,
         expression: MBox<Expression>
     },
     Return {
