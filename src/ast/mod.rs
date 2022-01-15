@@ -5,13 +5,19 @@ pub mod types;
 
 use miette::SourceSpan;
 
-type Span = SourceSpan;
+pub type Span = SourceSpan;
 
 /// The metadata wrapper type
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct M<T> {
     pub span: Span,
     pub value: T
+}
+
+impl<T> M<T> {
+    pub fn new(span: Span, value: T) -> Self {
+        M { span, value }
+    }
 }
 
 /// The metadata wrapper type

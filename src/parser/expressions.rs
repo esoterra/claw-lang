@@ -1,20 +1,19 @@
-use super::ParserError;
+use super::{ParserError, ParseInput};
 
-use crate::lexer::TokenData;
-use crate::ast::expressions::Expression;
+use crate::ast::{expressions::Expression, M};
 
-pub fn parse_expression(input: &[TokenData]) -> Result<Expression, ParserError> {
+pub fn parse_expression(input: &mut ParseInput) -> Result<M<Expression>, ParserError> {
     unreachable!()
 }
 
-fn parse_place(input: &[TokenData]) -> Result<Expression, ParserError> {
+fn parse_place(input: &mut ParseInput) -> Result<Expression, ParserError> {
     unreachable!()
 }
 
-fn parse_literal(input: &[TokenData]) -> Result<Expression, ParserError> {
+fn parse_literal(input: &mut ParseInput) -> Result<Expression, ParserError> {
     unreachable!()
 }
 
-fn parse_add(input: &[TokenData]) -> Result<Expression, ParserError> {
+fn parse_add(input: &mut ParseInput) -> Result<Expression, ParserError> {
     unreachable!()
 }

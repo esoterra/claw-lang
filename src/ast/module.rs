@@ -93,10 +93,13 @@ pub struct Memory {
 /// 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Global {
-    pub export: Option<Span>,
-    pub mutable: Option<Span>,
-    pub name: M<String>,
-    pub init_value: M<Expression>
+    pub export_kwd: Option<Span>,
+    pub let_kwd: Span,
+    pub mut_kwd: Option<Span>,
+    pub ident: M<String>,
+    pub assign: Span,
+    pub init_value: M<Expression>,
+    pub semicolon: Span
 }
 
 /// 
