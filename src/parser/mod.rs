@@ -116,8 +116,26 @@ pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Module, Pa
 }
 
 
+#[cfg(test)]
+mod tests {
+    
+    use std::sync::Arc;
+    use miette::NamedSource;
 
+    use crate::{
+        lexer::tokenize,
+        ast::Span,
+        parser::ParseInput
+    };
 
+    pub fn make_input(source: &str) -> ParseInput {
+        let src = Arc::new(NamedSource::new("test", source.to_string()));
+        let tokens = tokenize(src.clone(), source.to_string()).unwrap();
+        ParseInput::new(src, tokens)
+    }
 
-
+    pub fn make_span(start: usize, len: usize) -> Span {
+        Span::new(start.into(), len.into())
+    }
+}
 

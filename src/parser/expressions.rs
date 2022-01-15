@@ -79,3 +79,97 @@ fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
         _ => Err(ParserError::UnexpectedToken)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::tests::{make_input, make_span};
+    use super::*;
+
+    use crate::ast::expressions::{
+        Expression, Literal
+    };
+
+    #[test]
+    fn parsing_supports_dec_integer() {
+        let cases = &[
+            ("0", 0, make_span(0, 1)),
+            ("1", 1, make_span(0, 1)),
+            ("32", 32, make_span(0, 2)),
+            ("129", 129, make_span(0, 3))
+        ];
+        for (source, value, span) in cases.into_iter() {
+            let parsed_literal = M::new(Literal::Integer(*value), span.clone());
+            let parsed_expression = MBox::new(
+                Expression::Literal {
+                    value: M::new(Literal::Integer(*value), span.clone())
+                },
+                span.clone()
+            );
+            // parse_literal
+            let mut input = make_input(source);
+            assert_eq!(
+                parse_literal(&mut input).unwrap(),
+                parsed_literal
+            );
+            // parse_leaf
+            let mut input = make_input(source);
+            assert_eq!(
+                parse_leaf(&mut input).unwrap(),
+                parsed_expression
+            );
+            // parse_expression
+            let mut input = make_input(source);
+            assert_eq!(
+                parse_expression(&mut input).unwrap(),
+                parsed_expression
+            );
+        }
+    }
+
+    #[test]
+    fn parsing_supports_idents() {
+        let cases = &[
+            ("foo", make_span(0, 3)),
+            ("foobar", make_span(0, 6)),
+            ("asdf", make_span(0, 4)),
+            ("asdf2", make_span(0, 5))
+        ];
+        for (source, span) in cases.into_iter() {
+            let parsed_place = M::new(
+                Place::Identifier {
+                    ident: M::new(source.to_string(), span.clone())
+                },
+                span.clone()
+            );
+            let parsed_expression = MBox::new(
+                Expression::Place {
+                    place: M::new(
+                        Place::Identifier {
+                            ident: M::new(source.to_string(), span.clone())
+                        },
+                        span.clone()
+                    )
+                },
+                span.clone()
+            );
+            // parse_place
+            let mut input = make_input(source);
+            assert_eq!(
+                parse_place(&mut input).unwrap(),
+                parsed_place
+            );
+            // parse_leaf
+            let mut input = make_input(source);
+            assert_eq!(
+                parse_leaf(&mut input).unwrap(),
+                parsed_expression
+            );
+            // parse_expression
+            let mut input = make_input(source);
+            assert_eq!(
+                parse_expression(&mut input).unwrap(),
+                parsed_expression
+            );
+        }
+    }
+}
