@@ -35,12 +35,26 @@ pub struct ParseInput {
     index: usize
 }
 
+#[derive(Clone, Copy)]
+pub struct Checkpoint {
+    index: usize
+}
+
 impl ParseInput {
     pub fn new(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Self {
         ParseInput {
-            src, tokens,
+            src,
+            tokens,
             index: 0
         }
+    }
+
+    pub fn checkpoint(&self) -> Checkpoint {
+        Checkpoint { index: self.index }
+    }
+
+    pub fn restore(&mut self, checkpoint: Checkpoint) {
+        self.index = checkpoint.index
     }
 
     pub fn get_source(&self) -> Arc<NamedSource> {

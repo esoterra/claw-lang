@@ -12,7 +12,7 @@ pub enum Expression {
         right: MBox<Expression>
     },
     Place {
-        ident: M<Place>,
+        place: M<Place>,
     },
     Literal {
         value: M<Literal>,

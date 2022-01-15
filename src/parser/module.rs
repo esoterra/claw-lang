@@ -41,7 +41,7 @@ fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Glob
 
     let ident_token = input.next()?;
     let ident = if let Token::Identifier(ident) = ident_token.token.clone() {
-        M::new(ident_token.span.clone(), ident)
+        M::new(ident, ident_token.span.clone())
     } else {
         return Err(ParserError::UnexpectedToken)
     };

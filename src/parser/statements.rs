@@ -1,5 +1,6 @@
-use super::ParserError;
+use super::{ParserError, ParseInput};
 
+use crate::ast::MBox;
 use crate::lexer::{ Token, TokenData };
 use crate::ast::{ M,
     statements::{
@@ -7,18 +8,18 @@ use crate::ast::{ M,
     }
 };
 
-pub fn parse_block(input: &[TokenData]) -> Result<Block, ParserError> {
+pub fn parse_block(input: &mut ParseInput) -> Result<Block, ParserError> {
     unreachable!()
 }
 
-pub fn parse_statement(input: &[TokenData]) -> Result<Statement, ParserError> {
+pub fn parse_statement(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
     unreachable!()
 }
 
-fn parse_assign(input: &[TokenData]) -> Result<Statement, ParserError> {
+fn parse_assign(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
     unreachable!()
 }
 
-fn parse_return(input: &[TokenData]) -> Result<Statement, ParserError> {
+fn parse_return(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
     unreachable!()
 }

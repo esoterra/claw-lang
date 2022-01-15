@@ -4,7 +4,7 @@ use super::{
         FnType, ValType
     },
     statements::Block,
-    expressions::Expression
+    expressions::Expression, MBox
 };
 
 /// Each Wrought source file represents a module
@@ -98,7 +98,7 @@ pub struct Global {
     pub mut_kwd: Option<Span>,
     pub ident: M<String>,
     pub assign: Span,
-    pub init_value: M<Expression>,
+    pub init_value: MBox<Expression>,
     pub semicolon: Span
 }
 
