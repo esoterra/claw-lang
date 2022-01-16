@@ -24,7 +24,10 @@ pub enum ParserError{
         #[label("Unable to parse this code")]
         span: SourceSpan,
     },
-    UnexpectedToken,
+    UnexpectedToken {
+        description: String,
+        token: Option<Token>
+    },
     EndOfInput,
     NotYetSupported {
         feature: String,
@@ -61,6 +64,13 @@ impl ParseInput {
         }
     }
 
+    pub fn unexpected_token(&self, description: &str) -> ParserError {
+        ParserError::UnexpectedToken {
+            description: description.to_string(),
+            token: self.tokens.get(self.index).map(|t| t.token.clone())
+        }
+    }
+
     pub fn checkpoint(&self) -> Checkpoint {
         Checkpoint { index: self.index }
     }
@@ -87,22 +97,23 @@ impl ParseInput {
         result.ok_or(ParserError::EndOfInput)
     }
 
-    pub fn assert_next(&mut self, token: Token) -> Result<Span, ParserError> {
+    pub fn assert_next(&mut self, token: Token, description: &str) -> Result<Span, ParserError> {
         let next = self.next()?;
         if next.token == token {
             Ok(next.span.clone())
         } else {
-            Err(ParserError::UnexpectedToken)
+            Err(self.unexpected_token(description))
         }
     }
 
     pub fn next_if(&mut self, token: Token) -> Option<Span> {
-        let next = self.next().ok()?;
-        if next.token == token {
-            Some(next.span.clone())
-        } else {
-            None
+        {
+            let next = self.peek().ok()?;
+            if next.token != token {
+                return None;
+            }
         }
+        Some(self.next().ok()?.span.clone())
     }
 
     pub fn has(&self, num: usize) -> bool {

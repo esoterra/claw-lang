@@ -6,7 +6,7 @@ use super::{
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct Block {
     pub start_brace: Span,
-    pub root_statement: MBox<Statement>,
+    pub root_statement: Option<MBox<Statement>>,
     pub end_brace: Span
 }
 

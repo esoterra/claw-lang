@@ -67,6 +67,7 @@ pub struct Function {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FunctionSignature {
+    pub fn_kwd: Span,
     pub name: M<String>,
     pub arguments: Vec<(M<String>, M<ValType>)>,
     pub arrow: Span,
@@ -98,6 +99,7 @@ pub struct Global {
     pub let_kwd: Span,
     pub mut_kwd: Option<Span>,
     pub ident: M<String>,
+    pub valtype: M<ValType>,
     pub assign: Span,
     pub init_value: MBox<Expression>,
     pub semicolon: Span

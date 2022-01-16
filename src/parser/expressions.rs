@@ -8,7 +8,7 @@ use crate::parser::{ParserError, ParseInput};
 pub fn parse_expression(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
     let mut root = parse_leaf(input)?;
     while !input.done() && input.peek().unwrap().token == Token::Add {
-        let add = input.assert_next(Token::Add)?;
+        let add = input.assert_next(Token::Add, "Add operator '+'")?;
         let next_leaf = parse_leaf(input)?;
         let left = root.span.clone();
         let right = next_leaf.span.clone();
@@ -38,13 +38,13 @@ fn parse_leaf(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
         return Ok(MBox::new(Expression::Place { place }, span))
     }
 
-    Err(ParserError::UnexpectedToken)
+    Err(input.unexpected_token("Parse Leaf"))
 }
 
 fn parse_parenthetical(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
-    let _left = input.assert_next(Token::LParen)?;
+    let _left = input.assert_next(Token::LParen, "Left parenthesis '('")?;
     let inner = parse_expression(input)?;
-    let _right = input.assert_next(Token::RParen)?;
+    let _right = input.assert_next(Token::RParen, "Right parenthesis ')'")?;
     Ok(inner)
 }
 
@@ -62,7 +62,7 @@ pub fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
             next.span.clone()
         ))
     } else {
-        Err(ParserError::UnexpectedToken)
+        Err(input.unexpected_token("Parse Place"))
     }
 }
 
@@ -76,7 +76,7 @@ fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
         Token::DecFloatLiteral(_value) => Err(input.unsupported_error("DecFloatLiteral")),
         Token::BinLiteral(_value) => Err(input.unsupported_error("BinLiteral")),
         Token::HexLiteral(_value) => Err(input.unsupported_error("HexLiteral")),
-        _ => Err(ParserError::UnexpectedToken)
+        _ => Err(input.unexpected_token("Parse Literal"))
     }
 }
 
