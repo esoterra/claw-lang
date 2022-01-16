@@ -30,13 +30,14 @@ pub enum ParserError{
 }
 
 
+#[derive(Debug, Clone)]
 pub struct ParseInput {
     src: Arc<NamedSource>, 
     tokens: Vec<TokenData>,
     index: usize
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Checkpoint {
     index: usize
 }
@@ -81,7 +82,7 @@ impl ParseInput {
         if next.token == token {
             Ok(next.span.clone())
         } else {
-            Err(ParserError::EndOfInput)
+            Err(ParserError::UnexpectedToken)
         }
     }
 

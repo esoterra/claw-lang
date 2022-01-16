@@ -6,7 +6,7 @@ use miette::{Diagnostic, SourceSpan, NamedSource};
 use thiserror::Error;
 
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct TokenData {
     pub token: Token,
     pub span: SourceSpan
