@@ -94,14 +94,14 @@ fn parse_fn_signature(input: &mut ParseInput) -> Result<FunctionSignature, Parse
     let arguments = parse_arguments(input)?;
     let _rparen = input.assert_next(Token::RParen, "Closing parenthesis ')'")?;
     let arrow = input.assert_next(Token::Arrow, "Function arrow '->'")?;
-    let result_type = parse_valtype(input)?;
+    let return_type = parse_valtype(input)?;
 
     Ok(FunctionSignature {
         fn_kwd,
         name,
         arguments,
         arrow,
-        result_type
+        return_type
     })
 }
 

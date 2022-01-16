@@ -36,6 +36,12 @@ pub enum ParserError{
 }
 
 
+pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Module, ParserError> {
+    let mut parse_input = ParseInput::new(src, tokens);
+    parse_module(&mut parse_input)
+}
+
+
 #[derive(Debug, Clone)]
 pub struct ParseInput {
     src: Arc<NamedSource>, 
@@ -129,12 +135,6 @@ impl ParseInput {
             Err(ParserError::EndOfInput)
         }
     }
-}
-
-
-pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Module, ParserError> {
-    let mut parse_input = ParseInput::new(src, tokens);
-    parse_module(&mut parse_input)
 }
 
 

@@ -71,7 +71,7 @@ pub struct FunctionSignature {
     pub name: M<String>,
     pub arguments: Vec<(M<String>, M<ValType>)>,
     pub arrow: Span,
-    pub result_type: M<ValType>
+    pub return_type: M<ValType>
 }
 
 /// 

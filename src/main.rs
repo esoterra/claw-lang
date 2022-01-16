@@ -3,8 +3,10 @@ use std::{path::PathBuf, sync::Arc};
 use clap::{Parser, ArgEnum};
 
 pub mod ast;
+pub mod ir;
 pub mod lexer;
 pub mod parser;
+pub mod resolver;
 
 use lexer::tokenize;
 use miette::{Report, NamedSource};

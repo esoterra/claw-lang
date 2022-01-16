@@ -2,7 +2,7 @@ use crate::lexer::Token;
 use crate::ast::{
     MBox,
     statements::{
-        Block, Statement, StatementType
+        Block, Statement
     }
 };
 use crate::parser::{
@@ -39,11 +39,8 @@ fn parse_return(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> 
     let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 
     let span = return_kwd.clone();
-    let statement = Statement {
-        inner: StatementType::Return {
-            return_kwd, expression
-        },
-        next: None
+    let statement = Statement::Return {
+        return_kwd, expression
     };
     Ok(MBox::new_range(statement, span, semicolon))
 }
@@ -63,11 +60,8 @@ fn parse_assign(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> 
     };
 
     let span = place.span.clone();
-    let statement = Statement {
-        inner: StatementType::Assign {
-            place, assign_op, expression
-        },
-        next
+    let statement = Statement::Assign {
+        place, assign_op, expression, next
     };
     Ok(MBox::new_range(statement, span, semicolon))
 }

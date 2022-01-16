@@ -11,17 +11,12 @@ pub struct Block {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Statement {
-    pub inner: StatementType,
-    pub next: Option<MBox<Statement>>
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum StatementType {
+pub enum Statement {
     Assign {
         place: M<Place>,
         assign_op: Span,
-        expression: MBox<Expression>
+        expression: MBox<Expression>,
+        next: Option<MBox<Statement>>
     },
     Return {
         return_kwd: Span,
