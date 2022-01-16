@@ -37,7 +37,7 @@ fn parse_item(input: &mut ParseInput) -> Result<Item, ParserError> {
             .map(|global| Item::Global(global)),
         Token::Fn => parse_fn(export_kwd, input)
             .map(|function| Item::Function(function)),
-        _ => Err(ParserError::NotYetSupported)
+        _ => Err(input.unsupported_error("Module Items"))
     }
 }
 
@@ -115,4 +115,23 @@ fn parse_arguments(input: &mut ParseInput) -> Result<Vec<(M<String>, M<ValType>)
         arguments.push((name, valtype));
     }
     Ok(arguments)
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::parser::tests::{make_input, make_span};
+    use super::*;
+
+    #[test]
+    fn test_increment() {
+        let source = "
+        let mut counter: u32 = 0;
+
+        export fn increment() -> u32 {
+            counter = counter + 1;
+            return counter;
+        }";
+        let mut input = make_input(source);
+        let module = parse_module(&mut input).unwrap();
+    }
 }

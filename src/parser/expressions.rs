@@ -69,13 +69,13 @@ pub fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
 fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
     let next = input.next()?;
     match &next.token {
-        Token::StringLiteral(_value) => Err(ParserError::NotYetSupported),
+        Token::StringLiteral(_value) => Err(input.unsupported_error("StringLiteral")),
         Token::DecIntLiteral(value) => Ok(
             M::new(Literal::Integer(*value), next.span.clone())
         ),
-        Token::DecFloatLiteral(_value) => Err(ParserError::NotYetSupported),
-        Token::BinLiteral(_value) => Err(ParserError::NotYetSupported),
-        Token::HexLiteral(_value) => Err(ParserError::NotYetSupported),
+        Token::DecFloatLiteral(_value) => Err(input.unsupported_error("DecFloatLiteral")),
+        Token::BinLiteral(_value) => Err(input.unsupported_error("BinLiteral")),
+        Token::HexLiteral(_value) => Err(input.unsupported_error("HexLiteral")),
         _ => Err(ParserError::UnexpectedToken)
     }
 }

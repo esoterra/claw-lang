@@ -26,7 +26,10 @@ pub enum ParserError{
     },
     UnexpectedToken,
     EndOfInput,
-    NotYetSupported
+    NotYetSupported {
+        feature: String,
+        token: Token
+    }
 }
 
 
@@ -48,6 +51,13 @@ impl ParseInput {
             src,
             tokens,
             index: 0
+        }
+    }
+
+    pub fn unsupported_error(&self, feature: &str) -> ParserError {
+        ParserError::NotYetSupported {
+            feature: feature.to_string(),
+            token: self.tokens[self.index].token.clone()
         }
     }
 
