@@ -5,14 +5,14 @@ use std::{
     rc::Rc,
     sync::Arc
 };
-use crate::ast::{
+use crate::{ast::{
     Span, M, MBox, Place,
     module::{
         Module, Item, Global, Function
     },
     statements::Statement,
-    expressions::Expression, types::ValType, 
-};
+    expressions::{Expression, Literal}, types::ValType, 
+}, ir::Constant};
 use crate::ir::{self, NeedsResolve};
 use self::expressions::{resolve_expression, TypeContext};
 
@@ -45,13 +45,13 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
         match &item {
             Item::Global(global) => {
                 let id = ItemID::Global(module.globals.len());
-                let ir_entry = scan_global(global);
+                let ir_entry = scan_global(global)?;
                 root.bind(ir_entry.ident.value, id);
                 item_ids.push(id);
             },
             Item::Function(function) => {
                 let id = ItemID::Function(module.functions.len());
-                let ir_entry = scan_function(function);
+                let ir_entry = scan_function(function)?;
                 root.bind(ir_entry.signature.name.value, id);
                 item_ids.push(id);
             },
@@ -64,15 +64,13 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
     for (item, id) in ast.items.iter().zip(item_ids.iter()) {
         match &id {
             ItemID::Global(index) => {
-                let ir_entry = module.get_global_mut(*index).unwrap();
                 if let Item::Global(ast) = item {
-                    resolve_global(parent.clone(), &mut module, ast);
+                    resolve_global(parent.clone(), &mut module, *index, ast)?;
                 } else { unreachable!() }
             },
             ItemID::Function(index) => {
-                let ir_entry = module.get_function_mut(*index).unwrap();
                 if let Item::Function(ast) = item {
-                    resolve_function(parent.clone(), &mut module, *index, ast);
+                    resolve_function(parent.clone(), &mut module, *index, ast)?;
                 } else { unreachable!() }
             }
         }
@@ -81,22 +79,34 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
     Ok(module)
 }
 
-
-
-fn scan_global(_global: &Global) -> ir::Global {
+fn scan_global(_global: &Global) -> Result<ir::Global, ResolverError> {
     unreachable!() // TODO
 }
 
-fn scan_function(_function: &Function) -> ir::Function {
+fn scan_function(_function: &Function) -> Result<ir::Function, ResolverError> {
     unreachable!() // TODO
 }
 
 fn resolve_global<'r, 'ast>(
     context: Rc<Context>,
     module: &'r mut ir::Module,
+    global_index: usize,
     ast: &'ast Global
-) {
-    unreachable!() // TODO
+) -> Result<(), ResolverError> {
+    let _ = context;
+    // let global_type = module.globals[global_index].type_.clone();
+
+    match ast.init_value.value.as_ref() {
+        Expression::Literal { value } => {
+            if let Literal::Integer(integer) = &value.value {
+                let constant = Constant::I32 { value: *integer as i32 };
+                module.globals[global_index].initial_value = NeedsResolve::Resolved(constant);
+            } else { panic!("Only integer literals allowed for global") }
+        },
+        _ => panic!("Non-literal expressions not allowed as init_val for global")
+    }
+
+    Ok(())
 }
 
 fn resolve_function<'r, 'ast>(
@@ -130,13 +140,18 @@ fn resolve_statement<'r, 'ast, 'ops>(
             expression,
             next
         } => {
-            resolve_assign(context, return_type, module, place, expression, ops);
+            let _ = assign_op;
+            resolve_assign(context.clone(), return_type.clone(), module, place, expression, ops)?;
+            if let Some(next_statement) = next {
+                resolve_statement(context, return_type, module, &next_statement.value, ops)?;
+            }
         },
         Statement::Return {
             return_kwd,
             expression
         } => {
-            resolve_return(context, return_type, module, expression, ops);
+            let _ = return_kwd;
+            resolve_return(context, return_type, module, expression, ops)?;
         }
     }
 

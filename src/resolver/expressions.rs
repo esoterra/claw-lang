@@ -59,8 +59,8 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
             operator,
             right
         } => {
-            resolve_expression(context.clone(), type_context.clone(), module, &left.value, ops);
-            resolve_expression(context.clone(), type_context.clone(), module, &right.value, ops);
+            resolve_expression(context.clone(), type_context.clone(), module, &left.value, ops)?;
+            resolve_expression(context.clone(), type_context.clone(), module, &right.value, ops)?;
             assert_eq!(operator.value, BinaryOp::Add);
             if let ValType::Basic(basic_type) = type_context.result_type.value {
                 ops.push(Operation::Add { result_type: basic_type });
