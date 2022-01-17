@@ -3,6 +3,7 @@ use std::{path::PathBuf, sync::Arc};
 use clap::{Parser, ArgEnum};
 
 pub mod ast;
+pub mod gen;
 pub mod ir;
 pub mod lexer;
 pub mod parser;
@@ -12,6 +13,7 @@ use lexer::tokenize;
 use miette::{Report, NamedSource};
 use parser::parse;
 use resolver::resolve;
+use gen::wat::generate;
 
 #[derive(Parser, Debug)]
 struct Arguments {
@@ -59,7 +61,6 @@ fn main() {
         },
         Command::Compile(Compile { input_path }) => {
             let ir = compile(input_path);
-            println!("Result: {:#?}", ir);
         }
         _ => println!("Not yet implemented!")
     }
@@ -86,7 +87,7 @@ fn check_lex(input_path: PathBuf) -> Option<()> {
     Some(())
 }
 
-fn compile(input_path: PathBuf) -> Option<ir::Module> {
+fn compile(input_path: PathBuf) -> Option<()> {
     let file_name = input_path.file_name()?.to_string_lossy().to_string();
     let file_string = std::fs::read_to_string(input_path).ok()?;
     let src = Arc::new(NamedSource::new(file_name, file_string.clone()));
@@ -117,6 +118,9 @@ fn compile(input_path: PathBuf) -> Option<ir::Module> {
         }
     };
 
-    Some(resolved)
+    let wat = generate(resolved);
+    println!("{}", wat);
+
+    Some(())
 }
 
