@@ -79,12 +79,29 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
     Ok(module)
 }
 
-fn scan_global(_global: &Global) -> Result<ir::Global, ResolverError> {
-    unreachable!() // TODO
+fn scan_global(global: &Global) -> Result<ir::Global, ResolverError> {
+    let Global {
+        ident,
+        valtype,
+        ..
+    } = global;
+
+    Ok(ir::Global {
+        ident: ident.clone(),
+        type_: valtype.clone(),
+        initial_value: NeedsResolve::Unresolved
+    })
 }
 
-fn scan_function(_function: &Function) -> Result<ir::Function, ResolverError> {
-    unreachable!() // TODO
+fn scan_function(function: &Function) -> Result<ir::Function, ResolverError> {
+    let Function {
+        signature, ..
+    } = function;
+
+    Ok(ir::Function {
+        signature: signature.clone(),
+        body: NeedsResolve::Unresolved
+    })
 }
 
 fn resolve_global<'r, 'ast>(

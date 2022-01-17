@@ -4,11 +4,13 @@ use crate::ast::{
     types::{ValType, BasicVal}
 };
 
+#[derive(Debug)]
 pub enum NeedsResolve<T> {
     Resolved(T),
     Unresolved
 }
 
+#[derive(Debug)]
 pub struct Module {
     pub globals: Vec<Global>,
     pub functions: Vec<Function>
@@ -39,23 +41,27 @@ impl Module {
     }
 }
 
+#[derive(Debug)]
 pub enum Constant {
     I32 {
         value: i32
     }
 }
 
+#[derive(Debug)]
 pub struct Global {
     pub ident: M<String>,
     pub type_: M<ValType>,
     pub initial_value: NeedsResolve<Constant>
 }
 
+#[derive(Debug)]
 pub struct Function {
     pub signature: FunctionSignature,
     pub body: NeedsResolve<Vec<Operation>>
 }
 
+#[derive(Debug)]
 pub enum Operation {
     Constant {
         value: Constant
