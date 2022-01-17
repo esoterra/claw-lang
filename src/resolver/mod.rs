@@ -46,13 +46,15 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
             Item::Global(global) => {
                 let id = ItemID::Global(module.globals.len());
                 let ir_entry = scan_global(global)?;
-                root.bind(ir_entry.ident.value, id);
+                root.bind(ir_entry.ident.value.clone(), id);
+                module.globals.push(ir_entry);
                 item_ids.push(id);
             },
             Item::Function(function) => {
                 let id = ItemID::Function(module.functions.len());
                 let ir_entry = scan_function(function)?;
-                root.bind(ir_entry.signature.name.value, id);
+                root.bind(ir_entry.signature.name.value.clone(), id);
+                module.functions.push(ir_entry);
                 item_ids.push(id);
             },
             _ => return Err(ResolverError::NotYetSupported)
@@ -149,7 +151,7 @@ fn resolve_statement<'r, 'ast, 'ops>(
     module: &'r ir::Module,
     statement: &'ast Statement,
     ops: &'ops mut Vec<ir::Operation>
-) -> Result<Vec<ir::Operation>, ResolverError> {
+) -> Result<(), ResolverError> {
     match &statement {
         Statement::Assign {
             place,
@@ -160,19 +162,18 @@ fn resolve_statement<'r, 'ast, 'ops>(
             let _ = assign_op;
             resolve_assign(context.clone(), return_type.clone(), module, place, expression, ops)?;
             if let Some(next_statement) = next {
-                resolve_statement(context, return_type, module, &next_statement.value, ops)?;
-            }
+                resolve_statement(context, return_type, module, &next_statement.value, ops)
+            } else { Ok(()) }
         },
         Statement::Return {
             return_kwd,
             expression
         } => {
             let _ = return_kwd;
-            resolve_return(context, return_type, module, expression, ops)?;
-        }
+            resolve_return(context, return_type, module, expression, ops)
+        },
+        _ => unreachable!()
     }
-
-    unreachable!()
 }
 
 fn resolve_assign<'r, 'ast, 'ops>(

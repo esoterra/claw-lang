@@ -13,7 +13,7 @@ use crate::resolver::Context;
 use super::{ResolverError, ItemID};
 
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct TypeContext {
     return_type: M<ValType>,
     result_type: M<ValType>
@@ -40,9 +40,10 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
     match ast {
         Expression::Literal { value } => {
             match (&value.value, type_context.result_type.value) {
-                (Literal::Integer(num), ValType::Basic(BasicVal::I32)) => {
-                    ops.push(Operation::Constant { value: ir::Constant::I32 { value: *num as i32 } });
-                }
+                (Literal::Integer(num), ValType::Basic(BasicVal::U32)) => {
+                    let constant = ir::Constant::I32 { value: *num as i32 };
+                    ops.push(Operation::Constant { value: constant });
+                },
                 _ => panic!("Unsupported literal value")
             }
         },
