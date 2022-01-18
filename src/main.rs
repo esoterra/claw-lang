@@ -60,7 +60,7 @@ fn main() {
             }
         },
         Command::Compile(Compile { input_path }) => {
-            let ir = compile(input_path);
+            compile(input_path);
         }
         _ => println!("Not yet implemented!")
     }

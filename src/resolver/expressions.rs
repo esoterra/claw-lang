@@ -12,7 +12,7 @@ use crate::resolver::Context;
 
 use super::{ResolverError, ItemID};
 
-
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub struct TypeContext {
     return_type: M<ValType>,
@@ -48,12 +48,15 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
             }
         },
         Expression::Place { place } => {
-            if let Place::Identifier { ident } = &place.value {
-                let id = context.lookup(&ident.value);
-                if let Some(ItemID::Global(index)) = id {
-                    ops.push(Operation::GlobalGet { index });
-                } else { panic!("Dereferencing names other than globals not supported") }
-            } else { panic!("Dereferencing place expressions other than identifiers not supported") }
+            match &place.value {
+                Place::Identifier { ident } => {
+                    let id = context.lookup(&ident.value);
+                    if let Some(ItemID::Global(index)) = id {
+                        ops.push(Operation::GlobalGet { index });
+                    } else { panic!("Dereferencing names other than globals not supported") }
+                },
+                // _ => panic!("Dereferencing place expressions other than identifiers not supported")
+            }
         },
         Expression::Binary {
             left,

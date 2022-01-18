@@ -117,10 +117,13 @@ fn resolve_global<'r, 'ast>(
 
     match ast.init_value.value.as_ref() {
         Expression::Literal { value } => {
-            if let Literal::Integer(integer) = &value.value {
-                let constant = Constant::I32 { value: *integer as i32 };
-                module.globals[global_index].initial_value = NeedsResolve::Resolved(constant);
-            } else { panic!("Only integer literals allowed for global") }
+            match &value.value {
+                Literal::Integer(integer) => {
+                    let constant = Constant::I32 { value: *integer as i32 };
+                    module.globals[global_index].initial_value = NeedsResolve::Resolved(constant);
+                },
+                // _ => panic!("Only integer literals allowed for global")
+            }
         },
         _ => panic!("Non-literal expressions not allowed as init_val for global")
     }
@@ -171,8 +174,7 @@ fn resolve_statement<'r, 'ast, 'ops>(
         } => {
             let _ = return_kwd;
             resolve_return(context, return_type, module, expression, ops)
-        },
-        _ => unreachable!()
+        }
     }
 }
 
@@ -184,9 +186,10 @@ fn resolve_assign<'r, 'ast, 'ops>(
     expression: &'ast MBox<Expression>,
     ops: &'ops mut Vec<ir::Operation>
 ) -> Result<(), ResolverError> {
-    let name = if let Place::Identifier { ident } = &place.value {
-        ident.value.clone()
-    } else { panic!("Only identifiers supported as assignment targets") };
+    let name = match &place.value {
+        Place::Identifier { ident } => ident.value.clone(),
+        // _ => panic!("Only identifiers supported as assignment targets")
+    };
 
     let global_index = match context.lookup(&name) {
         Some(ItemID::Global(index)) => index,

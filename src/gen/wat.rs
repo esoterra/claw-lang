@@ -14,7 +14,7 @@ fn globals_to_wat(globals: &Vec<ir::Global>, result: &mut String) {
     for (index, global) in globals.iter().enumerate() {
         let valtype = valtype_to_wat(&global.type_.value);
         if let NeedsResolve::Resolved(init_value) = &global.initial_value {
-            write!(result, "   (global $G{} {} {})\n", index, valtype, constant_to_wat(&init_value));
+            let _ = write!(result, "   (global $G{} {} {})\n", index, valtype, constant_to_wat(&init_value));
         }
     }
 }
@@ -22,13 +22,13 @@ fn globals_to_wat(globals: &Vec<ir::Global>, result: &mut String) {
 fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
     for (index, function) in functions.iter().enumerate() {
         let valtype = valtype_to_wat(&function.signature.return_type.value);
-        write!(result, "   (func $F{} (result {})\n", index, valtype);
+        let _ = write!(result, "   (func $F{} (result {})\n", index, valtype);
         if let NeedsResolve::Resolved(operations) = &function.body {
             for operation in operations.iter() {
-                write!(result, "      {}\n", operation_to_wat(operation));
+                let _ = write!(result, "      {}\n", operation_to_wat(operation));
             }
         } else { panic!("Cannot generate WASM for unresolved function")}
-        write!(result, "   )\n");
+        let _ = write!(result, "   )\n");
     }
 }
 
