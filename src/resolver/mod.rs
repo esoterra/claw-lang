@@ -161,7 +161,7 @@ fn resolve_statement<'r, 'ast, 'ops>(
     return_type: M<ValType>,
     module: &'r ir::Module,
     statement: &'ast Statement,
-    ops: &'ops mut Vec<ir::Operation>
+    ops: &'ops mut Vec<ir::Instruction>
 ) -> Result<(), ResolverError> {
     match &statement {
         Statement::Assign {
@@ -192,7 +192,7 @@ fn resolve_assign<'r, 'ast, 'ops>(
     module: &'r ir::Module,
     place: &M<Place>,
     expression: &'ast MBox<Expression>,
-    ops: &'ops mut Vec<ir::Operation>
+    ops: &'ops mut Vec<ir::Instruction>
 ) -> Result<(), ResolverError> {
     let name = match &place.value {
         Place::Identifier { ident } => ident.value.clone(),
@@ -207,7 +207,7 @@ fn resolve_assign<'r, 'ast, 'ops>(
 
     let type_context = TypeContext::new(return_type, result_type);
     resolve_expression(context, type_context, module, &expression.value, ops)?;
-    ops.push(ir::Operation::GlobalSet { index: global_index });
+    ops.push(ir::Instruction::GlobalSet { index: global_index });
 
     Ok(())
 }
@@ -217,11 +217,11 @@ fn resolve_return<'r, 'ast, 'ops>(
     return_type: M<ValType>,
     module: &'r ir::Module,
     expression: &'ast MBox<Expression>,
-    ops: &'ops mut Vec<ir::Operation>
+    ops: &'ops mut Vec<ir::Instruction>
 ) -> Result<(), ResolverError> {
     let type_context = TypeContext::new(return_type.clone(), return_type);
     resolve_expression(context, type_context, module, &expression.value, ops)?;
-    ops.push(ir::Operation::Return);
+    ops.push(ir::Instruction::Return);
     Ok(())
 }
 

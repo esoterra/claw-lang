@@ -66,11 +66,11 @@ pub struct Global {
 #[derive(Debug)]
 pub struct Function {
     pub signature: FunctionSignature,
-    pub body: NeedsResolve<Vec<Operation>>
+    pub body: NeedsResolve<Vec<Instruction>>
 }
 
 #[derive(Debug)]
-pub enum Operation {
+pub enum Instruction {
     Constant {
         value: Constant
     },

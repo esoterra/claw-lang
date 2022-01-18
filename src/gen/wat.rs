@@ -27,9 +27,9 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
     for (index, function) in functions.iter().enumerate() {
         let valtype = valtype_to_wat(&function.signature.return_type.value);
         let _ = write!(result, "   (func $F{} (result {})\n", index, valtype);
-        if let NeedsResolve::Resolved(operations) = &function.body {
-            for operation in operations.iter() {
-                let _ = write!(result, "      {}\n", operation_to_wat(operation));
+        if let NeedsResolve::Resolved(instructions) = &function.body {
+            for instruction in instructions.iter() {
+                let _ = write!(result, "      {}\n", instruction_to_wat(instruction));
             }
         } else { panic!("Cannot generate WASM for unresolved function")}
         let _ = write!(result, "   )\n");
@@ -62,12 +62,12 @@ fn valtype_to_wat(valtype: &ValType) -> String {
     }
 }
 
-fn operation_to_wat(operation: &ir::Operation) -> String {
-    match &operation {
-        ir::Operation::Constant { value } => constant_to_wat(value),
-        ir::Operation::GlobalGet { index } => format!("global.get $G{}", index),
-        ir::Operation::GlobalSet { index } => format!("global.set $G{}", index),
-        ir::Operation::Add { result_type } => {
+fn instruction_to_wat(instruction: &ir::Instruction) -> String {
+    match &instruction {
+        ir::Instruction::Constant { value } => constant_to_wat(value),
+        ir::Instruction::GlobalGet { index } => format!("global.get $G{}", index),
+        ir::Instruction::GlobalSet { index } => format!("global.set $G{}", index),
+        ir::Instruction::Add { result_type } => {
             match &result_type {
                 BasicVal::U32 => format!("i32.add"),
                 BasicVal::S32 => format!("i32.add"),
@@ -75,6 +75,6 @@ fn operation_to_wat(operation: &ir::Operation) -> String {
                 _ => panic!("Unsupported addition return type for WAT output {:?}", result_type)
             }
         },
-        ir::Operation::Return => "return".to_string()
+        ir::Instruction::Return => "return".to_string()
     }
 }

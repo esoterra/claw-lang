@@ -7,7 +7,7 @@ use crate::ast::{
     types::{ValType, BasicVal},
     expressions::Expression
 };
-use crate::ir::{self, Operation};
+use crate::ir::{self, Instruction};
 use crate::resolver::Context;
 
 use super::{ResolverError, ItemID};
@@ -34,7 +34,7 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
     type_context: TypeContext,
     module: &'r ir::Module,
     ast: &'ast Expression,
-    ops: &'ops mut Vec<ir::Operation>
+    ops: &'ops mut Vec<ir::Instruction>
 ) -> Result<(), ResolverError> {
 
     match ast {
@@ -42,7 +42,7 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
             match (&value.value, type_context.result_type.value) {
                 (Literal::Integer(num), ValType::Basic(BasicVal::U32)) => {
                     let constant = ir::Constant::I32 { value: *num as i32 };
-                    ops.push(Operation::Constant { value: constant });
+                    ops.push(Instruction::Constant { value: constant });
                 },
                 _ => panic!("Unsupported literal value")
             }
@@ -52,7 +52,7 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
                 Place::Identifier { ident } => {
                     let id = context.lookup(&ident.value);
                     if let Some(ItemID::Global(index)) = id {
-                        ops.push(Operation::GlobalGet { index });
+                        ops.push(Instruction::GlobalGet { index });
                     } else { panic!("Dereferencing names other than globals not supported") }
                 },
                 // _ => panic!("Dereferencing place expressions other than identifiers not supported")
@@ -67,7 +67,7 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
             resolve_expression(context.clone(), type_context.clone(), module, &right.value, ops)?;
             assert_eq!(operator.value, BinaryOp::Add);
             if let ValType::Basic(basic_type) = type_context.result_type.value {
-                ops.push(Operation::Add { result_type: basic_type });
+                ops.push(Instruction::Add { result_type: basic_type });
             } else { panic!("Addition only supported for basic types") }
         },
         _ => panic!("Unsupported expression type")
