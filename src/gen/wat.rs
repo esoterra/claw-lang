@@ -1,11 +1,15 @@
 use std::fmt::Write;
-use crate::{ir::{self, NeedsResolve}, ast::types::{ValType, BasicVal}};
+
+use crate::ast::types::{ValType, BasicVal};
+use crate::ir::{self, NeedsResolve};
+use crate::resolver::ItemID;
 
 pub fn generate(ir: ir::Module) -> String {
     let mut result = String::new();
     let _ = write!(result, "(module\n");
     globals_to_wat(&ir.globals, &mut result);
     functions_to_wat(&ir.functions, &mut result);
+    exports_to_wat(&ir.exports, &mut result);
     let _ = write!(result, ")");
     result
 }
@@ -29,6 +33,17 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
             }
         } else { panic!("Cannot generate WASM for unresolved function")}
         let _ = write!(result, "   )\n");
+    }
+}
+
+fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
+    for export in exports.iter() {
+        match &export.id {
+            ItemID::Function(index) => {
+                let _ = write!(result, "   (export {:?} (func $F{}))\n", export.ident.value, index);
+            },
+            _ => panic!("Only function exports supported")
+        }
     }
 }
 

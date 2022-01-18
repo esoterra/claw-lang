@@ -53,9 +53,17 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
             Item::Function(function) => {
                 let id = ItemID::Function(module.functions.len());
                 let ir_entry = scan_function(function)?;
-                root.bind(ir_entry.signature.name.value.clone(), id);
+                let name = &ir_entry.signature.name.value;
+                root.bind(name.clone(), id);
                 module.functions.push(ir_entry);
                 item_ids.push(id);
+
+                if function.export_kwd.is_some() {
+                    module.exports.push(ir::Export {
+                        ident: function.signature.name.clone(),
+                        id
+                    })
+                }
             },
             _ => return Err(ResolverError::NotYetSupported)
         }

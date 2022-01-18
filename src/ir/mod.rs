@@ -1,8 +1,8 @@
-use crate::ast::{
+use crate::{ast::{
     M,
     module::FunctionSignature,
     types::{ValType, BasicVal}
-};
+}, resolver::ItemID};
 
 #[derive(Debug)]
 pub enum NeedsResolve<T> {
@@ -13,14 +13,16 @@ pub enum NeedsResolve<T> {
 #[derive(Debug)]
 pub struct Module {
     pub globals: Vec<Global>,
-    pub functions: Vec<Function>
+    pub functions: Vec<Function>,
+    pub exports: Vec<Export>
 }
 
 impl Module {
     pub fn new() -> Self {
         Module {
             globals: Vec::new(),
-            functions: Vec::new()
+            functions: Vec::new(),
+            exports: Vec::new()
         }
     }
 
@@ -46,6 +48,12 @@ pub enum Constant {
     I32 {
         value: i32
     }
+}
+
+#[derive(Debug)]
+pub struct Export {
+    pub ident: M<String>,
+    pub id: ItemID
 }
 
 #[derive(Debug)]
