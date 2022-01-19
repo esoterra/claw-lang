@@ -34,15 +34,17 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
     type_context: TypeContext,
     module: &'r ir::Module,
     ast: &'ast Expression,
-    ops: &'ops mut Vec<ir::Instruction>
-) -> Result<(), ResolverError> {
+) -> Result<ir::Instruction, ResolverError> {
 
     match ast {
         Expression::Literal { value } => {
             match (&value.value, type_context.result_type.value) {
                 (Literal::Integer(num), ValType::Basic(BasicVal::U32)) => {
                     let constant = ir::Constant::I32 { value: *num as i32 };
-                    ops.push(Instruction::Constant { value: constant });
+                    Ok(Instruction::Constant {
+                        value: constant,
+                        result_type: BasicVal::I32
+                    })
                 },
                 _ => panic!("Unsupported literal value")
             }
@@ -52,7 +54,7 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
                 Place::Identifier { ident } => {
                     let id = context.lookup(&ident.value);
                     if let Some(ItemID::Global(index)) = id {
-                        ops.push(Instruction::GlobalGet { index });
+                        Ok(Instruction::GlobalGet { index })
                     } else { panic!("Dereferencing names other than globals not supported") }
                 },
                 // _ => panic!("Dereferencing place expressions other than identifiers not supported")
@@ -63,15 +65,17 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
             operator,
             right
         } => {
-            resolve_expression(context.clone(), type_context.clone(), module, &left.value, ops)?;
-            resolve_expression(context.clone(), type_context.clone(), module, &right.value, ops)?;
+            let left = resolve_expression(context.clone(), type_context.clone(), module, &left.value)?;
+            let right = resolve_expression(context.clone(), type_context.clone(), module, &right.value)?;
             assert_eq!(operator.value, BinaryOp::Add);
             if let ValType::Basic(basic_type) = type_context.result_type.value {
-                ops.push(Instruction::Add { result_type: basic_type });
+                Ok(Instruction::Add {
+                    result_type: basic_type,
+                    left: Box::new(left),
+                    right: Box::new(right)
+                })
             } else { panic!("Addition only supported for basic types") }
         },
         _ => panic!("Unsupported expression type")
     }
-
-    Ok(())
 }

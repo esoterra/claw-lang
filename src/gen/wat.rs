@@ -49,7 +49,7 @@ fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
 
 fn constant_to_wat(constant: &ir::Constant) -> String {
     match &constant {
-        ir::Constant::I32 { value } => format!("{}", value)
+        ir::Constant::I32 { value } => format!("(i32.const {})", value)
     }
 }
 
@@ -64,17 +64,23 @@ fn valtype_to_wat(valtype: &ValType) -> String {
 
 fn instruction_to_wat(instruction: &ir::Instruction) -> String {
     match &instruction {
-        ir::Instruction::Constant { value } => constant_to_wat(value),
-        ir::Instruction::GlobalGet { index } => format!("global.get $G{}", index),
-        ir::Instruction::GlobalSet { index } => format!("global.set $G{}", index),
-        ir::Instruction::Add { result_type } => {
+        ir::Instruction::Constant { result_type, value } => {
+            constant_to_wat(value)
+        },
+        ir::Instruction::GlobalGet { index } => format!("(global.get $G{})", index),
+        ir::Instruction::GlobalSet { index, value } => {
+            format!("(global.set $G{} {})", index, instruction_to_wat(&value))
+        },
+        ir::Instruction::Add { result_type, left, right } => {
             match &result_type {
-                BasicVal::U32 => format!("i32.add"),
-                BasicVal::S32 => format!("i32.add"),
-                BasicVal::I32 => format!("i32.add"),
+                BasicVal::U32 | BasicVal::S32 | BasicVal::I32 => {
+                    format!("(i32.add {} {})", instruction_to_wat(&left), instruction_to_wat(&right))
+                },
                 _ => panic!("Unsupported addition return type for WAT output {:?}", result_type)
             }
         },
-        ir::Instruction::Return => "return".to_string()
+        ir::Instruction::Return { value } => {
+            format!("(return {})", instruction_to_wat(&value))
+        }
     }
 }

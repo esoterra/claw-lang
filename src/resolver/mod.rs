@@ -206,8 +206,8 @@ fn resolve_assign<'r, 'ast, 'ops>(
     let result_type = module.get_global(global_index).unwrap().type_.clone();
 
     let type_context = TypeContext::new(return_type, result_type);
-    resolve_expression(context, type_context, module, &expression.value, ops)?;
-    ops.push(ir::Instruction::GlobalSet { index: global_index });
+    let value = resolve_expression(context, type_context, module, &expression.value)?;
+    ops.push(ir::Instruction::GlobalSet { index: global_index, value: Box::new(value) });
 
     Ok(())
 }
@@ -220,8 +220,8 @@ fn resolve_return<'r, 'ast, 'ops>(
     ops: &'ops mut Vec<ir::Instruction>
 ) -> Result<(), ResolverError> {
     let type_context = TypeContext::new(return_type.clone(), return_type);
-    resolve_expression(context, type_context, module, &expression.value, ops)?;
-    ops.push(ir::Instruction::Return);
+    let value = resolve_expression(context, type_context, module, &expression.value)?;
+    ops.push(ir::Instruction::Return { value: Box::new(value) });
     Ok(())
 }
 

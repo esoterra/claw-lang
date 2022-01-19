@@ -72,16 +72,22 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Instruction {
     Constant {
+        result_type: BasicVal,
         value: Constant
     },
     GlobalGet {
         index: usize
     },
     GlobalSet {
-        index: usize
+        index: usize,
+        value: Box<Instruction>
     },
     Add {
-        result_type: BasicVal
+        result_type: BasicVal,
+        left: Box<Instruction>,
+        right: Box<Instruction>
     },
-    Return
+    Return {
+        value: Box<Instruction>
+    }
 }
