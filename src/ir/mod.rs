@@ -51,6 +51,12 @@ pub enum Constant {
     I64 {
         value: i64
     },
+    U32 {
+        value: u32
+    },
+    U64 {
+        value: u64
+    },
     F32 {
         value: f32
     },

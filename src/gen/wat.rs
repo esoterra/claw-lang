@@ -54,6 +54,8 @@ fn constant_to_wat(constant: &ir::Constant) -> String {
     match &constant {
         ir::Constant::I32 { value } => format!("(i32.const {})", value),
         ir::Constant::I64 { value } => format!("(i64.const {})", value),
+        ir::Constant::U32 { value } => format!("(i32.const {})", value),
+        ir::Constant::U64 { value } => format!("(i64.const {})", value),
         ir::Constant::F32 { value } => format!("(f32.const {})", value),
         ir::Constant::F64 { value } => format!("(f64.const {})", value)
     }
@@ -64,6 +66,9 @@ fn valtype_to_wat(valtype: &ValType) -> String {
         ValType::Basic(BasicVal::U32) => "i32".to_string(),
         ValType::Basic(BasicVal::S32) => "i32".to_string(),
         ValType::Basic(BasicVal::I32) => "i32".to_string(),
+        ValType::Basic(BasicVal::U64) => "i64".to_string(),
+        ValType::Basic(BasicVal::S64) => "i64".to_string(),
+        ValType::Basic(BasicVal::I64) => "i64".to_string(),
         _ => panic!("Unsupported type for WAT output {:?}", valtype)
     }
 }
@@ -81,6 +86,9 @@ fn instruction_to_wat(instruction: &ir::Instruction) -> String {
             match &result_type {
                 BasicVal::U32 | BasicVal::S32 | BasicVal::I32 => {
                     format!("(i32.add {} {})", instruction_to_wat(&left), instruction_to_wat(&right))
+                },
+                BasicVal::U64 | BasicVal::S64 | BasicVal::I64 => {
+                    format!("(i64.add {} {})", instruction_to_wat(&left), instruction_to_wat(&right))
                 },
                 _ => panic!("Unsupported addition return type for WAT output {:?}", result_type)
             }

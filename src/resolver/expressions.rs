@@ -38,15 +38,18 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
 
     match ast {
         Expression::Literal { value } => {
-            match (&value.value, type_context.result_type.value) {
+            let constant = match (&value.value, type_context.result_type.value) {
                 (Literal::Integer(num), ValType::Basic(BasicVal::U32)) => {
-                    let constant = ir::Constant::I32 { value: *num as i32 };
-                    Ok(Instruction::Constant {
-                        value: constant
-                    })
+                    ir::Constant::U32 { value: *num as u32 }
+                },
+                (Literal::Integer(num), ValType::Basic(BasicVal::U64)) => {
+                    ir::Constant::U64 { value: *num as u64 }
                 },
                 _ => panic!("Unsupported literal value")
-            }
+            };
+            Ok(Instruction::Constant {
+                value: constant
+            })
         },
         Expression::Place { place } => {
             match &place.value {

@@ -123,22 +123,18 @@ fn resolve_global<'r, 'ast>(
     ast: &'ast Global
 ) -> Result<(), ResolverError> {
     let _ = context;
-    // let global_type = module.globals[global_index].type_.clone();
+    let global_type = module.globals[global_index].type_.clone();
+    let type_context = TypeContext::new(global_type.clone(), global_type.clone());
+    let initial_value = resolve_expression(
+        context.clone(),type_context , module, &ast.init_value.value
+    )?;
 
-    match ast.init_value.value.as_ref() {
-        Expression::Literal { value } => {
-            match &value.value {
-                Literal::Integer(integer) => {
-                    let constant = Constant::I32 { value: *integer as i32 };
-                    module.globals[global_index].initial_value = NeedsResolve::Resolved(constant);
-                },
-                Literal::Float(_float) => {
-                    panic!("Floats are not supported as global init values");
-                }
-            }
-        },
-        _ => panic!("Non-literal expressions not allowed as init_val for global")
-    }
+    let constant = match initial_value {
+        ir::Instruction::Constant { value } => value,
+        _ => panic!("Unsupported initial value expression type")
+    };
+
+    module.globals[global_index].initial_value = NeedsResolve::Resolved(constant);
 
     Ok(())
 }
