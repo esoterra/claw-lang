@@ -42,8 +42,7 @@ pub fn resolve_expression<'r, 'ast, 'ops>(
                 (Literal::Integer(num), ValType::Basic(BasicVal::U32)) => {
                     let constant = ir::Constant::I32 { value: *num as i32 };
                     Ok(Instruction::Constant {
-                        value: constant,
-                        result_type: BasicVal::I32
+                        value: constant
                     })
                 },
                 _ => panic!("Unsupported literal value")

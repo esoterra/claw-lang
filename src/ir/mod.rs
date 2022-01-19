@@ -72,7 +72,6 @@ pub struct Function {
 #[derive(Debug)]
 pub enum Instruction {
     Constant {
-        result_type: BasicVal,
         value: Constant
     },
     GlobalGet {
