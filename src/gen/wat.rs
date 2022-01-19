@@ -18,10 +18,12 @@ fn globals_to_wat(globals: &Vec<ir::Global>, result: &mut String) {
     for (index, global) in globals.iter().enumerate() {
         let valtype = valtype_to_wat(&global.type_.value);
         if let NeedsResolve::Resolved(init_value) = &global.initial_value {
-            let integer = match &init_value {
-                ir::Constant::I32{ value } => *value
+            let value = match &init_value {
+                ir::Constant::I32 { value } => format!("{}", *value),
+                ir::Constant::I64 { value } => format!("{}", *value),
+                _ => panic!("Only integer values supported for globals")
             };
-            let _ = write!(result, "   (global $G{} {} {})\n", index, valtype, integer);
+            let _ = write!(result, "   (global $G{} {} {})\n", index, valtype, value);
         } else { panic!("Cannot generate WASM for unresolved global") }
     }
 }
@@ -52,7 +54,10 @@ fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
 
 fn constant_to_wat(constant: &ir::Constant) -> String {
     match &constant {
-        ir::Constant::I32 { value } => format!("(i32.const {})", value)
+        ir::Constant::I32 { value } => format!("(i32.const {})", value),
+        ir::Constant::I64 { value } => format!("(i64.const {})", value),
+        ir::Constant::F32 { value } => format!("(f32.const {})", value),
+        ir::Constant::F64 { value } => format!("(f64.const {})", value)
     }
 }
 

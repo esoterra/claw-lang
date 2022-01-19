@@ -44,11 +44,12 @@ fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Glob
     let mut_kwd = input.next_if(Token::Mut);
 
     let ident_token = input.next()?;
-    let ident = if let Token::Identifier(ident) = ident_token.token.clone() {
-        M::new(ident, ident_token.span.clone())
-    } else {
-        return Err(input.unexpected_token("Global Ident"))
+
+    let ident = match &ident_token.token {
+        Token::Identifier(ident) => M::new(ident.clone(), ident_token.span.clone()),
+        _ => return Err(input.unexpected_token("Global Ident"))
     };
+
     let _colon = input.assert_next(Token::Colon, "Colon: ':'");
     let valtype = parse_valtype(input)?;
 
@@ -109,13 +110,12 @@ fn parse_arguments(input: &mut ParseInput) -> Result<Vec<(M<String>, M<ValType>)
     let mut arguments = Vec::new();
     while input.peek()?.token != Token::RParen {
         let next = input.next()?;
-        let name = if let Token::Identifier(name) = &next.token {
-            let span = next.span.clone();
-            M::new(name.clone(), span)
-        } else { return Err(input.unexpected_token("Parse Arguments Identifier")) };
-
+        let span = next.span.clone();
+        let name = match &next.token {
+            Token::Identifier(name) => M::new(name.clone(), span),
+            _ => return Err(input.unexpected_token("Parse Arguments Identifier"))
+        };
         let _colon = input.assert_next(Token::Colon, "Colon ':'")?;
-
         let valtype = parse_valtype(input)?;
 
         arguments.push((name, valtype));

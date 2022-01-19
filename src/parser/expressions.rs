@@ -68,16 +68,15 @@ pub fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
 
 fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
     let next = input.next()?;
-    match &next.token {
-        Token::StringLiteral(_value) => Err(input.unsupported_error("StringLiteral")),
-        Token::DecIntLiteral(value) => Ok(
-            M::new(Literal::Integer(*value), next.span.clone())
-        ),
-        Token::DecFloatLiteral(_value) => Err(input.unsupported_error("DecFloatLiteral")),
-        Token::BinLiteral(_value) => Err(input.unsupported_error("BinLiteral")),
-        Token::HexLiteral(_value) => Err(input.unsupported_error("HexLiteral")),
-        _ => Err(input.unexpected_token("Parse Literal"))
-    }
+    let value = match &next.token {
+        Token::StringLiteral(_value) => return Err(input.unsupported_error("StringLiteral")),
+        Token::DecIntLiteral(value) => Literal::Integer(*value),
+        Token::DecFloatLiteral(value) => Literal::Float(*value),
+        Token::BinLiteral(value) => Literal::Integer(*value),
+        Token::HexLiteral(value) => Literal::Integer(*value),
+        _ => return Err(input.unexpected_token("Parse Literal"))
+    };
+    Ok(M::new(value, next.span.clone()))
 }
 
 #[cfg(test)]

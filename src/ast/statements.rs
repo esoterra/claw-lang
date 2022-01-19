@@ -3,14 +3,14 @@ use super::{
     expressions::Expression
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Block {
     pub start_brace: Span,
     pub root_statement: Option<MBox<Statement>>,
     pub end_brace: Span
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Statement {
     Assign {
         place: M<Place>,

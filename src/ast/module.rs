@@ -9,13 +9,13 @@ use super::{
 
 /// Each Wrought source file represents a module
 /// and this struct represents the root of the AST.
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Module {
     /// The root of a module is composed of a sequence of items
     pub items: Vec<Item>
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Item {
     Import(Import),
     Function(Function),
@@ -58,7 +58,7 @@ pub struct MemType {
 }
 
 /// 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Function {
     pub export_kwd: Option<Span>,
     pub signature: FunctionSignature,
@@ -93,7 +93,7 @@ pub struct Memory {
 }
 
 /// 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Global {
     pub export_kwd: Option<Span>,
     pub let_kwd: Span,

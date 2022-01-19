@@ -1,6 +1,6 @@
 use super::{M, MBox, Place};
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Unary {
         operator: M<UnaryOp>,
@@ -55,7 +55,8 @@ pub enum BinaryOp {
     LogicalOr
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Literal {
-    Integer(u64)
+    Integer(u64),
+    Float(f64)
 }

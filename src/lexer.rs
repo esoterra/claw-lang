@@ -184,7 +184,7 @@ pub enum Token {
     #[token("i32")]
     I32,
 
-    /// The 32-bit Integer Type Keyword 
+    /// The 64-bit Integer Type Keyword 
     #[token("i64")]
     I64,
 
@@ -219,7 +219,7 @@ pub enum Token {
     /// The True Keyword
     #[token("true")]
     True,
-    
+
     /// The False Keyword
     #[token("false")]
     False,

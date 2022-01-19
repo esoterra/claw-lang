@@ -130,7 +130,9 @@ fn resolve_global<'r, 'ast>(
                     let constant = Constant::I32 { value: *integer as i32 };
                     module.globals[global_index].initial_value = NeedsResolve::Resolved(constant);
                 },
-                // _ => panic!("Only integer literals allowed for global")
+                Literal::Float(_float) => {
+                    panic!("Floats are not supported as global init values");
+                }
             }
         },
         _ => panic!("Non-literal expressions not allowed as init_val for global")
