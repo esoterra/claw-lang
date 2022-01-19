@@ -69,6 +69,7 @@ pub struct Export {
 pub struct Global {
     pub ident: M<String>,
     pub type_: M<ValType>,
+    pub mutable: bool,
     pub initial_value: NeedsResolve<Constant>
 }
 

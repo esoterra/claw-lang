@@ -17,13 +17,11 @@ pub fn generate(ir: ir::Module) -> String {
 fn globals_to_wat(globals: &Vec<ir::Global>, result: &mut String) {
     for (index, global) in globals.iter().enumerate() {
         let valtype = valtype_to_wat(&global.type_.value);
+        let valtype = if global.mutable {
+            format!("(mut {})", valtype)
+        } else { valtype };
         if let NeedsResolve::Resolved(init_value) = &global.initial_value {
-            let value = match &init_value {
-                ir::Constant::I32 { value } => format!("{}", *value),
-                ir::Constant::I64 { value } => format!("{}", *value),
-                _ => panic!("Only integer values supported for globals")
-            };
-            let _ = write!(result, "   (global $G{} {} {})\n", index, valtype, value);
+            let _ = write!(result, "   (global $G{} {} {})\n", index, valtype, constant_to_wat(init_value));
         } else { panic!("Cannot generate WASM for unresolved global") }
     }
 }

@@ -93,12 +93,14 @@ fn scan_global(global: &Global) -> Result<ir::Global, ResolverError> {
     let Global {
         ident,
         valtype,
+        mut_kwd,
         ..
     } = global;
 
     Ok(ir::Global {
         ident: ident.clone(),
         type_: valtype.clone(),
+        mutable: mut_kwd.is_some(),
         initial_value: NeedsResolve::Unresolved
     })
 }
