@@ -1,8 +1,14 @@
-use crate::{ast::{
+pub mod type_graph;
+
+use crate::ast::{
     M,
     module::FunctionSignature,
-    types::{ValType, BasicVal}
-}, resolver::ItemID};
+    types::ValType,
+    expressions::Literal
+};
+use crate::resolver::ModuleItem;
+
+use self::type_graph::TypeNode;
 
 #[derive(Debug)]
 pub enum NeedsResolve<T> {
@@ -43,32 +49,11 @@ impl Module {
     }
 }
 
-#[derive(Debug)]
-pub enum Constant {
-    I32 {
-        value: i32
-    },
-    I64 {
-        value: i64
-    },
-    U32 {
-        value: u32
-    },
-    U64 {
-        value: u64
-    },
-    F32 {
-        value: f32
-    },
-    F64 {
-        value: f64
-    }
-}
 
 #[derive(Debug)]
 pub struct Export {
     pub ident: M<String>,
-    pub id: ItemID
+    pub id: ModuleItem
 }
 
 #[derive(Debug)]
@@ -76,19 +61,21 @@ pub struct Global {
     pub ident: M<String>,
     pub type_: M<ValType>,
     pub mutable: bool,
-    pub initial_value: NeedsResolve<Constant>
+    pub initial_value: NeedsResolve<Literal>
 }
 
 #[derive(Debug)]
 pub struct Function {
     pub signature: FunctionSignature,
+    pub type_graph: NeedsResolve<type_graph::TypeGraph>,
     pub body: NeedsResolve<Vec<Instruction>>
 }
 
 #[derive(Debug)]
 pub enum Instruction {
     Constant {
-        value: Constant
+        node: TypeNode,
+        value: Literal
     },
     GlobalGet {
         index: usize
@@ -98,7 +85,7 @@ pub enum Instruction {
         value: Box<Instruction>
     },
     Add {
-        result_type: BasicVal,
+        node: TypeNode,
         left: Box<Instruction>,
         right: Box<Instruction>
     },
