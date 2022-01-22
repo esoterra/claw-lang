@@ -73,7 +73,6 @@ impl TypeGraph {
 
         for (index, info) in self.data.iter().enumerate() {
             if info.declared_type.is_some() {
-                println!("Queued Declared {}", index);
                 queue.push_back(index);
             }
         }
@@ -81,7 +80,6 @@ impl TypeGraph {
         while let Some(index) = queue.pop_front() {
             for neighbor in self.data[index].neighbors.clone().iter() {
                 if self.propagate(index, *neighbor) {
-                    println!("Queued Updated {}", index);
                     queue.push_back(*neighbor)
                 }
             }
