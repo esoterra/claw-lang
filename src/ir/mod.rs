@@ -68,6 +68,7 @@ pub struct Global {
 pub struct Function {
     pub signature: FunctionSignature,
     pub type_graph: NeedsResolve<type_graph::TypeGraph>,
+    pub locals: NeedsResolve<Vec<TypeNode>>,
     pub body: NeedsResolve<Vec<Instruction>>
 }
 
@@ -84,7 +85,24 @@ pub enum Instruction {
         index: usize,
         value: Box<Instruction>
     },
+    LocalGet {
+        index: usize
+    },
+    LocalSet {
+        index: usize,
+        value: Box<Instruction>
+    },
     Add {
+        node: TypeNode,
+        left: Box<Instruction>,
+        right: Box<Instruction>
+    },
+    Subtract {
+        node: TypeNode,
+        left: Box<Instruction>,
+        right: Box<Instruction>
+    },
+    Equals {
         node: TypeNode,
         left: Box<Instruction>,
         right: Box<Instruction>

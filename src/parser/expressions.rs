@@ -8,13 +8,24 @@ use crate::parser::{ParserError, ParseInput};
 pub fn parse_expression(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
     let mut root = parse_leaf(input)?;
     while !input.done() && input.peek().unwrap().token == Token::Add {
-        let add = input.assert_next(Token::Add, "Add operator '+'")?;
+        let op = input.next()?;
+        let op_span = op.span.clone();
+        let bin_op = match op.token {
+            Token::Add => BinaryOp::Add,
+            Token::Sub => BinaryOp::Sub,
+            Token::EQ => BinaryOp::EQ,
+            _ => return Err(ParserError::UnexpectedToken {
+                description: format!(r#"Token {:?} is not a valid binary operator"#, op.token),
+                token: Some(op.token.clone())
+            })
+        };
+
         let next_leaf = parse_leaf(input)?;
         let left = root.span.clone();
         let right = next_leaf.span.clone();
         let new_root = Expression::Binary {
             left: root,
-            operator: M::new(BinaryOp::Add, add),
+            operator: M::new(bin_op, op_span),
             right: next_leaf
         };
         root = MBox::new_range(new_root, left, right)

@@ -1,6 +1,6 @@
 use crate::lexer::Token;
 use crate::ast::{
-    MBox,
+    M, MBox,
     statements::{
         Block, Statement
     }
@@ -31,6 +31,31 @@ pub fn parse_statement(input: &mut ParseInput) -> Result<MBox<Statement>, Parser
         return Ok(value)
     }
     Err(input.unexpected_token("Parse Statement"))
+}
+
+fn parse_let(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
+    let let_kwd = input.assert_next(Token::Let, "Let keyword 'let'")?;
+    let start_span = let_kwd.clone();
+    let mut_kwd = input.next_if(Token::Mut);
+
+    let next = input.next()?;
+    let ident = if let Token::Identifier(ident) = &next.token {
+        M::new(ident.clone(), next.span.clone())
+    } else { todo!() };
+
+    let expression = parse_expression(input)?;
+    let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
+
+    let statement = Statement::Let {
+        let_kwd,
+        mut_kwd,
+        ident,
+        annotation: todo!(),
+        assign_op: todo!(),
+        expression,
+        next: todo!(),
+    };
+    Ok(MBox::new_range(statement, start_span, semicolon))
 }
 
 fn parse_return(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
@@ -68,7 +93,7 @@ fn parse_assign(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> 
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::tests::{make_input};
+    use crate::parser::tests::make_input;
     use super::*;
 
 

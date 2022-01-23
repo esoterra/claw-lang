@@ -62,6 +62,10 @@ impl TypeGraph {
         None
     }
 
+    pub fn constrain_type(&mut self, node: TypeNode, valtype: ValType) {
+        self.data[node.index].inferences.push(valtype);
+    }
+
     /// Makes no guarantee that duplicate edges will not be added
     pub fn constrain_equal(&mut self, node1: TypeNode, node2: TypeNode) {
         self.data[node1.index].neighbors.push(node2.index);

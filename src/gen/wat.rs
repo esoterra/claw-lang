@@ -1,8 +1,12 @@
 use std::fmt::Write;
 
-use crate::ast::expressions::Literal;
-use crate::ast::types::{ValType, BasicVal};
+use crate::ast::{
+    module::FunctionSignature,
+    expressions::Literal,
+    types::{ValType, BasicVal}
+};
 use crate::resolver::ModuleItem;
+use crate::ir::type_graph::TypeNode;
 use crate::ir::{self, NeedsResolve, type_graph::TypeGraph};
 
 pub fn generate(ir: ir::Module) -> String {
@@ -34,8 +38,8 @@ fn globals_to_wat(globals: &Vec<ir::Global>, result: &mut String) {
 
 fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
     for (index, function) in functions.iter().enumerate() {
-        let valtype = valtype_to_wat(&function.signature.return_type.value);
-        let _ = write!(result, "   (func $F{} (result {})\n", index, valtype);
+        let signature = fn_signature_to_wat(&function.signature);
+        let _ = write!(result, "   (func $F{} {}\n", index, signature);
 
         let type_graph = match &function.type_graph {
             NeedsResolve::Resolved(type_graph) => type_graph,
@@ -51,6 +55,11 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
     }
 }
 
+fn fn_signature_to_wat(signature: &FunctionSignature) -> String {
+    let valtype = valtype_to_wat(&signature.return_type.value);
+    format!("(result {})", valtype)
+}
+
 fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
     for export in exports.iter() {
         match &export.id {
@@ -64,38 +73,67 @@ fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
 
 fn instruction_to_wat(type_graph: &TypeGraph, instruction: &ir::Instruction) -> String {
     match &instruction {
-        ir::Instruction::Constant { node, value } => {
+        ir::Instruction::Constant {
+            node,
+            value
+        } => {
             let valtype = type_graph.type_of(*node).expect("Constant type not known");
             literal_to_wat(valtype, value)
         },
         ir::Instruction::GlobalGet { index } => format!("(global.get $G{})", index),
-        ir::Instruction::GlobalSet { index, value } => {
+        ir::Instruction::GlobalSet {
+            index,
+            value
+        } => {
             format!("(global.set $G{} {})", index, instruction_to_wat(type_graph, &value))
         },
-        ir::Instruction::Add { node, left, right } => {
-            let valtype = type_graph.type_of(*node).expect("Addition type not known");
-            if let ValType::Basic(basic_type) = valtype {
-                match basic_type {
-                    BasicVal::U32 | BasicVal::S32 | BasicVal::I32 => {
-                        format!("(i32.add {} {})",
-                            instruction_to_wat(type_graph, &left),
-                            instruction_to_wat(type_graph, &right)
-                        )
-                    },
-                    BasicVal::U64 | BasicVal::S64 | BasicVal::I64 => {
-                        format!("(i64.add {} {})",
-                            instruction_to_wat(type_graph, &left),
-                            instruction_to_wat(type_graph, &right)
-                        )
-                    },
-                    _ => panic!("Unsupported addition return type for WAT output {:?}", basic_type)
-                }
-            } else { panic!("Only basic types supported for addition") }
+        ir::Instruction::LocalGet { index } => format!("(local.get $L{})", index),
+        ir::Instruction::LocalSet {
+            index,
+            value
+        } => {
+            format!("(local.set $G{} {})", index, instruction_to_wat(type_graph, &value))
         },
+        ir::Instruction::Add {
+            node,
+            left,
+            right
+        } => binary_expr_to_wat(type_graph, "add", *node, left, right),
+        ir::Instruction::Subtract {
+            node,
+            left,
+            right
+        } => binary_expr_to_wat(type_graph, "sub", *node, left, right),
+        ir::Instruction::Equals {
+            node,
+            left,
+            right
+        } => binary_expr_to_wat(type_graph, "eq", *node, left, right),
         ir::Instruction::Return { value } => {
             format!("(return {})", instruction_to_wat(type_graph, &value))
         }
     }
+}
+
+fn binary_expr_to_wat(
+    type_graph: &TypeGraph,
+    label: &str,
+    node: TypeNode,
+    left: &Box<ir::Instruction>,
+    right: &Box<ir::Instruction>
+) -> String {
+    let valtype = type_graph.type_of(node)
+        .expect("Binary expr type unknown");
+    let basicval = match valtype {
+        ValType::Basic(basicval) => basicval,
+        _ => panic!("Only basic types supported for addition")
+    };
+    format!("({}.{} {} {})",
+        basicval_to_wat(&basicval),
+        label,
+        instruction_to_wat(type_graph, &left),
+        instruction_to_wat(type_graph, &right)
+    )
 }
 
 fn literal_to_wat(valtype: ValType, literal: &Literal) -> String {
@@ -112,12 +150,19 @@ fn literal_to_wat(valtype: ValType, literal: &Literal) -> String {
 
 fn valtype_to_wat(valtype: &ValType) -> String {
     match valtype {
-        ValType::Basic(BasicVal::U32) => "i32".to_string(),
-        ValType::Basic(BasicVal::S32) => "i32".to_string(),
-        ValType::Basic(BasicVal::I32) => "i32".to_string(),
-        ValType::Basic(BasicVal::U64) => "i64".to_string(),
-        ValType::Basic(BasicVal::S64) => "i64".to_string(),
-        ValType::Basic(BasicVal::I64) => "i64".to_string(),
+        ValType::Basic(basicval) => basicval_to_wat(basicval),
         _ => panic!("Unsupported type for WAT output {:?}", valtype)
+    }
+}
+
+fn basicval_to_wat(basicval: &BasicVal) -> String {
+    match basicval {
+        BasicVal::U32 => "i32".to_string(),
+        BasicVal::S32 => "i32".to_string(),
+        BasicVal::I32 => "i32".to_string(),
+        BasicVal::U64 => "i64".to_string(),
+        BasicVal::S64 => "i64".to_string(),
+        BasicVal::I64 => "i64".to_string(),
+        _ => panic!("Unsupported type for WAT output {:?}", basicval)
     }
 }

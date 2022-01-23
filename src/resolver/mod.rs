@@ -123,6 +123,7 @@ fn scan_function(function: &Function) -> Result<(ir::Function, ItemInfo), Resolv
     let ir_entry = ir::Function {
         signature: signature.clone(),
         type_graph: ir::NeedsResolve::Unresolved,
+        locals: ir::NeedsResolve::Unresolved,
         body: ir::NeedsResolve::Unresolved
     };
     Ok((ir_entry, item_info))

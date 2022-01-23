@@ -4,7 +4,7 @@ use crate::ast::{
     M, MBox, Place,
     module::{Function, FunctionSignature},
     statements::Statement,
-    expressions::Expression
+    expressions::Expression, types::ValType
 };
 use crate::resolver::{
     ResolverError, ModuleContext, ModuleItem,
@@ -16,8 +16,7 @@ use crate::ir::type_graph::{TypeGraph, TypeNode};
 pub struct FunctionBuilder {
     pub context: FunctionContext,
     pub return_type: TypeNode,
-    params: Vec<TypeNode>,
-    locals: Vec<TypeNode>,
+    pub locals: Vec<TypeNode>,
     pub type_graph: TypeGraph
 }
 
@@ -31,16 +30,16 @@ impl FunctionBuilder {
 
         let mut context = FunctionContext::from_module(&mut type_graph, &module, module_context);
 
-        let mut params = Vec::new();
+        let mut locals = Vec::new();
 
         for (ident, valtype) in signature.arguments.iter() {
             let node = type_graph.add_declared_type(valtype.clone());
             let item = FunctionItem::Param {
                 node,
-                index: params.len()
+                index: locals.len()
             };
             context.bind(ident.value.clone(), item);
-            params.push(node);
+            locals.push(node);
         }
 
         let return_node = type_graph.add_declared_type(signature.return_type.clone());
@@ -48,8 +47,7 @@ impl FunctionBuilder {
         FunctionBuilder {
             context,
             return_type: return_node,
-            params: Vec::new(),
-            locals: Vec::new(),
+            locals,
             type_graph
         }
     }
@@ -67,6 +65,7 @@ pub enum FunctionItem {
     },
     Global {
         node: TypeNode,
+        mutable: bool,
         index: usize,
     },
     Param {
@@ -75,6 +74,7 @@ pub enum FunctionItem {
     },
     Local {
         node: TypeNode,
+        mutable: bool,
         index: usize
     }
 }
@@ -87,9 +87,12 @@ impl FunctionContext {
         for (ident, item) in module_context.mappings.iter() {
             let item = match item {
                 ModuleItem::Global(index) => {
-                    let global_type = module.get_global(*index).unwrap().type_.clone();
+                    let global = module.get_global(*index).unwrap();
+                    let global_type = global.type_.clone();
+                    let mutable = global.mutable;
                     FunctionItem::Global {
                         node: type_graph.add_declared_type(global_type),
+                        mutable,
                         index: *index
                     }
                 },
@@ -153,6 +156,7 @@ pub fn resolve_function<'r, 'ast>(
         let function = &mut module.functions[fn_index];
         f_builder.type_graph.resolve_all();
         function.type_graph = ir::NeedsResolve::Resolved(f_builder.type_graph);
+        function.locals = ir::NeedsResolve::Resolved(f_builder.locals);
         function.body = ir::NeedsResolve::Resolved(instructions);
     }
 
@@ -165,6 +169,23 @@ fn resolve_statement<'fb, 'instrs, 'ast>(
     statement: &'ast Statement
 ) -> Result<(), ResolverError> {
     match &statement {
+        Statement::Let {
+            let_kwd: _,
+            mut_kwd,
+            ident,
+            annotation,
+            assign_op: _,
+            expression,
+            next
+        } => {
+            let mutable = mut_kwd.is_some();
+            let ident = ident.value.clone();
+            let annotation = annotation.clone();
+            let expression = &expression.value;
+            resolve_let(f_builder, instructions, mutable, ident,
+                annotation, expression, next
+            )
+        },
         Statement::Assign {
             place,
             assign_op,
@@ -178,13 +199,51 @@ fn resolve_statement<'fb, 'instrs, 'ast>(
             } else { Ok(()) }
         },
         Statement::Return {
-            return_kwd,
+            return_kwd: _,
             expression
         } => {
-            let _ = return_kwd;
             resolve_return(f_builder, instructions, expression)
         }
     }
+}
+
+fn resolve_let<'fb, 'inst, 'ast>(
+    f_builder: &'fb mut FunctionBuilder,
+    instructions: &'inst mut Vec<ir::Instruction>,
+    mutable: bool,
+    ident: String,
+    annotation: Option<M<ValType>>,
+    expression: &'ast Expression,
+    next: &'ast Option<MBox<Statement>>
+) -> Result<(), ResolverError> {
+    // Create a TypeNode for this local variable
+    let node = match annotation {
+        Some(valtype) =>
+            f_builder.type_graph.add_declared_type(valtype.clone()),
+        None =>
+            f_builder.type_graph.add_inferred_type()
+    };
+    // Add the variable to the locals table
+    let index = f_builder.locals.len();
+    f_builder.locals.push(node);
+    // Resolve expression
+    let (value_node, value) = resolve_expression(f_builder, expression)?;
+    f_builder.type_graph.constrain_equal(node, value_node);
+    // Generate set
+    instructions.push(ir::Instruction::LocalSet {
+        index,
+        value
+    });
+    // Associate this local with its identifier
+    let item = FunctionItem::Local { node, mutable, index };
+    f_builder.context.push(ident, item);
+    // Resolve any child statements
+    if let Some(next_statement) = next {
+        resolve_statement(f_builder, instructions, &next_statement.value)?;
+    }
+    // Unbind identifier
+    f_builder.context.pop();
+    Ok(())
 }
 
 fn resolve_assign<'fb, 'instrs, 'ast>(
@@ -198,12 +257,14 @@ fn resolve_assign<'fb, 'instrs, 'ast>(
         // _ => panic!("Only identifiers supported as assignment targets")
     };
 
-    let (global_node, global_index) = match f_builder.context.lookup(&name) {
-        Some(FunctionItem::Global { node, index }) => {
-            (node, index)
+    let (global_node, mutable, global_index) = match f_builder.context.lookup(&name) {
+        Some(FunctionItem::Global { node, mutable, index }) => {
+            (node, mutable, index)
         }
         _ => panic!("No global found with matching name")
     };
+    assert_eq!(mutable, true);
+
     let (expression_node, value) = resolve_expression(f_builder, &expression.value)?;
     f_builder.type_graph.constrain_equal(global_node, expression_node);
     instructions.push(ir::Instruction::GlobalSet { index: global_index, value });

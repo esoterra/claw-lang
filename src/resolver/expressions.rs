@@ -1,6 +1,7 @@
 use crate::ast::{
     Place,
-    expressions::{BinaryOp, Expression}
+    expressions::{BinaryOp, Expression},
+    types::{ValType, BasicVal}
 };
 use crate::resolver::{
     ResolverError,
@@ -40,12 +41,23 @@ pub fn resolve_expression<'fb, 'ast>(
         } => {
             let (left_node, left) = resolve_expression(f_builder, &left.value)?;
             let (right_node, right) = resolve_expression(f_builder, &right.value)?;
-            f_builder.type_graph.constrain_equal(node, left_node);
-            f_builder.type_graph.constrain_equal(node, right_node);
-            assert_eq!(operator.value, BinaryOp::Add);
-            ir::Instruction::Add {
-                node,
-                left, right
+            match operator.value {
+                BinaryOp::Add => {
+                    f_builder.type_graph.constrain_equal(node, left_node);
+                    f_builder.type_graph.constrain_equal(node, right_node);
+                    ir::Instruction::Add { node, left, right }
+                },
+                BinaryOp::Sub => {
+                    f_builder.type_graph.constrain_equal(node, left_node);
+                    f_builder.type_graph.constrain_equal(node, right_node);
+                    ir::Instruction::Subtract { node, left, right }
+                },
+                BinaryOp::EQ => {
+                    f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::I32));
+                    f_builder.type_graph.constrain_equal(left_node, right_node);
+                    ir::Instruction::Subtract { node, left, right }
+                },
+                _ => panic!("Unsupported binary operator {:?}", operator.value)
             }
         },
         _ => panic!("Unsupported expression type")
