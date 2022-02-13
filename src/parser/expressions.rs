@@ -1,3 +1,5 @@
+use std::string::ParseError;
+
 use crate::lexer::Token;
 use crate::ast::{
     M, MBox, Place,
@@ -6,31 +8,37 @@ use crate::ast::{
 use crate::parser::{ParserError, ParseInput};
 
 pub fn parse_expression(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
-    let mut root = parse_leaf(input)?;
-    while !input.done() && input.peek().unwrap().token == Token::Add {
-        let op = input.next()?;
-        let op_span = op.span.clone();
-        let bin_op = match op.token {
-            Token::Add => BinaryOp::Add,
-            Token::Sub => BinaryOp::Sub,
-            Token::EQ => BinaryOp::EQ,
-            _ => return Err(ParserError::UnexpectedToken {
-                description: format!(r#"Token {:?} is not a valid binary operator"#, op.token),
-                token: Some(op.token.clone())
-            })
-        };
+    pratt_parse(input, 0)
+}
 
-        let next_leaf = parse_leaf(input)?;
-        let left = root.span.clone();
-        let right = next_leaf.span.clone();
-        let new_root = Expression::Binary {
-            left: root,
-            operator: M::new(bin_op, op_span),
-            right: next_leaf
-        };
-        root = MBox::new_range(new_root, left, right)
+/// Pratt parsing of expressions based on
+/// https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
+fn pratt_parse(input: &mut ParseInput, min_bp: u8) -> Result<MBox<Expression>, ParserError> {
+    let mut lhs = parse_leaf(input)?;
+    loop {
+        let checkpoint = input.checkpoint();
+        if let Some(bin_op) = try_parse_bin_op(input) {
+            let (l_bp, r_bp) = infix_binding_power(bin_op.value);
+
+            if l_bp < min_bp {
+                input.restore(checkpoint);
+                break;
+            }
+
+            let rhs = pratt_parse(input, r_bp)?;
+            let left = lhs.span.clone();
+            let right = rhs.span.clone();
+            let new_root = Expression::Binary {
+                left: lhs,
+                operator: bin_op,
+                right: rhs
+            };
+            lhs = MBox::new_range(new_root, left, right)
+        } else {
+            break;
+        }
     }
-    Ok(root)
+    Ok(lhs)
 }
 
 fn parse_leaf(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
@@ -90,10 +98,81 @@ fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
     Ok(M::new(value, next.span.clone()))
 }
 
+fn try_parse_bin_op(input: &mut ParseInput) -> Option<M<BinaryOp>> {
+    let next = input.peek().ok()?;
+    let span = next.span.clone();
+    let op = match &next.token {
+        Token::LogicalOr => BinaryOp::LogicalOr,
+        Token::LogicalAnd => BinaryOp::LogicalAnd,
+
+        Token::BitOr => BinaryOp::BitOr,
+
+        Token::BitXor => BinaryOp::BitXor,
+
+        Token::BitAnd => BinaryOp::BitAnd,
+
+        Token::EQ => BinaryOp::EQ,
+        Token::NEQ => BinaryOp::NEQ,
+
+        Token::LT => BinaryOp::LT,
+        Token::LTE => BinaryOp::LTE,
+        Token::GT => BinaryOp::GT,
+        Token::GTE => BinaryOp::GTE,
+
+        Token::BitShiftL => BinaryOp::BitShiftL,
+        Token::BitShiftR => BinaryOp::BitShiftR,
+        Token::ArithShiftR => BinaryOp::ArithShiftR,
+
+        Token::Add => BinaryOp::Add,
+        Token::Sub => BinaryOp::Sub,
+
+        Token::Star => BinaryOp::Mult,
+        Token::Div => BinaryOp::Div,
+        Token::Mod => BinaryOp::Mod,
+
+        _ => return None
+    };
+    let _ = input.next();
+    Some(M::new(op, span))
+}
+
+fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
+    match op {
+        BinaryOp::LogicalOr => (10, 1),
+        BinaryOp::LogicalAnd => (20, 21),
+
+        BinaryOp::BitOr => (30, 31),
+
+        BinaryOp::BitXor => (40, 41),
+
+        BinaryOp::BitAnd => (50, 51),
+
+        BinaryOp::EQ
+        | BinaryOp::NEQ => (60, 61),
+
+        BinaryOp::LT
+        | BinaryOp::LTE
+        | BinaryOp::GT
+        | BinaryOp::GTE => (70, 71),
+
+        BinaryOp::BitShiftL
+        | BinaryOp::BitShiftR
+        | BinaryOp::ArithShiftR => (80, 81),
+
+        BinaryOp::Add
+        | BinaryOp::Sub => (90, 91),
+
+        BinaryOp::Mult
+        | BinaryOp::Div
+        | BinaryOp::Mod => (100, 101),
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::parser::tests::{make_input, make_span};
     use super::*;
+    use pretty_assertions::{assert_eq, assert_ne};
+    use crate::parser::tests::{make_input, make_span};
 
     use crate::ast::expressions::{
         Expression, Literal
@@ -173,6 +252,7 @@ mod tests {
 
     #[test]
     fn parsing_supports_parenthesized_idents() {
+        // parenthesized, raw, raw-span
         let cases = [
             ("(foo)", "foo", make_span(1, 3)),
             ("(foobar)", "foobar", make_span(1, 6)),
@@ -202,6 +282,118 @@ mod tests {
             assert_eq!(
                 parse_expression(&mut make_input(source)).unwrap(),
                 parsed_expression
+            );
+        }
+    }
+
+    macro_rules! lit {
+        ($val:expr => ($span_l:expr, $span_r:expr)) => {
+            MBox::new(
+                Expression::Literal {
+                    value: M::new(Literal::Integer($val), make_span($span_l, $span_r))
+                },
+                make_span($span_l, $span_r)
+            )
+        };
+    }
+
+    macro_rules! op {
+        ($op_val:expr => ($span_l:expr, $span_r:expr)) => {
+            M::new($op_val, make_span($span_l, $span_r))
+        };
+    }
+
+    macro_rules! bin {
+        (($left:expr, $op:expr, $right:expr) => ($span_l:expr, $span_r:expr)) => {
+            MBox::new(
+                Expression::Binary {
+                    left: $left,
+                    operator: $op,
+                    right: $right
+                },
+                make_span($span_l, $span_r)
+            )
+        };
+    }
+
+    #[test]
+    fn parse_expression_respects_precedence() {
+        let source0 = "0 + 1 * 2";
+        let expected0 = bin! (
+            (
+                lit!(0 => (0, 1)),
+                op!(BinaryOp::Add => (2, 1)),
+                bin!((
+                    lit!(1 => (4, 1)),
+                    op!(BinaryOp::Mult => (6, 1)),
+                    lit!(2 => (8, 1))
+                ) => (4, 5))
+            ) => (0, 9)
+        );
+
+        let source1 = "0 * 1 + 2";
+        let expected1 = bin! (
+            (
+                bin!((
+                    lit!(0 => (0, 1)),
+                    op!(BinaryOp::Mult => (2, 1)),
+                    lit!(1 => (4, 1))
+                ) => (0, 5)),
+                op!(BinaryOp::Add => (6, 1)),
+                lit!(2 => (8, 1))
+            ) => (0, 9)
+        );
+
+        let cases = [
+            (source0, expected0),
+            (source1, expected1)
+        ];
+
+        for (source, expected) in cases {
+            assert_eq!(
+                parse_expression(&mut make_input(source)).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn parse_expression_respects_associativity() {
+        let source0 = "0 + 1 + 2";
+        let expected0 = bin! (
+            (
+                bin!((
+                    lit!(0 => (0, 1)),
+                    op!(BinaryOp::Add => (2, 1)),
+                    lit!(1 => (4, 1))
+                ) => (0, 5)),
+                op!(BinaryOp::Add => (6, 1)),
+                lit!(2 => (8, 1))
+            ) => (0, 9)
+        );
+
+        let source1 = "0 * 1 * 2";
+        let expected1 = bin! (
+            (
+                bin!((
+                    lit!(0 => (0, 1)),
+                    op!(BinaryOp::Mult => (2, 1)),
+                    lit!(1 => (4, 1))
+                ) => (0, 5)),
+                op!(BinaryOp::Mult => (6, 1)),
+                lit!(2 => (8, 1))
+            ) => (0, 9)
+        );
+
+        let cases = [
+            (source0, expected0),
+            (source1, expected1)
+        ];
+
+        for (source, expected) in cases {
+            assert_eq!(
+                parse_expression(&mut make_input(source)).unwrap(),
+                expected
             );
         }
     }

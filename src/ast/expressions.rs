@@ -27,7 +27,7 @@ pub enum UnaryOp {
 }
 
 /// The supported binary operators
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum BinaryOp {
     // Arithmetic Operations
     Mult,
