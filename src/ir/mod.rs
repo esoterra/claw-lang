@@ -102,6 +102,11 @@ pub enum Instruction {
         left: Box<Instruction>,
         right: Box<Instruction>
     },
+    Multiply {
+        node: TypeNode,
+        left: Box<Instruction>,
+        right: Box<Instruction>
+    },
     Equals {
         node: TypeNode,
         left: Box<Instruction>,

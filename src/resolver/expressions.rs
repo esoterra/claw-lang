@@ -27,9 +27,12 @@ pub fn resolve_expression<'fb, 'ast>(
             match &place.value {
                 Place::Identifier { ident } => {
                     let id = f_builder.context.lookup(&ident.value);
-                    if let Some(FunctionItem::Global { index, .. }) = id {
-                        ir::Instruction::GlobalGet { index }
-                    } else { todo!("Implement dereferencing names other than globals") }
+                    match id {
+                        Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
+                        Some(FunctionItem::Param { index, .. }) => ir::Instruction::LocalGet { index },
+                        Some(FunctionItem::Local { index, .. }) => ir::Instruction::LocalGet { index },
+                        _ => panic!("Unsupported item dereferenced")
+                    }
                 },
                 // _ => panic!("Dereferencing place expressions other than identifiers not supported")
             }
@@ -51,6 +54,11 @@ pub fn resolve_expression<'fb, 'ast>(
                     f_builder.type_graph.constrain_equal(node, left_node);
                     f_builder.type_graph.constrain_equal(node, right_node);
                     ir::Instruction::Subtract { node, left, right }
+                },
+                BinaryOp::Mult => {
+                    f_builder.type_graph.constrain_equal(node, left_node);
+                    f_builder.type_graph.constrain_equal(node, right_node);
+                    ir::Instruction::Multiply { node, left, right }
                 },
                 BinaryOp::EQ => {
                     f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::I32));

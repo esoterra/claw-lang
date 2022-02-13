@@ -15,20 +15,23 @@ use thiserror::Error;
 use self::module::parse_module;
 
 #[derive(Error, Debug, Diagnostic)]
-#[error("Failed to parse")]
 #[diagnostic()]
 pub enum ParserError{
+    #[error("Failed to parse")]
     Base {
         #[source_code]
         src: Arc<NamedSource>,
         #[label("Unable to parse this code")]
         span: SourceSpan,
     },
+    #[error("Unexpected token {token:?} with description '{description}'")]
     UnexpectedToken {
         description: String,
         token: Option<Token>
     },
+    #[error("End of input reached")]
     EndOfInput,
+    #[error("Feature {feature} not supported yet at {token:?}")]
     NotYetSupported {
         feature: String,
         token: Token

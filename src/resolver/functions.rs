@@ -163,9 +163,9 @@ pub fn resolve_function<'r, 'ast>(
     Ok(())
 }
 
-fn resolve_statement<'fb, 'instrs, 'ast>(
+fn resolve_statement<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
-    instructions: &'instrs mut Vec<ir::Instruction>,
+    instructions: &'inst mut Vec<ir::Instruction>,
     statement: &'ast Statement
 ) -> Result<(), ResolverError> {
     match &statement {
@@ -184,7 +184,10 @@ fn resolve_statement<'fb, 'instrs, 'ast>(
             let expression = &expression.value;
             resolve_let(f_builder, instructions, mutable, ident,
                 annotation, expression, next
-            )
+            );
+            if let Some(next_statement) = next {
+                resolve_statement(f_builder, instructions, &next_statement.value)
+            } else { Ok(()) }
         },
         Statement::Assign {
             place,

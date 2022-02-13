@@ -56,8 +56,14 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
 }
 
 fn fn_signature_to_wat(signature: &FunctionSignature) -> String {
-    let valtype = valtype_to_wat(&signature.return_type.value);
-    format!("(result {})", valtype)
+    let mut parts: Vec<String> = signature.arguments
+        .iter()
+        .map(|(_name, valtype)| format!("(param {})", valtype_to_wat(&valtype.value)))
+        .collect();
+
+    let result_type = valtype_to_wat(&signature.return_type.value);
+    parts.push(format!("(result {})", result_type));
+    parts.join(" ")
 }
 
 fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
@@ -104,6 +110,11 @@ fn instruction_to_wat(type_graph: &TypeGraph, instruction: &ir::Instruction) -> 
             left,
             right
         } => binary_expr_to_wat(type_graph, "sub", *node, left, right),
+        ir::Instruction::Multiply {
+            node,
+            left,
+            right
+        } => binary_expr_to_wat(type_graph, "mul", *node, left, right),
         ir::Instruction::Equals {
             node,
             left,

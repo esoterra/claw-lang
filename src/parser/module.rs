@@ -109,18 +109,28 @@ fn parse_fn_signature(input: &mut ParseInput) -> Result<FunctionSignature, Parse
 fn parse_arguments(input: &mut ParseInput) -> Result<Vec<(M<String>, M<ValType>)>, ParserError> {
     let mut arguments = Vec::new();
     while input.peek()?.token != Token::RParen {
-        let next = input.next()?;
-        let span = next.span.clone();
-        let name = match &next.token {
-            Token::Identifier(name) => M::new(name.clone(), span),
-            _ => return Err(input.unexpected_token("Parse Arguments Identifier"))
-        };
-        let _colon = input.assert_next(Token::Colon, "Colon ':'")?;
-        let valtype = parse_valtype(input)?;
+        let argument = parse_argument(input)?;
+        arguments.push(argument);
 
-        arguments.push((name, valtype));
+        if input.peek()?.token != Token::Comma {
+            break;
+        }
+
+        let _ = input.next();
     }
     Ok(arguments)
+}
+
+fn parse_argument(input: &mut ParseInput) -> Result<(M<String>, M<ValType>), ParserError> {
+    let next = input.next()?;
+    let span = next.span.clone();
+    let name = match &next.token {
+        Token::Identifier(name) => M::new(name.clone(), span),
+        _ => return Err(input.unexpected_token("Parse Arguments Identifier"))
+    };
+    let _colon = input.assert_next(Token::Colon, "Colon ':'")?;
+    let valtype = parse_valtype(input)?;
+    Ok((name, valtype))
 }
 
 #[cfg(test)]

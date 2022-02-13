@@ -1,0 +1,3 @@
+export fn return_param(value: u64) -> u64 {
+    return value;
+}
