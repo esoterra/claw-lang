@@ -1,6 +1,6 @@
 export fn quad(a: u64, b: u64, c: u64, x: u64) -> u64 {
-    let a_term: u64 = a * x * x;
-    let b_term: u64 = b * x;
-    let c_term: u64 = c;
+    let a_term = a * x * x;
+    let b_term = b * x;
+    let c_term = c;
     return a_term + b_term + c_term;
 }

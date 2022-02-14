@@ -29,8 +29,14 @@ pub fn resolve_expression<'fb, 'ast>(
                     let id = f_builder.context.lookup(&ident.value);
                     match id {
                         Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
-                        Some(FunctionItem::Param { index, .. }) => ir::Instruction::LocalGet { index },
-                        Some(FunctionItem::Local { index, .. }) => ir::Instruction::LocalGet { index },
+                        Some(FunctionItem::Param { index, .. }) => {
+                            f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
+                            ir::Instruction::LocalGet { index }
+                        },
+                        Some(FunctionItem::Local { index, .. }) => {
+                            f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
+                            ir::Instruction::LocalGet { index }
+                        },
                         None => {
                             return Err(ResolverError::NameError {
                                 src: f_builder.src.clone(),

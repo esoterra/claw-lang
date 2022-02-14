@@ -243,21 +243,19 @@ fn resolve_let<'fb, 'inst, 'ast>(
     });
     // Associate this local with its identifier
     let item = FunctionItem::Local { node, mutable, index };
-    println!("push {} = {:?}", ident, item);
     f_builder.context.push(ident.clone(), item);
     // Resolve any child statements
     if let Some(next_statement) = next {
         resolve_statement(f_builder, instructions, &next_statement.value)?;
     }
     // Unbind identifier
-    println!("pop {}", ident);
     f_builder.context.pop();
     Ok(())
 }
 
-fn resolve_assign<'fb, 'instrs, 'ast>(
+fn resolve_assign<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
-    instructions: &'instrs mut Vec<ir::Instruction>,
+    instructions: &'inst mut Vec<ir::Instruction>,
     place: &'ast M<Place>,
     expression: &'ast MBox<Expression>
 ) -> Result<(), ResolverError> {
@@ -281,9 +279,9 @@ fn resolve_assign<'fb, 'instrs, 'ast>(
     Ok(())
 }
 
-fn resolve_return<'fb, 'instrs, 'ast>(
+fn resolve_return<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
-    instructions: &'instrs mut Vec<ir::Instruction>,
+    instructions: &'inst mut Vec<ir::Instruction>,
     expression: &'ast MBox<Expression>,
 ) -> Result<(), ResolverError> {
     let (value_node, value) = resolve_expression(f_builder, &expression.value)?;
