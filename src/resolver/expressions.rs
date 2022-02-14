@@ -31,7 +31,14 @@ pub fn resolve_expression<'fb, 'ast>(
                         Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
                         Some(FunctionItem::Param { index, .. }) => ir::Instruction::LocalGet { index },
                         Some(FunctionItem::Local { index, .. }) => ir::Instruction::LocalGet { index },
-                        _ => panic!("Unsupported item dereferenced")
+                        None => {
+                            return Err(ResolverError::NameError {
+                                src: f_builder.src.clone(),
+                                span: place.span.clone(),
+                                ident: ident.value.clone()
+                            })
+                        },
+                        other => panic!("Unsupported item dereferenced: {:?}", other)
                     }
                 },
                 // _ => panic!("Dereferencing place expressions other than identifiers not supported")

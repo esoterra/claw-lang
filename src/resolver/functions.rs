@@ -1,4 +1,6 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
+
+use miette::NamedSource;
 
 use crate::ast::{
     M, MBox, Place,
@@ -14,6 +16,7 @@ use crate::ir;
 use crate::ir::type_graph::{TypeGraph, TypeNode};
 
 pub struct FunctionBuilder {
+    pub src: Arc<NamedSource>,
     pub context: FunctionContext,
     pub return_type: TypeNode,
     pub locals: Vec<TypeNode>,
@@ -22,9 +25,10 @@ pub struct FunctionBuilder {
 
 impl FunctionBuilder {
     fn new(
+        src: Arc<NamedSource>,
         module_context: &ModuleContext,
-        module: &ir::Module, signature:
-        &FunctionSignature
+        module: &ir::Module,
+        signature: &FunctionSignature
     ) -> Self {
         let mut type_graph = TypeGraph::new();
 
@@ -45,6 +49,7 @@ impl FunctionBuilder {
         let return_node = type_graph.add_declared_type(signature.return_type.clone());
 
         FunctionBuilder {
+            src,
             context,
             return_type: return_node,
             locals,
@@ -53,12 +58,13 @@ impl FunctionBuilder {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct FunctionContext {
-    mapping: HashMap<String, Vec<FunctionItem>>,
-    pop_order: Vec<String>
+    mapping: HashMap<String, FunctionItem>,
+    history: Vec<(String, Option<FunctionItem>)>
 }
 
-#[derive(Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub enum FunctionItem {
     Function {
         index: usize
@@ -103,43 +109,44 @@ impl FunctionContext {
                 },
                 _ => todo!()
             };
-            mapping.insert(ident.clone(), vec![item]);
+            mapping.insert(ident.clone(), item);
         }
 
         FunctionContext {
             mapping,
-            pop_order: Vec::new()
+            history: Vec::new()
         }
     }
 
     fn bind(&mut self, name: String, item: FunctionItem) {
-        if let Some(entries) = self.mapping.get_mut(&name) {
-            entries.push(item)
-        } else {
-            self.mapping.insert(name, vec![item]);
-        }
+        self.mapping.insert(name, item);
     }
 
     pub fn push(&mut self, name: String, item: FunctionItem) {
-        self.pop_order.push(name.clone());
-        if let Some(entries) = self.mapping.get_mut(&name) {
-            entries.push(item)
-        } else {
-            self.mapping.insert(name, vec![item]);
-        }
+        let previous = self.mapping.get(&name).map(|f| *f);
+        self.history.push((name.clone(), previous));
+        self.mapping.insert(name, item);
     }
 
     pub fn pop(&mut self) {
-        let to_pop = self.pop_order.pop().expect("pop called more than push");
-        self.mapping.get_mut(&to_pop).unwrap().pop();
+        if let Some((id, value)) = self.history.pop() {
+            if let Some(value) = value {
+                self.mapping.insert(id, value);
+            } else {
+                self.mapping.remove(&id);
+            }
+        } else {
+            panic!("pop called more than push");
+        }
     }
 
     pub fn lookup(&self, name: &String) -> Option<FunctionItem> {
-        self.mapping.get(name).map(|stack| *stack.last().unwrap())
+        self.mapping.get(name).map(|f| *f)
     }
 }
 
 pub fn resolve_function<'r, 'ast>(
+    src: Arc<NamedSource>,
     module_context: &'r ModuleContext,
     module: &'r mut ir::Module,
     fn_index: usize,
@@ -148,7 +155,7 @@ pub fn resolve_function<'r, 'ast>(
     if let Some(root) = &ast.body.root_statement {
         // Initialize FunctionBuilder
         let signature = &module.functions[fn_index].signature;
-        let mut f_builder = FunctionBuilder::new(module_context, module, signature);
+        let mut f_builder = FunctionBuilder::new(src, module_context, module, signature);
         let mut instructions = Vec::new();
         // Resolve root statement
         resolve_statement(&mut f_builder, &mut instructions, &root.value)?;
@@ -184,10 +191,7 @@ fn resolve_statement<'fb, 'inst, 'ast>(
             let expression = &expression.value;
             resolve_let(f_builder, instructions, mutable, ident,
                 annotation, expression, next
-            );
-            if let Some(next_statement) = next {
-                resolve_statement(f_builder, instructions, &next_statement.value)
-            } else { Ok(()) }
+            )
         },
         Statement::Assign {
             place,
@@ -239,12 +243,14 @@ fn resolve_let<'fb, 'inst, 'ast>(
     });
     // Associate this local with its identifier
     let item = FunctionItem::Local { node, mutable, index };
-    f_builder.context.push(ident, item);
+    println!("push {} = {:?}", ident, item);
+    f_builder.context.push(ident.clone(), item);
     // Resolve any child statements
     if let Some(next_statement) = next {
         resolve_statement(f_builder, instructions, &next_statement.value)?;
     }
     // Unbind identifier
+    println!("pop {}", ident);
     f_builder.context.pop();
     Ok(())
 }
@@ -257,7 +263,7 @@ fn resolve_assign<'fb, 'instrs, 'ast>(
 ) -> Result<(), ResolverError> {
     let name = match &place.value {
         Place::Identifier { ident } => ident.value.clone(),
-        // _ => panic!("Only identifiers supported as assignment targets")
+        _ => panic!("Only identifiers supported as assignment targets")
     };
 
     let (global_node, mutable, global_index) = match f_builder.context.lookup(&name) {

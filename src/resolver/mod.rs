@@ -18,19 +18,31 @@ use miette::{Diagnostic, NamedSource};
 use thiserror::Error;
 
 #[derive(Error, Debug, Diagnostic)]
-#[error("Failed to resolve")]
 #[diagnostic()]
 pub enum ResolverError {
+    #[error("Failed to resolve")]
     Base {
         #[source_code]
         src: Arc<NamedSource>,
         #[label("This bit")]
         span: Span
     },
+    #[error("Failed to resolve name \"{ident}\"")]
+    NameError {
+        #[source_code]
+        src: Arc<NamedSource>,
+        #[label("Name referenced here")]
+        span: Span,
+        ident: String
+    },
+    #[error("Not yet supported")]
     NotYetSupported
 }
 
-pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
+pub fn resolve(
+    src: Arc<NamedSource>,
+    ast: Module
+) -> Result<ir::Module, ResolverError> {
     let mut root = ModuleContext::new();
     let mut module = ir::Module::new();
 
@@ -75,7 +87,7 @@ pub fn resolve(ast: Module) -> Result<ir::Module, ResolverError> {
             },
             ModuleItem::Function(index) => {
                 if let Item::Function(ast) = item {
-                    functions::resolve_function(&root, &mut module, *index, ast)?;
+                    functions::resolve_function(src.clone(), &root, &mut module, *index, ast)?;
                 } else { unreachable!() }
             }
         }

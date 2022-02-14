@@ -46,6 +46,10 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
             _ => panic!("Cannot generate WASM for unresolved function")
         };
 
+        if let Some(local_defs) = fn_locals_to_wat(type_graph, function) {
+            let _ = write!(result, "      {}\n", local_defs);
+        }
+
         if let NeedsResolve::Resolved(instructions) = &function.body {
             for instruction in instructions.iter() {
                 let _ = write!(result, "      {}\n", instruction_to_wat(&type_graph, instruction));
@@ -58,12 +62,36 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
 fn fn_signature_to_wat(signature: &FunctionSignature) -> String {
     let mut parts: Vec<String> = signature.arguments
         .iter()
-        .map(|(_name, valtype)| format!("(param {})", valtype_to_wat(&valtype.value)))
+        .enumerate()
+        .map(|(i, (_name, valtype))|
+            format!("(param $L{} {})", i, valtype_to_wat(&valtype.value))
+        )
         .collect();
 
     let result_type = valtype_to_wat(&signature.return_type.value);
     parts.push(format!("(result {})", result_type));
     parts.join(" ")
+}
+
+fn fn_locals_to_wat(type_graph: &TypeGraph, function: &ir::Function) -> Option<String> {
+    if let NeedsResolve::Resolved(locals) = &function.locals {
+        if locals.len() == function.signature.arguments.len() {
+            return None;
+        }
+
+        let local_str = locals.iter()
+            .enumerate()
+            .skip(function.signature.arguments.len())
+            .map(|(i, local)| {
+                let valtype = type_graph.type_of(*local).unwrap();
+                format!("(local $L{} {})", i, valtype_to_wat(&valtype))
+            })
+            .collect::<Vec<String>>()
+            .join(" ");
+        Some(local_str)
+    } else {
+        panic!("RIP!!!!")
+    }
 }
 
 fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
@@ -98,7 +126,7 @@ fn instruction_to_wat(type_graph: &TypeGraph, instruction: &ir::Instruction) -> 
             index,
             value
         } => {
-            format!("(local.set $G{} {})", index, instruction_to_wat(type_graph, &value))
+            format!("(local.set $L{} {})", index, instruction_to_wat(type_graph, &value))
         },
         ir::Instruction::Add {
             node,

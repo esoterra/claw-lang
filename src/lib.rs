@@ -27,7 +27,7 @@ pub fn compile<SN: ToString, SC: ToString>(
         }
     };
 
-    let ast = match parser::parse(src, tokens) {
+    let ast = match parser::parse(src.clone(), tokens) {
         Ok(module) => module,
         Err(error) => {
             println!("{:?}", Report::new(error));
@@ -35,7 +35,7 @@ pub fn compile<SN: ToString, SC: ToString>(
         }
     };
 
-    let resolved = match resolver::resolve(ast) {
+    let resolved = match resolver::resolve(src, ast) {
         Ok(ir) => ir,
         Err(error) => {
             println!("{:?}", Report::new(error));

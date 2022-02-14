@@ -28,6 +28,6 @@ fn test_sample_programs() {
         let result_file_path = entry.path()
             .with_file_name(result_name);
         let expected_output =  fs::read_to_string(result_file_path).unwrap();
-        assert_eq!(output, Some(expected_output));
+        assert_eq!(output.unwrap(), expected_output);
     }
 }

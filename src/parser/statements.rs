@@ -16,7 +16,9 @@ pub fn parse_block(input: &mut ParseInput) -> Result<Block, ParserError> {
 
     let root_statement = if input.peek()?.token == Token::RBrace {
         None
-    } else { Some(parse_statement(input)?) };
+    } else {
+        Some(parse_statement(input)?)
+    };
 
     let end_brace = input.assert_next(Token::RBrace, "Right brace '}'")?;
     Ok(Block { start_brace, root_statement, end_brace })

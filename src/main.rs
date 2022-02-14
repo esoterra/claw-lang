@@ -102,7 +102,7 @@ fn compile(input_path: PathBuf) -> Option<()> {
         }
     };
 
-    let ast = match parse(src, tokens) {
+    let ast = match parse(src.clone(), tokens) {
         Ok(module) => module,
         Err(error) => {
             println!("{:?}", Report::new(error));
@@ -110,7 +110,7 @@ fn compile(input_path: PathBuf) -> Option<()> {
         }
     };
 
-    let resolved = match resolve(ast) {
+    let resolved = match resolve(src, ast) {
         Ok(ir) => ir,
         Err(error) => {
             println!("{:?}", Report::new(error));
