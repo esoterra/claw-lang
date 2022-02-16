@@ -1,6 +1,0 @@
-let mut counter: u32 = 0;
-
-export fn increment() -> u32 {
-   counter = counter + 1;
-   return counter;
-}

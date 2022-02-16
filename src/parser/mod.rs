@@ -15,8 +15,8 @@ use thiserror::Error;
 use self::module::parse_module;
 
 #[derive(Error, Debug, Diagnostic)]
-#[diagnostic()]
 pub enum ParserError{
+    #[diagnostic()]
     #[error("Failed to parse")]
     Base {
         #[source_code]
@@ -24,13 +24,20 @@ pub enum ParserError{
         #[label("Unable to parse this code")]
         span: SourceSpan,
     },
+    #[diagnostic()]
     #[error("Unexpected token {token:?} with description '{description}'")]
     UnexpectedToken {
+        #[source_code]
+        src: Arc<NamedSource>,
+        #[label("Here")]
+        span: SourceSpan,
         description: String,
-        token: Option<Token>
+        token: Token
     },
+    #[diagnostic()]
     #[error("End of input reached")]
     EndOfInput,
+    #[diagnostic()]
     #[error("Feature {feature} not supported yet at {token:?}")]
     NotYetSupported {
         feature: String,
@@ -74,9 +81,12 @@ impl ParseInput {
     }
 
     pub fn unexpected_token(&self, description: &str) -> ParserError {
+        let data = &self.tokens[self.index-1];
         ParserError::UnexpectedToken {
+            src: self.src.clone(),
+            span: data.span.clone(),
             description: description.to_string(),
-            token: self.tokens.get(self.index).map(|t| t.token.clone())
+            token: data.token.clone()
         }
     }
 

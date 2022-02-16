@@ -5,8 +5,8 @@ use miette::NamedSource;
 use crate::ast::{
     M, MBox, Place,
     module::{Function, FunctionSignature},
-    statements::Statement,
-    expressions::Expression, types::ValType
+    statements::{Statement, Block},
+    expressions::Expression, types::{ValType, BasicVal}
 };
 use crate::resolver::{
     ResolverError, ModuleContext, ModuleItem,
@@ -30,7 +30,7 @@ impl FunctionBuilder {
         module: &ir::Module,
         signature: &FunctionSignature
     ) -> Self {
-        let mut type_graph = TypeGraph::new();
+        let mut type_graph = TypeGraph::new(src.clone());
 
         let mut context = FunctionContext::from_module(&mut type_graph, &module, module_context);
 
@@ -152,7 +152,7 @@ pub fn resolve_function<'r, 'ast>(
     fn_index: usize,
     ast: &'ast Function
 ) -> Result<(), ResolverError> {
-    if let Some(root) = &ast.body.root_statement {
+    if let Some(root) = &ast.body.value.root_statement {
         // Initialize FunctionBuilder
         let signature = &module.functions[fn_index].signature;
         let mut f_builder = FunctionBuilder::new(src, module_context, module, signature);
@@ -162,6 +162,10 @@ pub fn resolve_function<'r, 'ast>(
         // Update IR
         let function = &mut module.functions[fn_index];
         f_builder.type_graph.resolve_all();
+        let type_errors = f_builder.type_graph.get_errors();
+        if !type_errors.is_empty() {
+            return Err(ResolverError::TypeErrors { errors: type_errors });
+        }
         function.type_graph = ir::NeedsResolve::Resolved(f_builder.type_graph);
         function.locals = ir::NeedsResolve::Resolved(f_builder.locals);
         function.body = ir::NeedsResolve::Resolved(instructions);
@@ -186,21 +190,30 @@ fn resolve_statement<'fb, 'inst, 'ast>(
             next
         } => {
             let mutable = mut_kwd.is_some();
-            let ident = ident.value.clone();
+            let ident = ident.clone();
             let annotation = annotation.clone();
-            let expression = &expression.value;
             resolve_let(f_builder, instructions, mutable, ident,
                 annotation, expression, next
             )
         },
         Statement::Assign {
             place,
-            assign_op,
+            assign_op: _,
             expression,
             next
         } => {
-            let _ = assign_op;
             resolve_assign(f_builder, instructions, place, expression)?;
+            if let Some(next_statement) = next {
+                resolve_statement(f_builder, instructions, &next_statement.value)
+            } else { Ok(()) }
+        },
+        Statement::If {
+            if_kwd: _,
+            condition,
+            block,
+            next
+        } => {
+            resolve_if(f_builder, instructions, condition, block)?;
             if let Some(next_statement) = next {
                 resolve_statement(f_builder, instructions, &next_statement.value)
             } else { Ok(()) }
@@ -218,9 +231,9 @@ fn resolve_let<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
     instructions: &'inst mut Vec<ir::Instruction>,
     mutable: bool,
-    ident: String,
+    ident: M<String>,
     annotation: Option<M<ValType>>,
-    expression: &'ast Expression,
+    expression: &'ast MBox<Expression>,
     next: &'ast Option<MBox<Statement>>
 ) -> Result<(), ResolverError> {
     // Create a TypeNode for this local variable
@@ -228,7 +241,7 @@ fn resolve_let<'fb, 'inst, 'ast>(
         Some(valtype) =>
             f_builder.type_graph.add_declared_type(valtype.clone()),
         None =>
-            f_builder.type_graph.add_inferred_type()
+            f_builder.type_graph.add_inferred_type(ident.span)
     };
     // Add the variable to the locals table
     let index = f_builder.locals.len();
@@ -243,7 +256,7 @@ fn resolve_let<'fb, 'inst, 'ast>(
     });
     // Associate this local with its identifier
     let item = FunctionItem::Local { node, mutable, index };
-    f_builder.context.push(ident.clone(), item);
+    f_builder.context.push(ident.value.clone(), item);
     // Resolve any child statements
     if let Some(next_statement) = next {
         resolve_statement(f_builder, instructions, &next_statement.value)?;
@@ -272,10 +285,32 @@ fn resolve_assign<'fb, 'inst, 'ast>(
     };
     assert_eq!(mutable, true);
 
-    let (expression_node, value) = resolve_expression(f_builder, &expression.value)?;
+    let (expression_node, value) = resolve_expression(f_builder, expression)?;
     f_builder.type_graph.constrain_equal(global_node, expression_node);
     instructions.push(ir::Instruction::GlobalSet { index: global_index, value });
 
+    Ok(())
+}
+
+fn resolve_if<'fb, 'inst, 'ast>(
+    f_builder: &'fb mut FunctionBuilder,
+    instructions: &'inst mut Vec<ir::Instruction>,
+    condition: &'ast MBox<Expression>,
+    block: &'ast M<Block>
+) -> Result<(), ResolverError> {
+    // Resolve condition
+    let (cond_node, cond) = resolve_expression(f_builder, condition)?;
+    f_builder.type_graph.constrain_type(cond_node, ValType::Basic(BasicVal::Bool));
+    // Resolve body statements
+    let mut body_instructions = Vec::new();
+    if let Some(body) = &block.value.root_statement {
+        resolve_statement(f_builder, &mut body_instructions, &body.value)?;
+    }
+    // Produce IR
+    instructions.push(*cond);
+    instructions.push(ir::Instruction::If { 
+        body: body_instructions
+    });
     Ok(())
 }
 
@@ -284,7 +319,7 @@ fn resolve_return<'fb, 'inst, 'ast>(
     instructions: &'inst mut Vec<ir::Instruction>,
     expression: &'ast MBox<Expression>,
 ) -> Result<(), ResolverError> {
-    let (value_node, value) = resolve_expression(f_builder, &expression.value)?;
+    let (value_node, value) = resolve_expression(f_builder, expression)?;
     f_builder.type_graph.constrain_equal(f_builder.return_type, value_node);
     instructions.push(ir::Instruction::Return { value });
     Ok(())

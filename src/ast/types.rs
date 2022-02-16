@@ -1,7 +1,7 @@
 use super::M;
 
 /// The type for all values
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum ValType {
     /// Basic values that WASM can operate on
     Basic(BasicVal),
@@ -12,7 +12,7 @@ pub enum ValType {
 }
 
 /// The set of primitive values WASM can operate on directly
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum BasicVal {
     // Integers (any signed-ness)
     I32, I64,
@@ -26,7 +26,7 @@ pub enum BasicVal {
     Bool
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct PointerVal {
     pub kind: M<PointerKind>,
     pub mem_type: M<Pointable>,
@@ -35,7 +35,7 @@ pub struct PointerVal {
     pub memory: Option<M<String>>
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum PointerKind {
     /// A pointer that represents a single location in memory
     Ptr,
@@ -44,7 +44,7 @@ pub enum PointerKind {
 }
 
 /// The valid targets for pointer types
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum Pointable {
     /// All of the basic values can be pointed to
     Basic(BasicVal),
@@ -54,7 +54,7 @@ pub enum Pointable {
     U8, U16, S8, S16, I8, I16
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FnType {
     pub param_types: Vec<M<ValType>>,
     pub result_type: M<ValType>

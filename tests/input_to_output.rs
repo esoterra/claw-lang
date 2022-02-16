@@ -15,8 +15,13 @@ fn test_sample_programs() {
         let name = entry.path()
             .file_name().expect("File name not available")
             .to_str().expect("File name not valid String").to_string();
+        println!("Testing case '{}'", name);
         let input =  fs::read_to_string(entry.path()).unwrap();
         let output = compile(name.clone(), input);
+        let output = match output {
+            Some(output) => output,
+            None => panic!("Failed to compile '{}'", name)
+        };
 
         // Construct the name of the .wat expectation file
         let result_name = &name.split(".")
@@ -28,6 +33,6 @@ fn test_sample_programs() {
         let result_file_path = entry.path()
             .with_file_name(result_name);
         let expected_output =  fs::read_to_string(result_file_path).unwrap();
-        assert_eq!(output.unwrap(), expected_output);
+        assert_eq!(output, expected_output);
     }
 }

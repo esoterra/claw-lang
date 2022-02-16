@@ -14,27 +14,35 @@ use crate::ast::{
 };
 use crate::ir;
 
-use miette::{Diagnostic, NamedSource};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 #[derive(Error, Debug, Diagnostic)]
-#[diagnostic()]
 pub enum ResolverError {
+    #[diagnostic()]
     #[error("Failed to resolve")]
     Base {
         #[source_code]
         src: Arc<NamedSource>,
         #[label("This bit")]
-        span: Span
+        span: SourceSpan
     },
+    #[diagnostic()]
     #[error("Failed to resolve name \"{ident}\"")]
     NameError {
         #[source_code]
         src: Arc<NamedSource>,
         #[label("Name referenced here")]
-        span: Span,
+        span: SourceSpan,
         ident: String
     },
+    #[diagnostic()]
+    #[error("Errors when resolving types")]
+    TypeErrors {
+        #[related]
+        errors: Vec<ir::type_graph::TypeError>
+    },
+    #[diagnostic()]
     #[error("Not yet supported")]
     NotYetSupported
 }

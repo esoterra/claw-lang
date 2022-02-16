@@ -8,7 +8,7 @@ use miette::SourceSpan;
 pub type Span = SourceSpan;
 
 /// The metadata wrapper type
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct M<T> {
     pub span: Span,
     pub value: T
@@ -29,7 +29,7 @@ impl<T> M<T> {
 }
 
 /// The metadata wrapper type
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MBox<T> {
     pub span: Span,
     pub value: Box<T>

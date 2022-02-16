@@ -72,7 +72,7 @@ pub struct Function {
     pub body: NeedsResolve<Vec<Instruction>>
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Instruction {
     Constant {
         node: TypeNode,
@@ -92,27 +92,46 @@ pub enum Instruction {
         index: usize,
         value: Box<Instruction>
     },
-    Add {
+    BinaryArith {
         node: TypeNode,
+        op: BinArithOp,
         left: Box<Instruction>,
         right: Box<Instruction>
     },
-    Subtract {
+    BinaryRel {
         node: TypeNode,
+        op: BinRelOp,
         left: Box<Instruction>,
         right: Box<Instruction>
     },
-    Multiply {
-        node: TypeNode,
+    BinaryLog {
+        op: BinRelOp,
         left: Box<Instruction>,
         right: Box<Instruction>
     },
-    Equals {
-        node: TypeNode,
-        left: Box<Instruction>,
-        right: Box<Instruction>
+    If {
+        body: Vec<Instruction>
     },
     Return {
         value: Box<Instruction>
     }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinArithOp {
+    Add,
+    Sub,
+    Mul,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinRelOp {
+    EQ,
+    LT
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BinLogOp {
+    AND,
+    OR,
 }

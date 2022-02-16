@@ -1,5 +1,5 @@
 use crate::ast::{
-    Place,
+    MBox, Place,
     expressions::{BinaryOp, Expression},
     types::{ValType, BasicVal}
 };
@@ -12,11 +12,11 @@ use crate::ir::type_graph::TypeNode;
 
 pub fn resolve_expression<'fb, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
-    ast: &'ast Expression,
+    ast: &'ast MBox<Expression>,
 ) -> Result<(TypeNode, Box<ir::Instruction>), ResolverError> {
-    let node = f_builder.type_graph.add_inferred_type();
+    let node = f_builder.type_graph.add_inferred_type(ast.span.clone());
 
-    let instr = match ast {
+    let instr = match ast.value.as_ref() {
         Expression::Literal { value } => {
             ir::Instruction::Constant {
                 node,
@@ -55,28 +55,38 @@ pub fn resolve_expression<'fb, 'ast>(
             operator,
             right
         } => {
-            let (left_node, left) = resolve_expression(f_builder, &left.value)?;
-            let (right_node, right) = resolve_expression(f_builder, &right.value)?;
+            let (left_node, left) = resolve_expression(f_builder, &left)?;
+            let (right_node, right) = resolve_expression(f_builder, &right)?;
             match operator.value {
                 BinaryOp::Add => {
+                    let op = ir::BinArithOp::Add;
                     f_builder.type_graph.constrain_equal(node, left_node);
                     f_builder.type_graph.constrain_equal(node, right_node);
-                    ir::Instruction::Add { node, left, right }
+                    ir::Instruction::BinaryArith { node, op, left, right }
                 },
                 BinaryOp::Sub => {
+                    let op = ir::BinArithOp::Sub;
                     f_builder.type_graph.constrain_equal(node, left_node);
                     f_builder.type_graph.constrain_equal(node, right_node);
-                    ir::Instruction::Subtract { node, left, right }
+                    ir::Instruction::BinaryArith { node, op, left, right }
                 },
                 BinaryOp::Mult => {
+                    let op = ir::BinArithOp::Mul;
                     f_builder.type_graph.constrain_equal(node, left_node);
                     f_builder.type_graph.constrain_equal(node, right_node);
-                    ir::Instruction::Multiply { node, left, right }
+                    ir::Instruction::BinaryArith { node, op, left, right }
                 },
                 BinaryOp::EQ => {
-                    f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::I32));
+                    let op = ir::BinRelOp::EQ;
+                    f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::Bool));
                     f_builder.type_graph.constrain_equal(left_node, right_node);
-                    ir::Instruction::Subtract { node, left, right }
+                    ir::Instruction::BinaryRel { node, left, op, right }
+                },
+                BinaryOp::LT => {
+                    let op = ir::BinRelOp::LT;
+                    f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::Bool));
+                    f_builder.type_graph.constrain_equal(left_node, right_node);
+                    ir::Instruction::BinaryRel { node, op, left, right }
                 },
                 _ => panic!("Unsupported binary operator {:?}", operator.value)
             }

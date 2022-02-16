@@ -62,7 +62,7 @@ pub struct MemType {
 pub struct Function {
     pub export_kwd: Option<Span>,
     pub signature: FunctionSignature,
-    pub body: Block
+    pub body: M<Block>
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

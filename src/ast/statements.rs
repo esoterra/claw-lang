@@ -27,6 +27,12 @@ pub enum Statement {
         expression: MBox<Expression>,
         next: Option<MBox<Statement>>
     },
+    If {
+        if_kwd: Span,
+        condition: MBox<Expression>,
+        block: M<Block>,
+        next: Option<MBox<Statement>>
+    },
     Return {
         return_kwd: Span,
         expression: MBox<Expression>

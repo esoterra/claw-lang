@@ -1,5 +1,3 @@
-use std::string::ParseError;
-
 use crate::lexer::Token;
 use crate::ast::{
     M, MBox, Place,
@@ -56,7 +54,7 @@ fn parse_leaf(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
         let span = place.span.clone();
         return Ok(MBox::new(Expression::Place { place }, span))
     }
-
+    input.next();
     Err(input.unexpected_token("Parse Leaf"))
 }
 
@@ -68,7 +66,7 @@ fn parse_parenthetical(input: &mut ParseInput) -> Result<MBox<Expression>, Parse
 }
 
 /// A place expression describes a memory location
-/// e.g. foobar, foobar[0], foobar[10][0]
+/// e.g. foobar, foobar[0], foobar[10], foobar.items[0]
 /// For now, ony plain identifiers are supported
 pub fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
     let next = input.next()?;

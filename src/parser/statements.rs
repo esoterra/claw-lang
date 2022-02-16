@@ -11,8 +11,9 @@ use crate::parser::{
     types::parse_valtype
 };
 
-pub fn parse_block(input: &mut ParseInput) -> Result<Block, ParserError> {
+pub fn parse_block(input: &mut ParseInput) -> Result<M<Block>, ParserError> {
     let start_brace = input.assert_next(Token::LBrace, "Left brace '{'")?;
+    let start_span = start_brace.clone();
 
     let root_statement = if input.peek()?.token == Token::RBrace {
         None
@@ -21,7 +22,8 @@ pub fn parse_block(input: &mut ParseInput) -> Result<Block, ParserError> {
     };
 
     let end_brace = input.assert_next(Token::RBrace, "Right brace '}'")?;
-    Ok(Block { start_brace, root_statement, end_brace })
+    let end_span = end_brace.clone();
+    Ok(M::new_range(Block { start_brace, root_statement, end_brace }, start_span, end_span))
 }
 
 pub fn parse_statement(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
@@ -37,7 +39,15 @@ pub fn parse_statement(input: &mut ParseInput) -> Result<MBox<Statement>, Parser
     if let Ok(value) = parse_let(input) {
         return Ok(value)
     }
-    Err(input.unexpected_token("Parse Statement"))
+    input.restore(checkpoint);
+    if let Ok(value) = parse_if(input) {
+        return Ok(value)
+    }
+    if input.done() {
+        Err(ParserError::EndOfInput)
+    } else {
+        Err(input.unexpected_token("Parse Statement"))
+    }
 }
 
 pub fn try_parse_statement(input: &mut ParseInput) -> Option<MBox<Statement>> {
@@ -109,6 +119,22 @@ fn parse_assign(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> 
         place, assign_op, expression, next
     };
     Ok(MBox::new_range(statement, span, semicolon))
+}
+
+fn parse_if(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
+    let if_kwd = input.assert_next(Token::If, "If keyword 'if'")?;
+    let condition = parse_expression(input)?;
+    let block = parse_block(input)?;
+
+    let next = try_parse_statement(input);
+
+    let start_span = if_kwd.clone();
+    let end_span = block.span.clone();
+
+    let statement = Statement::If {
+        if_kwd, condition, block, next
+    };
+    Ok(MBox::new_range(statement, start_span, end_span))
 }
 
 fn parse_ident(input: &mut ParseInput) -> Result<M<String>, ParserError> {

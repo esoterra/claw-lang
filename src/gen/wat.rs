@@ -51,8 +51,9 @@ fn functions_to_wat(functions: &Vec<ir::Function>, result: &mut String) {
         }
 
         if let NeedsResolve::Resolved(instructions) = &function.body {
+            let base_context = Context::Indented { amount: 2 };
             for instruction in instructions.iter() {
-                let _ = write!(result, "      {}\n", instruction_to_wat(&type_graph, instruction));
+                instruction_to_wat(&type_graph, instruction, result, base_context);
             }
         } else { panic!("Cannot generate WASM for unresolved function") }
         let _ = write!(result, "   )\n");
@@ -105,53 +106,93 @@ fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
     }
 }
 
-fn instruction_to_wat(type_graph: &TypeGraph, instruction: &ir::Instruction) -> String {
+fn instruction_to_wat(
+    type_graph: &TypeGraph, instruction: &ir::Instruction,
+    result: &mut String, line: Context
+) {
+    line.emit_prefix(result);
     match &instruction {
         ir::Instruction::Constant {
             node,
             value
         } => {
             let valtype = type_graph.type_of(*node).expect("Constant type not known");
-            literal_to_wat(valtype, value)
+            let const_expr = literal_to_wat(valtype, value);
+            let _ = write!(result, "{}", const_expr);
         },
-        ir::Instruction::GlobalGet { index } => format!("(global.get $G{})", index),
+        ir::Instruction::GlobalGet { index } => {
+            let _ = write!(result, "(global.get $G{})", index);
+        },
         ir::Instruction::GlobalSet {
             index,
             value
         } => {
-            format!("(global.set $G{} {})", index, instruction_to_wat(type_graph, &value))
+            let _ = write!(result, "(global.set $G{} ", index);
+            instruction_to_wat(type_graph, &value, result, Context::Inline);
+            let _ = write!(result, ")");
         },
-        ir::Instruction::LocalGet { index } => format!("(local.get $L{})", index),
+        ir::Instruction::LocalGet { index } => {
+            let _ = write!(result, "(local.get $L{})", index);
+        },
         ir::Instruction::LocalSet {
             index,
             value
         } => {
-            format!("(local.set $L{} {})", index, instruction_to_wat(type_graph, &value))
+            let _ = write!(result, "(local.set $L{} ", index);
+            instruction_to_wat(type_graph, &value, result, Context::Inline);
+            let _ = write!(result, ")");
         },
-        ir::Instruction::Add {
+        ir::Instruction::BinaryArith {
             node,
+            op,
             left,
             right
-        } => binary_expr_to_wat(type_graph, "add", *node, left, right),
-        ir::Instruction::Subtract {
+        } => {
+            let mnemonic = match op {
+                ir::BinArithOp::Add => "add",
+                ir::BinArithOp::Sub => "sub",
+                ir::BinArithOp::Mul => "mul",
+            };
+            binary_expr_to_wat(
+                type_graph,
+                mnemonic, *node,
+                left, right, result
+            );
+        },
+        ir::Instruction::BinaryRel {
             node,
+            op,
             left,
             right
-        } => binary_expr_to_wat(type_graph, "sub", *node, left, right),
-        ir::Instruction::Multiply {
-            node,
-            left,
-            right
-        } => binary_expr_to_wat(type_graph, "mul", *node, left, right),
-        ir::Instruction::Equals {
-            node,
-            left,
-            right
-        } => binary_expr_to_wat(type_graph, "eq", *node, left, right),
+        } => {
+            let mnemonic = match op {
+                ir::BinRelOp::EQ => "eq",
+                ir::BinRelOp::LT => "lt",
+            };
+            binary_expr_to_wat(
+                type_graph,
+                mnemonic, *node,
+                left, right, result
+            );
+        },
+        ir::Instruction::If {
+            body
+        } => {
+            let _ = write!(result, "(if\n");
+            for instruction in body {
+                instruction_to_wat(type_graph, instruction, result, line.indent());
+            }
+            line.emit_prefix(result);
+            let _ = write!(result, "end)");
+        },
         ir::Instruction::Return { value } => {
-            format!("(return {})", instruction_to_wat(type_graph, &value))
-        }
-    }
+            let _ = write!(result, "(return ");
+            instruction_to_wat(type_graph, &value, result, Context::Inline);
+            let _ = write!(result, ")");
+        },
+        _ => todo!()
+    };
+    line.emit_suffix(result);
 }
 
 fn binary_expr_to_wat(
@@ -159,20 +200,20 @@ fn binary_expr_to_wat(
     label: &str,
     node: TypeNode,
     left: &Box<ir::Instruction>,
-    right: &Box<ir::Instruction>
-) -> String {
+    right: &Box<ir::Instruction>,
+    result: &mut String
+) {
     let valtype = type_graph.type_of(node)
         .expect("Binary expr type unknown");
     let basicval = match valtype {
         ValType::Basic(basicval) => basicval,
-        _ => panic!("Only basic types supported for addition")
+        _ => panic!("Only basic types supported for binary operations")
     };
-    format!("({}.{} {} {})",
-        basicval_to_wat(&basicval),
-        label,
-        instruction_to_wat(type_graph, &left),
-        instruction_to_wat(type_graph, &right)
-    )
+    let _ = write!(result, "({}.{} ", basicval_to_wat(&basicval), label);
+    instruction_to_wat(type_graph, &left, result, Context::Inline);
+    let _ = write!(result, " ");
+    instruction_to_wat(type_graph, &right, result, Context::Inline);
+    let _ = write!(result, ")");
 }
 
 fn literal_to_wat(valtype: ValType, literal: &Literal) -> String {
@@ -202,6 +243,40 @@ fn basicval_to_wat(basicval: &BasicVal) -> String {
         BasicVal::U64 => "i64".to_string(),
         BasicVal::S64 => "i64".to_string(),
         BasicVal::I64 => "i64".to_string(),
+        BasicVal::Bool => "i32".to_string(),
         _ => panic!("Unsupported type for WAT output {:?}", basicval)
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+enum Context {
+    Inline,
+    Indented { amount: usize }
+}
+
+impl Context {
+    fn indent(&self) -> Self {
+        match *self {
+            Context::Inline => Context::Indented { amount: 1 },
+            Context::Indented { amount } => Context::Indented { amount: amount + 1 }
+        }
+    }
+
+    fn emit_prefix(&self, result: &mut String) {
+        match *self {
+            Context::Inline => {},
+            Context::Indented { amount } => {
+                let _ = write!(result, "{}", "   ".repeat(amount));
+            }
+        }
+    }
+
+    fn emit_suffix(&self, result: &mut String) {
+        match *self {
+            Context::Inline => {},
+            Context::Indented { amount: _ } => {
+                let _ = write!(result, "\n");
+            }
+        }
     }
 }
