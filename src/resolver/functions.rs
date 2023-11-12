@@ -6,7 +6,7 @@ use crate::ast::{
     M, MBox, Place,
     module::{Function, FunctionSignature},
     statements::{Statement, Block},
-    expressions::Expression, types::{ValType, BasicVal}
+    expressions::Expression, types::ValType
 };
 use crate::resolver::{
     ResolverError, ModuleContext, ModuleItem,
@@ -298,7 +298,7 @@ fn resolve_if<'fb, 'inst, 'ast>(
 ) -> Result<(), ResolverError> {
     // Resolve condition
     let (cond_node, cond) = resolve_expression(f_builder, condition)?;
-    f_builder.type_graph.constrain_type(cond_node, ValType::Basic(BasicVal::Bool));
+    f_builder.type_graph.constrain_type(cond_node, ValType::Bool);
     // Resolve body statements
     let mut body_instructions = Vec::new();
     if let Some(body) = &block.value.root_statement {

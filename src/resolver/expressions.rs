@@ -1,7 +1,7 @@
 use crate::ast::{
     MBox, Place,
     expressions::{BinaryOp, Expression},
-    types::{ValType, BasicVal}
+    types::ValType
 };
 use crate::resolver::{
     ResolverError,
@@ -78,13 +78,13 @@ pub fn resolve_expression<'fb, 'ast>(
                 },
                 BinaryOp::EQ => {
                     let op = ir::BinRelOp::EQ;
-                    f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::Bool));
+                    f_builder.type_graph.constrain_type(node, ValType::Bool);
                     f_builder.type_graph.constrain_equal(left_node, right_node);
                     ir::Instruction::BinaryRel { node, left, op, right }
                 },
                 BinaryOp::LT => {
                     let op = ir::BinRelOp::LT;
-                    f_builder.type_graph.constrain_type(node, ValType::Basic(BasicVal::Bool));
+                    f_builder.type_graph.constrain_type(node, ValType::Bool);
                     f_builder.type_graph.constrain_equal(left_node, right_node);
                     ir::Instruction::BinaryRel { node, op, left, right }
                 },

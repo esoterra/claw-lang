@@ -3,7 +3,7 @@ use std::fmt::Write;
 use crate::ast::{
     module::FunctionSignature,
     expressions::Literal,
-    types::{ValType, BasicVal}
+    types::ValType
 };
 use crate::resolver::ModuleItem;
 use crate::ir::type_graph::TypeNode;
@@ -205,11 +205,7 @@ fn binary_expr_to_wat(
 ) {
     let valtype = type_graph.type_of(node)
         .expect("Binary expr type unknown");
-    let basicval = match valtype {
-        ValType::Basic(basicval) => basicval,
-        _ => panic!("Only basic types supported for binary operations")
-    };
-    let _ = write!(result, "({}.{} ", basicval_to_wat(&basicval), label);
+    let _ = write!(result, "({}.{} ", valtype_to_wat(&valtype), label);
     instruction_to_wat(type_graph, &left, result, Context::Inline);
     let _ = write!(result, " ");
     instruction_to_wat(type_graph, &right, result, Context::Inline);
@@ -218,33 +214,24 @@ fn binary_expr_to_wat(
 
 fn literal_to_wat(valtype: ValType, literal: &Literal) -> String {
     match (valtype, &literal) {
-        (ValType::Basic(BasicVal::I32), Literal::Integer(value)) => format!("(i32.const {})", value),
-        (ValType::Basic(BasicVal::I64), Literal::Integer(value)) => format!("(i64.const {})", value),
-        (ValType::Basic(BasicVal::U32), Literal::Integer(value)) => format!("(i32.const {})", value),
-        (ValType::Basic(BasicVal::U64), Literal::Integer(value)) => format!("(i64.const {})", value),
-        (ValType::Basic(BasicVal::F32), Literal::Float(value)) => format!("(f32.const {})", value),
-        (ValType::Basic(BasicVal::F64), Literal::Float(value)) => format!("(f64.const {})", value),
+        (ValType::S32, Literal::Integer(value)) => format!("(i32.const {})", value),
+        (ValType::S64, Literal::Integer(value)) => format!("(i64.const {})", value),
+        (ValType::U32, Literal::Integer(value)) => format!("(i32.const {})", value),
+        (ValType::U64, Literal::Integer(value)) => format!("(i64.const {})", value),
+        (ValType::F32, Literal::Float(value)) => format!("(f32.const {})", value),
+        (ValType::F64, Literal::Float(value)) => format!("(f64.const {})", value),
         _ => todo!()
     }
 }
 
 fn valtype_to_wat(valtype: &ValType) -> String {
     match valtype {
-        ValType::Basic(basicval) => basicval_to_wat(basicval),
+        ValType::U32 => "i32".to_string(),
+        ValType::S32 => "i32".to_string(),
+        ValType::U64 => "i64".to_string(),
+        ValType::S64 => "i64".to_string(),
+        ValType::Bool => "i32".to_string(),
         _ => panic!("Unsupported type for WAT output {:?}", valtype)
-    }
-}
-
-fn basicval_to_wat(basicval: &BasicVal) -> String {
-    match basicval {
-        BasicVal::U32 => "i32".to_string(),
-        BasicVal::S32 => "i32".to_string(),
-        BasicVal::I32 => "i32".to_string(),
-        BasicVal::U64 => "i64".to_string(),
-        BasicVal::S64 => "i64".to_string(),
-        BasicVal::I64 => "i64".to_string(),
-        BasicVal::Bool => "i32".to_string(),
-        _ => panic!("Unsupported type for WAT output {:?}", basicval)
     }
 }
 
