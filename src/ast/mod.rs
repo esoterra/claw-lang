@@ -48,14 +48,3 @@ impl<T> MBox<T> {
         MBox { span, value: Box::new(value) }
     }
 }
-
-/// A place value represents a memory location
-/// e.g. foobar, foobar[0], foobar[0..199]
-/// Places can be dereferenced, assigned to, and operated on
-/// They are used in expressions and statements
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub enum Place {
-    Identifier {
-        ident: M<String>
-    }
-}

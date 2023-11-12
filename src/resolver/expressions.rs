@@ -1,5 +1,5 @@
 use crate::ast::{
-    MBox, Place,
+    MBox,
     expressions::{BinaryOp, Expression},
     types::ValType
 };
@@ -23,31 +23,26 @@ pub fn resolve_expression<'fb, 'ast>(
                 value: value.value.clone()
             }
         },
-        Expression::Place { place } => {
-            match &place.value {
-                Place::Identifier { ident } => {
-                    let id = f_builder.context.lookup(&ident.value);
-                    match id {
-                        Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
-                        Some(FunctionItem::Param { index, .. }) => {
-                            f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
-                            ir::Instruction::LocalGet { index }
-                        },
-                        Some(FunctionItem::Local { index, .. }) => {
-                            f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
-                            ir::Instruction::LocalGet { index }
-                        },
-                        None => {
-                            return Err(ResolverError::NameError {
-                                src: f_builder.src.clone(),
-                                span: place.span.clone(),
-                                ident: ident.value.clone()
-                            })
-                        },
-                        other => panic!("Unsupported item dereferenced: {:?}", other)
-                    }
+        Expression::Identifier { ident } => {
+            let id = f_builder.context.lookup(&ident.value);
+            match id {
+                Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
+                Some(FunctionItem::Param { index, .. }) => {
+                    f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
+                    ir::Instruction::LocalGet { index }
                 },
-                // _ => panic!("Dereferencing place expressions other than identifiers not supported")
+                Some(FunctionItem::Local { index, .. }) => {
+                    f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
+                    ir::Instruction::LocalGet { index }
+                },
+                None => {
+                    return Err(ResolverError::NameError {
+                        src: f_builder.src.clone(),
+                        span: ident.span.clone(),
+                        ident: ident.value.clone()
+                    })
+                },
+                other => panic!("Unsupported item dereferenced: {:?}", other)
             }
         },
         Expression::Binary {

@@ -1,4 +1,4 @@
-use super::{M, MBox, Place};
+use super::{M, MBox};
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
@@ -11,8 +11,13 @@ pub enum Expression {
         operator: M<BinaryOp>,
         right: MBox<Expression>
     },
-    Place {
-        place: M<Place>,
+    /// Function calls and variant case constructors.
+    Invocation {
+        ident: M<String>,
+        args: Vec<(M<String>, MBox<Expression>)>
+    },
+    Identifier {
+        ident: M<String>,
     },
     Literal {
         value: M<Literal>,
@@ -22,8 +27,7 @@ pub enum Expression {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum UnaryOp {
     LogicalInvert,
-    ArithmeticNegate,
-    Dereference
+    ArithmeticNegate
 }
 
 /// The supported binary operators

@@ -7,7 +7,7 @@ use crate::ast::{
 };
 use crate::parser::{
     ParserError, ParseInput,
-    expressions::{parse_expression, parse_place},
+    expressions::{parse_expression, parse_ident},
     types::parse_valtype
 };
 
@@ -107,16 +107,16 @@ fn parse_return(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> 
 }
 
 fn parse_assign(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
-    let place = parse_place(input)?;
+    let ident = parse_ident(input)?;
     let assign_op = input.assert_next(Token::Assign, "Assign '='")?;
     let expression = parse_expression(input)?;
     let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 
     let next = try_parse_statement(input);
 
-    let span = place.span.clone();
+    let span = ident.span.clone();
     let statement = Statement::Assign {
-        place, assign_op, expression, next
+        ident, assign_op, expression, next
     };
     Ok(MBox::new_range(statement, span, semicolon))
 }
@@ -135,20 +135,6 @@ fn parse_if(input: &mut ParseInput) -> Result<MBox<Statement>, ParserError> {
         if_kwd, condition, block, next
     };
     Ok(MBox::new_range(statement, start_span, end_span))
-}
-
-fn parse_ident(input: &mut ParseInput) -> Result<M<String>, ParserError> {
-    let next = input.peek()?;
-    let span = next.span.clone();
-    match next.token.clone() {
-        Token::Identifier(ident) => {
-            let _ = input.next();
-            Ok(M::new(ident, span))
-        },
-        _ => {
-            Err(input.unexpected_token("Expected identifier"))
-        }
-    }
 }
 
 #[cfg(test)]

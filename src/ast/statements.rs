@@ -1,5 +1,5 @@
 use super::{
-    Span, M, MBox, Place,
+    Span, M, MBox,
     expressions::Expression, types::ValType
 };
 
@@ -22,7 +22,7 @@ pub enum Statement {
         next: Option<MBox<Statement>>
     },
     Assign {
-        place: M<Place>,
+        ident: M<String>,
         assign_op: Span,
         expression: MBox<Expression>,
         next: Option<MBox<Statement>>

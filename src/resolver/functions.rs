@@ -3,7 +3,7 @@ use std::{collections::HashMap, sync::Arc};
 use miette::NamedSource;
 
 use crate::ast::{
-    M, MBox, Place,
+    M, MBox,
     module::{Function, FunctionSignature},
     statements::{Statement, Block},
     expressions::Expression, types::ValType
@@ -196,12 +196,12 @@ fn resolve_statement<'fb, 'inst, 'ast>(
             )
         },
         Statement::Assign {
-            place,
+            ident,
             assign_op: _,
             expression,
             next
         } => {
-            resolve_assign(f_builder, instructions, place, expression)?;
+            resolve_assign(f_builder, instructions, ident, expression)?;
             if let Some(next_statement) = next {
                 resolve_statement(f_builder, instructions, &next_statement.value)
             } else { Ok(()) }
@@ -268,14 +268,12 @@ fn resolve_let<'fb, 'inst, 'ast>(
 fn resolve_assign<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
     instructions: &'inst mut Vec<ir::Instruction>,
-    place: &'ast M<Place>,
+    ident: &'ast M<String>,
     expression: &'ast MBox<Expression>
 ) -> Result<(), ResolverError> {
-    let name = match &place.value {
-        Place::Identifier { ident } => ident.value.clone(),
-    };
+    let name = &ident.value;
 
-    let (global_node, mutable, global_index) = match f_builder.context.lookup(&name) {
+    let (global_node, mutable, global_index) = match f_builder.context.lookup(name) {
         Some(FunctionItem::Global { node, mutable, index }) => {
             (node, mutable, index)
         }

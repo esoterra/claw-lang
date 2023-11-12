@@ -1,6 +1,6 @@
 use crate::lexer::Token;
 use crate::ast::{
-    M, MBox, Place,
+    M, MBox,
     expressions::{Expression, Literal, BinaryOp}
 };
 use crate::parser::{ParserError, ParseInput};
@@ -50,9 +50,9 @@ fn parse_leaf(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
         return Ok(MBox::new(Expression::Literal { value }, span))
     }
     input.restore(checkpoint);
-    if let Ok(place) = parse_place(input) {
-        let span = place.span.clone();
-        return Ok(MBox::new(Expression::Place { place }, span))
+    if let Ok(ident) = parse_ident(input) {
+        let span = ident.span.clone();
+        return Ok(MBox::new(Expression::Identifier { ident }, span))
     }
     Err(input.unexpected_token("Parse Leaf"))
 }
@@ -64,21 +64,19 @@ fn parse_parenthetical(input: &mut ParseInput) -> Result<MBox<Expression>, Parse
     Ok(inner)
 }
 
-/// A place expression describes a memory location
-/// e.g. foobar, foobar[0], foobar[10], foobar.items[0]
-/// For now, ony plain identifiers are supported
-pub fn parse_place(input: &mut ParseInput) -> Result<M<Place>, ParserError> {
+/// Parse an identifier
+pub fn parse_ident(input: &mut ParseInput) -> Result<M<String>, ParserError> {
+    let checkpoint = input.checkpoint();
     let next = input.next()?;
-    if let Token::Identifier(ident) = &next.token {
-        let ident_m = M::new(ident.clone(), next.span.clone());
-        Ok(M::new(
-            Place::Identifier {
-                ident: ident_m
-            },
-            next.span.clone()
-        ))
-    } else {
-        Err(input.unexpected_token("Parse Place"))
+    let span = next.span.clone();
+    match next.token.clone() {
+        Token::Identifier(ident) => {
+            Ok(M::new(ident, span))
+        },
+        _ => {
+            input.restore(checkpoint);
+            Err(input.unexpected_token("Expected identifier"))
+        }
     }
 }
 
@@ -215,26 +213,11 @@ mod tests {
             ("asdf2", make_span(0, 5))
         ];
         for (source, span) in cases {
-            let parsed_place = M::new(
-                Place::Identifier {
+            let parsed_expression = MBox::new(
+                Expression::Identifier {
                     ident: M::new(source.to_string(), span.clone())
                 },
                 span.clone()
-            );
-            let parsed_expression = MBox::new(
-                Expression::Place {
-                    place: M::new(
-                        Place::Identifier {
-                            ident: M::new(source.to_string(), span.clone())
-                        },
-                        span.clone()
-                    )
-                },
-                span.clone()
-            );
-            assert_eq!(
-                parse_place(&mut make_input(source)).unwrap(),
-                parsed_place
             );
             assert_eq!(
                 parse_leaf(&mut make_input(source)).unwrap(),
@@ -258,13 +241,8 @@ mod tests {
         ];
         for (source, ident, span) in cases {
             let parsed_expression = MBox::new(
-                Expression::Place {
-                    place: M::new(
-                        Place::Identifier {
-                            ident: M::new(ident.to_string(), span.clone())
-                        },
-                        span.clone()
-                    )
+                Expression::Identifier {
+                    ident: M::new(ident.to_string(), span.clone())
                 },
                 span.clone()
             );
