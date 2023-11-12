@@ -33,7 +33,7 @@ fn parse_item(input: &mut ParseInput) -> Result<Item, ParserError> {
     match input.peek()?.token {
         Token::Let => parse_global(export_kwd, input)
             .map(|global| Item::Global(global)),
-        Token::Fn => parse_fn(export_kwd, input)
+        Token::Func => parse_func(export_kwd, input)
             .map(|function| Item::Function(function)),
         _ => Err(input.unsupported_error("Module Items"))
     }
@@ -69,8 +69,8 @@ fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Glob
     })
 }
 
-fn parse_fn(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Function, ParserError> {
-    let signature = parse_fn_signature(input)?;
+fn parse_func(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Function, ParserError> {
+    let signature = parse_func_signature(input)?;
     let body = parse_block(input)?;
 
     Ok(Function {
@@ -80,8 +80,8 @@ fn parse_fn(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Function
     })
 }
 
-fn parse_fn_signature(input: &mut ParseInput) -> Result<FunctionSignature, ParserError> {
-    let fn_kwd = input.assert_next(Token::Fn, "Function keyword 'fn'")?;
+fn parse_func_signature(input: &mut ParseInput) -> Result<FunctionSignature, ParserError> {
+    let fn_kwd = input.assert_next(Token::Func, "Function keyword 'fn'")?;
     let next = input.next()?;
     let name = match &next.token {
         Token::Identifier(name) => {
@@ -135,7 +135,7 @@ fn parse_argument(input: &mut ParseInput) -> Result<(M<String>, M<ValType>), Par
 
 #[cfg(test)]
 mod tests {
-    use crate::parser::tests::{make_input};
+    use crate::parser::tests::make_input;
     use super::*;
 
     #[test]
@@ -143,7 +143,7 @@ mod tests {
         let source = "
         let mut counter: u32 = 0;
 
-        export fn increment() -> u32 {
+        export func increment() -> u32 {
             counter = counter + 1;
             return counter;
         }";
@@ -153,20 +153,20 @@ mod tests {
 
     #[test]
     fn test_basic_function() {
-        let source = "fn increment() -> u32 {}";
-        let _fn = parse_fn(None, &mut make_input(source)).unwrap();
+        let source = "func increment() -> u32 {}";
+        let _func = parse_func(None, &mut make_input(source)).unwrap();
         let _module = parse_module(&mut make_input(source)).unwrap();
     }
 
     #[test]
     fn parse_function_signature() {
-        let source = "fn increment() -> u32";
-        let _fn_sig = parse_fn_signature(&mut make_input(source)).unwrap();
+        let source = "func increment() -> u32";
+        let _func_sig = parse_func_signature(&mut make_input(source)).unwrap();
     }
 
     #[test]
     fn test_parse_global() {
         let source = "let mut counter: u32 = 0;";
-        let _fn_sig = parse_global(None, &mut make_input(source)).unwrap();
+        let _func_sig = parse_global(None, &mut make_input(source)).unwrap();
     }
 }

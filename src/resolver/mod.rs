@@ -6,7 +6,7 @@ use std::{
     sync::Arc
 };
 use crate::ast::{
-    Span, M,
+    M,
     module::{
         Module, Item, Global, Function
     },

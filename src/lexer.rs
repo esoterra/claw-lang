@@ -100,17 +100,9 @@ pub enum Token {
     #[token("from")]
     From,
 
-    /// The Function "fn" Keyword
-    #[token("fn")]
-    Fn,
-
-    /// The Table Keyword
-    #[token("table")]
-    Table,
-
-    /// The Memory "mem" Keyword
-    #[token("mem")]
-    Memory,
+    /// The Function "func" Keyword
+    #[token("func")]
+    Func,
 
     /// The If Keyword
     #[token("if")]
@@ -140,13 +132,13 @@ pub enum Token {
     #[token("return")]
     Return,
 
-    /// The Pointer Type Keyword
-    #[token("Ptr")]
-    Ptr,
+    /// The Result Type Keyword
+    #[token("result")]
+    Result,
 
-    /// The Slice Type Keyword
-    #[token("Slice")]
-    Slice,
+    /// The String Type Keyword
+    #[token("string")]
+    String,
 
     /// The Unsigned 8-bit Integer Type Keyword 
     #[token("u8")]
@@ -207,7 +199,7 @@ pub enum Token {
     /// The Let Keyword
     #[token("let")]
     Let,
-
+    
     /// The Mut Keyword
     #[token("mut")]
     Mut,
@@ -266,10 +258,6 @@ pub enum Token {
     #[token(":")]
     Colon,
 
-    /// Double Colon Symbol "::"
-    #[token("::")]
-    DoubleColon,
-
     /// Semicolon Symbol ";"
     #[token(";")]
     Semicolon,
@@ -290,9 +278,9 @@ pub enum Token {
     #[token("-")]
     Sub,
 
-    /// Star Operator "*" (used for dereference and multiply)
+    /// Multiplication Operator "*"
     #[token("*")]
-    Star,
+    Mult,
 
     /// Division Operator "/"
     #[token("/")]
@@ -314,15 +302,15 @@ pub enum Token {
     #[token("or")]
     LogicalOr,
 
-    /// Modulo Operator "|"
+    /// Bitwise Or "|"
     #[token("|")]
     BitOr,
 
-    /// Modulo Operator "&"
+    /// Bitwise And "&"
     #[token("&")]
     BitAnd,
 
-    /// Modulo Operator "^"
+    /// Bitwise XOR "^"
     #[token("^")]
     BitXor,
 
@@ -533,23 +521,24 @@ fn parse_hex_literal(s: &str) -> Option<u64> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use pretty_assertions::assert_eq;
 
     #[test]
-    fn tokenize_fn_declaration() {
-        let contents: String = "fn test(a: u32) -> u32".into();
+    fn tokenize_func_declaration() {
+        let contents: String = "func test(a: u32) -> u32".into();
         let src = Arc::new(NamedSource::new(String::from("test"), contents.clone()));
         let ident_test = Token::Identifier(String::from("test"));
         let ident_a = Token::Identifier(String::from("a"));
         let output = vec![
-            ( Token::Fn,      SourceSpan::from(0..2) ),
-            ( ident_test,     SourceSpan::from(3..7) ),
-            ( Token::LParen,  SourceSpan::from(7..8) ),
-            ( ident_a,        SourceSpan::from(8..9) ),
-            ( Token::Colon,   SourceSpan::from(9..10) ),
-            ( Token::U32,     SourceSpan::from(11..14) ),
-            ( Token::RParen,  SourceSpan::from(14..15) ),
-            ( Token::Arrow,   SourceSpan::from(16..18) ),
-            ( Token::U32,     SourceSpan::from(19..22) )
+            ( Token::Func,    SourceSpan::from(0..4) ),
+            ( ident_test,     SourceSpan::from(5..9) ),
+            ( Token::LParen,  SourceSpan::from(9..10) ),
+            ( ident_a,        SourceSpan::from(10..11) ),
+            ( Token::Colon,   SourceSpan::from(11..12) ),
+            ( Token::U32,     SourceSpan::from(13..16) ),
+            ( Token::RParen,  SourceSpan::from(16..17) ),
+            ( Token::Arrow,   SourceSpan::from(18..20) ),
+            ( Token::U32,     SourceSpan::from(21..24) )
         ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
 
         match tokenize(src, contents) {

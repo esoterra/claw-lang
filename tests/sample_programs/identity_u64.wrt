@@ -1,3 +1,3 @@
-export fn identity(value: u64) -> u64 {
+export func identity(value: u64) -> u64 {
     return value;
 }

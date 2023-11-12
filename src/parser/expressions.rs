@@ -54,7 +54,6 @@ fn parse_leaf(input: &mut ParseInput) -> Result<MBox<Expression>, ParserError> {
         let span = place.span.clone();
         return Ok(MBox::new(Expression::Place { place }, span))
     }
-    input.next();
     Err(input.unexpected_token("Parse Leaf"))
 }
 
@@ -124,7 +123,7 @@ fn try_parse_bin_op(input: &mut ParseInput) -> Option<M<BinaryOp>> {
         Token::Add => BinaryOp::Add,
         Token::Sub => BinaryOp::Sub,
 
-        Token::Star => BinaryOp::Mult,
+        Token::Mult => BinaryOp::Mult,
         Token::Div => BinaryOp::Div,
         Token::Mod => BinaryOp::Mod,
 
@@ -169,7 +168,7 @@ fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
     use crate::parser::tests::{make_input, make_span};
 
     use crate::ast::expressions::{

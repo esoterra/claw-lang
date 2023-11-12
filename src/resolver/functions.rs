@@ -106,8 +106,7 @@ impl FunctionContext {
                     FunctionItem::Function {
                         index: *index
                     }
-                },
-                _ => todo!()
+                }
             };
             mapping.insert(ident.clone(), item);
         }
@@ -274,7 +273,6 @@ fn resolve_assign<'fb, 'inst, 'ast>(
 ) -> Result<(), ResolverError> {
     let name = match &place.value {
         Place::Identifier { ident } => ident.value.clone(),
-        _ => panic!("Only identifiers supported as assignment targets")
     };
 
     let (global_node, mutable, global_index) = match f_builder.context.lookup(&name) {
