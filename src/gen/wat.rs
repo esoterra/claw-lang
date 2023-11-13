@@ -131,7 +131,7 @@ fn instruction_to_wat(
             instruction_to_wat(type_graph, &value, result, Context::Inline);
             let _ = write!(result, ")");
         },
-        ir::Instruction::LocalGet { index } => {
+        ir::Instruction::LocalGet { node: _, index } => {
             let _ = write!(result, "(local.get $L{})", index);
         },
         ir::Instruction::LocalSet {

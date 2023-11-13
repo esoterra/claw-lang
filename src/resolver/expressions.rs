@@ -29,11 +29,11 @@ pub fn resolve_expression<'fb, 'ast>(
                 Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
                 Some(FunctionItem::Param { index, .. }) => {
                     f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
-                    ir::Instruction::LocalGet { index }
+                    ir::Instruction::LocalGet { node, index }
                 },
                 Some(FunctionItem::Local { index, .. }) => {
                     f_builder.type_graph.constrain_equal(node, f_builder.locals[index]);
-                    ir::Instruction::LocalGet { index }
+                    ir::Instruction::LocalGet { node, index }
                 },
                 None => {
                     return Err(ResolverError::NameError {

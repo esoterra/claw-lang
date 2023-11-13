@@ -86,6 +86,7 @@ pub enum Instruction {
         value: Box<Instruction>
     },
     LocalGet {
+        node: TypeNode,
         index: usize
     },
     LocalSet {

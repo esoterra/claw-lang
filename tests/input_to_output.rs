@@ -1,4 +1,4 @@
-use wrought::compile;
+use wrought::{compile, gen};
 
 use std::fs;
 
@@ -22,6 +22,7 @@ fn test_sample_programs() {
             Some(output) => output,
             None => panic!("Failed to compile '{}'", name)
         };
+        let output = gen::generate_wat(output);
 
         // Construct the name of the .wat expectation file
         let result_name = &name.split(".")

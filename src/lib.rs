@@ -12,7 +12,7 @@ pub mod resolver;
 pub fn compile<SN: ToString, SC: ToString>(
         source_name: SN,
         source_code: SC
-    ) -> Option<String> {
+    ) -> Option<ir::Module> {
     let source_name = source_name.to_string();
     let source_code = source_code.to_string();
     let src = Arc::new(NamedSource::new(source_name, source_code.clone()));
@@ -35,14 +35,11 @@ pub fn compile<SN: ToString, SC: ToString>(
         }
     };
 
-    let resolved = match resolver::resolve(src, ast) {
-        Ok(ir) => ir,
+    match resolver::resolve(src, ast) {
+        Ok(ir) => Some(ir),
         Err(error) => {
             println!("{:?}", Report::new(error));
             return None;
         }
-    };
-
-    let wat = gen::wat::generate(resolved);
-    Some(wat)
+    }
 }
