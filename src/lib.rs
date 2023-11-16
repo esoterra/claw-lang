@@ -8,6 +8,7 @@ pub mod ir;
 pub mod lexer;
 pub mod parser;
 pub mod resolver;
+pub mod id_map;
 
 pub fn compile<SN: ToString, SC: ToString>(
         source_name: SN,

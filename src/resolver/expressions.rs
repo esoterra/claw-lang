@@ -1,6 +1,5 @@
 use crate::ast::{
-    MBox,
-    expressions::{BinaryOp, Expression},
+    expressions::{BinaryOp, Expression, ExpressionData, ExpressionId},
     types::ValType
 };
 use crate::resolver::{
@@ -12,11 +11,12 @@ use crate::ir::type_graph::TypeNode;
 
 pub fn resolve_expression<'fb, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
-    ast: &'ast MBox<Expression>,
+    data: &ExpressionData,
+    id: ExpressionId,
 ) -> Result<(TypeNode, Box<ir::Instruction>), ResolverError> {
-    let node = f_builder.type_graph.add_inferred_type(ast.span.clone());
+    let node = f_builder.type_graph.add_inferred_type(data.get_span(id));
 
-    let instr = match ast.value.as_ref() {
+    let instr = match data.get_exp(id) {
         Expression::Literal { value } => {
             ir::Instruction::Constant {
                 node,
@@ -24,7 +24,7 @@ pub fn resolve_expression<'fb, 'ast>(
             }
         },
         Expression::Identifier { ident } => {
-            let id = f_builder.context.lookup(&ident.value);
+            let id = f_builder.context.lookup(ident.as_ref());
             match id {
                 Some(FunctionItem::Global { index, .. }) => ir::Instruction::GlobalGet { index },
                 Some(FunctionItem::Param { index, .. }) => {
@@ -50,8 +50,8 @@ pub fn resolve_expression<'fb, 'ast>(
             operator,
             right
         } => {
-            let (left_node, left) = resolve_expression(f_builder, &left)?;
-            let (right_node, right) = resolve_expression(f_builder, &right)?;
+            let (left_node, left) = resolve_expression(f_builder, data, left.to_owned())?;
+            let (right_node, right) = resolve_expression(f_builder, data, right.to_owned())?;
             match operator.value {
                 BinaryOp::Add => {
                     let op = ir::BinArithOp::Add;
@@ -83,7 +83,7 @@ pub fn resolve_expression<'fb, 'ast>(
                     f_builder.type_graph.constrain_equal(left_node, right_node);
                     ir::Instruction::BinaryRel { node, op, left, right }
                 },
-                _ => panic!("Unsupported binary operator {:?}", operator.value)
+                _ => panic!("Unsupported binary operator {:?}", operator.as_ref())
             }
         },
         _ => panic!("Unsupported expression type")

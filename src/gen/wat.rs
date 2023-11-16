@@ -23,7 +23,7 @@ fn globals_to_wat(globals: &Vec<ir::Global>, result: &mut String) {
     for (index, global) in globals.iter().enumerate() {
         let valtype = global.type_.value.clone();
 
-        let valtype_s = valtype_to_wat(&global.type_.value);
+        let valtype_s = valtype_to_wat(global.type_.as_ref());
         let valtype_s = if global.mutable {
             format!("(mut {})", valtype_s)
         } else { valtype_s };
@@ -65,11 +65,11 @@ fn fn_signature_to_wat(signature: &FunctionSignature) -> String {
         .iter()
         .enumerate()
         .map(|(i, (_name, valtype))|
-            format!("(param $L{} {})", i, valtype_to_wat(&valtype.value))
+            format!("(param $L{} {})", i, valtype_to_wat(valtype.as_ref()))
         )
         .collect();
 
-    let result_type = valtype_to_wat(&signature.return_type.value);
+    let result_type = valtype_to_wat(signature.return_type.as_ref());
     parts.push(format!("(result {})", result_type));
     parts.join(" ")
 }
@@ -99,7 +99,7 @@ fn exports_to_wat(exports: &Vec<ir::Export>, result: &mut String) {
     for export in exports.iter() {
         match &export.id {
             ModuleItem::Function(index) => {
-                let _ = write!(result, "   (export {:?} (func $F{}))\n", export.ident.value, index);
+                let _ = write!(result, "   (export {:?} (func $F{}))\n", export.ident.as_ref(), index);
             },
             _ => panic!("Only function exports supported")
         }

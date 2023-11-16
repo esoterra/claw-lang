@@ -1785,6 +1785,7 @@ name = "wrought"
 version = "0.1.2"
 dependencies = [
  "clap",
+ "id-arena",
  "logos",
  "miette",
  "pretty_assertions",

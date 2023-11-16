@@ -6,7 +6,7 @@ use crate::ast::{
     M, MBox,
     module::{Function, FunctionSignature},
     statements::{Statement, Block},
-    expressions::Expression, types::ValType
+    expressions::{ExpressionId, ExpressionData}, types::ValType
 };
 use crate::resolver::{
     ResolverError, ModuleContext, ModuleItem,
@@ -149,6 +149,7 @@ pub fn resolve_function<'r, 'ast>(
     module_context: &'r ModuleContext,
     module: &'r mut ir::Module,
     fn_index: usize,
+    data: &ExpressionData,
     ast: &'ast Function
 ) -> Result<(), ResolverError> {
     if let Some(root) = &ast.body.value.root_statement {
@@ -157,7 +158,7 @@ pub fn resolve_function<'r, 'ast>(
         let mut f_builder = FunctionBuilder::new(src, module_context, module, signature);
         let mut instructions = Vec::new();
         // Resolve root statement
-        resolve_statement(&mut f_builder, &mut instructions, &root.value)?;
+        resolve_statement(&mut f_builder, data, &mut instructions, root.as_ref())?;
         // Update IR
         let function = &mut module.functions[fn_index];
         f_builder.type_graph.resolve_all();
@@ -175,6 +176,7 @@ pub fn resolve_function<'r, 'ast>(
 
 fn resolve_statement<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
+    data: &ExpressionData,
     instructions: &'inst mut Vec<ir::Instruction>,
     statement: &'ast Statement
 ) -> Result<(), ResolverError> {
@@ -191,8 +193,8 @@ fn resolve_statement<'fb, 'inst, 'ast>(
             let mutable = mut_kwd.is_some();
             let ident = ident.clone();
             let annotation = annotation.clone();
-            resolve_let(f_builder, instructions, mutable, ident,
-                annotation, expression, next
+            resolve_let(f_builder, data, instructions, mutable, ident,
+                annotation, expression.to_owned(), next
             )
         },
         Statement::Assign {
@@ -201,9 +203,9 @@ fn resolve_statement<'fb, 'inst, 'ast>(
             expression,
             next
         } => {
-            resolve_assign(f_builder, instructions, ident, expression)?;
+            resolve_assign(f_builder, data, instructions, ident, expression.to_owned())?;
             if let Some(next_statement) = next {
-                resolve_statement(f_builder, instructions, &next_statement.value)
+                resolve_statement(f_builder, data, instructions, &next_statement.value)
             } else { Ok(()) }
         },
         Statement::If {
@@ -212,27 +214,28 @@ fn resolve_statement<'fb, 'inst, 'ast>(
             block,
             next
         } => {
-            resolve_if(f_builder, instructions, condition, block)?;
+            resolve_if(f_builder, data, instructions, condition.to_owned(), block)?;
             if let Some(next_statement) = next {
-                resolve_statement(f_builder, instructions, &next_statement.value)
+                resolve_statement(f_builder, data, instructions, next_statement.as_ref())
             } else { Ok(()) }
         },
         Statement::Return {
             return_kwd: _,
             expression
         } => {
-            resolve_return(f_builder, instructions, expression)
+            resolve_return(f_builder, data, instructions, expression.to_owned())
         }
     }
 }
 
 fn resolve_let<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
+    data: &ExpressionData,
     instructions: &'inst mut Vec<ir::Instruction>,
     mutable: bool,
     ident: M<String>,
     annotation: Option<M<ValType>>,
-    expression: &'ast MBox<Expression>,
+    expression: ExpressionId,
     next: &'ast Option<MBox<Statement>>
 ) -> Result<(), ResolverError> {
     // Create a TypeNode for this local variable
@@ -246,7 +249,7 @@ fn resolve_let<'fb, 'inst, 'ast>(
     let index = f_builder.locals.len();
     f_builder.locals.push(node);
     // Resolve expression
-    let (value_node, value) = resolve_expression(f_builder, expression)?;
+    let (value_node, value) = resolve_expression(f_builder, data, expression)?;
     f_builder.type_graph.constrain_equal(node, value_node);
     // Generate set
     instructions.push(ir::Instruction::LocalSet {
@@ -258,7 +261,7 @@ fn resolve_let<'fb, 'inst, 'ast>(
     f_builder.context.push(ident.value.clone(), item);
     // Resolve any child statements
     if let Some(next_statement) = next {
-        resolve_statement(f_builder, instructions, &next_statement.value)?;
+        resolve_statement(f_builder, data, instructions, next_statement.as_ref())?;
     }
     // Unbind identifier
     f_builder.context.pop();
@@ -267,11 +270,12 @@ fn resolve_let<'fb, 'inst, 'ast>(
 
 fn resolve_assign<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
+    data: &ExpressionData,
     instructions: &'inst mut Vec<ir::Instruction>,
     ident: &'ast M<String>,
-    expression: &'ast MBox<Expression>
+    id: ExpressionId,
 ) -> Result<(), ResolverError> {
-    let name = &ident.value;
+    let name = ident.as_ref();
 
     let (global_node, mutable, global_index) = match f_builder.context.lookup(name) {
         Some(FunctionItem::Global { node, mutable, index }) => {
@@ -281,7 +285,7 @@ fn resolve_assign<'fb, 'inst, 'ast>(
     };
     assert_eq!(mutable, true);
 
-    let (expression_node, value) = resolve_expression(f_builder, expression)?;
+    let (expression_node, value) = resolve_expression(f_builder, data, id)?;
     f_builder.type_graph.constrain_equal(global_node, expression_node);
     instructions.push(ir::Instruction::GlobalSet { index: global_index, value });
 
@@ -290,17 +294,18 @@ fn resolve_assign<'fb, 'inst, 'ast>(
 
 fn resolve_if<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
+    data: &ExpressionData,
     instructions: &'inst mut Vec<ir::Instruction>,
-    condition: &'ast MBox<Expression>,
+    condition: ExpressionId,
     block: &'ast M<Block>
 ) -> Result<(), ResolverError> {
     // Resolve condition
-    let (cond_node, cond) = resolve_expression(f_builder, condition)?;
+    let (cond_node, cond) = resolve_expression(f_builder, data, condition)?;
     f_builder.type_graph.constrain_type(cond_node, ValType::Bool);
     // Resolve body statements
     let mut body_instructions = Vec::new();
     if let Some(body) = &block.value.root_statement {
-        resolve_statement(f_builder, &mut body_instructions, &body.value)?;
+        resolve_statement(f_builder, data, &mut body_instructions, body.as_ref())?;
     }
     // Produce IR
     instructions.push(*cond);
@@ -312,10 +317,11 @@ fn resolve_if<'fb, 'inst, 'ast>(
 
 fn resolve_return<'fb, 'inst, 'ast>(
     f_builder: &'fb mut FunctionBuilder,
+    data: &ExpressionData,
     instructions: &'inst mut Vec<ir::Instruction>,
-    expression: &'ast MBox<Expression>,
+    expression: ExpressionId,
 ) -> Result<(), ResolverError> {
-    let (value_node, value) = resolve_expression(f_builder, expression)?;
+    let (value_node, value) = resolve_expression(f_builder, data, expression)?;
     f_builder.type_graph.constrain_equal(f_builder.return_type, value_node);
     instructions.push(ir::Instruction::Return { value });
     Ok(())

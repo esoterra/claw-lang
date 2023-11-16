@@ -4,6 +4,7 @@ use std::fs;
 
 use wasmtime::{Engine, Instance, Module, Store};
 
+#[allow(dead_code)]
 struct Runtime {
     engine: Engine,
     module: Module,

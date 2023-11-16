@@ -14,16 +14,19 @@ pub struct M<T> {
     pub value: T
 }
 
+impl<T> AsRef<T> for M<T> {
+    fn as_ref(&self) -> &T {
+        &self.value
+    }
+}
+
 impl<T> M<T> {
     pub fn new(value: T, span: Span) -> Self {
         M { span, value }
     }
 
     pub fn new_range(value: T, left: Span, right: Span) -> Self {
-        let left_most = left.offset();
-        let right_most = right.offset() + right.len();
-        let len = right_most - left_most;
-        let span = Span::from((left_most, len));
+        let span = merge(&left, &right);
         M { span, value }
     }
 }
@@ -41,10 +44,20 @@ impl<T> MBox<T> {
     }
 
     pub fn new_range(value: T, left: Span, right: Span) -> Self {
-        let left_most = left.offset();
-        let right_most = right.offset() + right.len();
-        let len = right_most - left_most;
-        let span = Span::from((left_most, len));
+        let span = merge(&left, &right);
         MBox { span, value: Box::new(value) }
     }
+}
+
+impl<T> AsRef<T> for MBox<T> {
+    fn as_ref(&self) -> &T {
+        &self.value
+    }
+}
+
+pub fn merge(left: &Span, right: &Span) -> Span {
+    let left_most = left.offset();
+    let right_most = right.offset() + right.len();
+    let len = right_most - left_most;
+    Span::from((left_most, len))
 }

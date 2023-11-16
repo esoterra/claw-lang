@@ -29,7 +29,7 @@ fn encode_globals(globals: &Vec<ir::Global>) -> enc::GlobalSection {
         
         let global_type = enc::GlobalType {
             mutable: global.mutable,
-            val_type: encode_valtype(&global.type_.value),
+            val_type: encode_valtype(global.type_.as_ref()),
         };
         
         let init_expr = if let NeedsResolve::Resolved(init_value) = &global.initial_value {
@@ -81,10 +81,10 @@ fn encode_func_signature(signature: &FunctionSignature, type_section: &mut enc::
     let params = signature.arguments
         .iter()
         .map(|(_name, valtype)|
-            encode_valtype(&valtype.value)
+            encode_valtype(valtype.as_ref())
         );
 
-    let result_type = encode_valtype(&signature.return_type.value);
+    let result_type = encode_valtype(signature.return_type.as_ref());
     let results = [result_type];
 
     type_section.function(params, results);
@@ -114,7 +114,7 @@ fn encode_exports(exports: &Vec<ir::Export>) -> enc::ExportSection {
     for export in exports.iter() {
         match &export.id {
             ModuleItem::Function(index) => {
-                section.export(&export.ident.value, enc::ExportKind::Func, *index as u32);
+                section.export(export.ident.as_ref(), enc::ExportKind::Func, *index as u32);
             },
             _ => panic!("Only function exports supported")
         }

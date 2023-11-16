@@ -10,7 +10,7 @@ use crate::ast::{
     module::{
         Module, Item, Global, Function
     },
-    expressions::Expression,
+    expressions::{Expression, ExpressionData},
 };
 use crate::ir;
 
@@ -89,13 +89,13 @@ pub fn resolve(
     for (item, id) in ast.items.iter().zip(item_ids.iter()) {
         match &id {
             ModuleItem::Global(index) => {
-                if let Item::Global(ast) = item {
-                    resolve_global(&root, &mut module, *index, ast)?;
+                if let Item::Global(global) = item {
+                    resolve_global(&root, &mut module, *index, &ast.expressions, global)?;
                 } else { unreachable!() }
             },
             ModuleItem::Function(index) => {
-                if let Item::Function(ast) = item {
-                    functions::resolve_function(src.clone(), &root, &mut module, *index, ast)?;
+                if let Item::Function(func) = item {
+                    functions::resolve_function(src.clone(), &root, &mut module, *index, &ast.expressions, func)?;
                 } else { unreachable!() }
             }
         }
@@ -153,11 +153,12 @@ fn resolve_global<'r, 'ast>(
     context: &ModuleContext,
     module: &'r mut ir::Module,
     global_index: usize,
+    data: &ExpressionData,
     ast: &'ast Global
 ) -> Result<(), ResolverError> {
     let _ = context;
 
-    let initial_value = match *ast.init_value.value.clone() {
+    let initial_value = match data.get_exp(ast.init_value) {
         Expression::Literal { value } => {
             value.value.clone()
         },

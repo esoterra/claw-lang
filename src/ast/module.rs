@@ -1,28 +1,29 @@
+use crate::ast::expressions::ExpressionData;
+
 use super::{
     Span, M,
     types::{
         FnType, ValType
     },
     statements::Block,
-    expressions::Expression, MBox
+    expressions::ExpressionId
 };
 
 /// Each Wrought source file represents a module
 /// and this struct represents the root of the AST.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Default)]
 pub struct Module {
     /// The root of a module is composed of a sequence of items
-    pub items: Vec<Item>
+    pub items: Vec<Item>,
+
+    pub expressions: ExpressionData
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug)]
 pub enum Item {
     Import(Import),
     Function(Function),
-    Table(Table),
-    Memory(Memory),
-    Global(Global),
-    Struct(StructDeclaration)
+    Global(Global)
 }
 
 /// 
@@ -39,7 +40,6 @@ pub struct Import {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ExternalType {
     Function(FnType),
-    Memory(MemType),
     MutGlobal {
         mut_kwd: Span,
         value_type: M<ValType>
@@ -50,19 +50,12 @@ pub enum ExternalType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct MemType {
-    mem_kwd: Span,
-    min_pages: M<u64>,
-    max_pages: Option<M<u64>>
-}
-
 /// 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug)]
 pub struct Function {
     pub export_kwd: Option<Span>,
     pub signature: FunctionSignature,
-    pub body: M<Block>
+    pub body: M<Block>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -75,25 +68,7 @@ pub struct FunctionSignature {
 }
 
 /// 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Table {
-    pub export: Option<Span>,
-    pub name: M<String>,
-    pub min_size: M<u64>,
-    pub max_size: M<u64>
-}
-
-/// 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Memory {
-    pub export: Option<Span>,
-    pub name: M<String>,
-    pub min_size: M<u64>,
-    pub max_size: Option<M<u64>>
-}
-
-/// 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug)]
 pub struct Global {
     pub export_kwd: Option<Span>,
     pub let_kwd: Span,
@@ -101,22 +76,6 @@ pub struct Global {
     pub ident: M<String>,
     pub valtype: M<ValType>,
     pub assign: Span,
-    pub init_value: MBox<Expression>,
+    pub init_value: ExpressionId,
     pub semicolon: Span
-}
-
-/// 
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct StructDeclaration {
-    pub struct_kwd: Span,
-    pub name: M<String>,
-    pub braces: (Span, Span),
-    pub members: Vec<StructMember>
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct StructMember {
-    pub name: M<String>,
-    pub colon: Span,
-    pub value_type: M<ValType>
 }
