@@ -7,12 +7,12 @@ use std::sync::Arc;
 
 use crate::ast::Span;
 use crate::lexer::{TokenData, Token};
-use crate::ast::module::Module;
+use crate::ast::component::Component;
 
 use miette::{Diagnostic, SourceSpan, NamedSource};
 use thiserror::Error;
 
-use self::module::parse_module;
+use self::module::parse_component;
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParserError{
@@ -46,9 +46,9 @@ pub enum ParserError{
 }
 
 
-pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Module, ParserError> {
+pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Component, ParserError> {
     let mut parse_input = ParseInput::new(src, tokens);
-    parse_module(&mut parse_input)
+    parse_component(&mut parse_input)
 }
 
 

@@ -1,10 +1,10 @@
-use super::{merge, Span, M};
+use super::{merge, Span, M, NameId};
 use crate::id_map::IdMap;
 use id_arena::{Arena, Id};
 
 pub type ExpressionId = Id<Expression>;
 
-#[derive(Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ExpressionData {
     expressions: Arena<Expression>,
     expression_spans: IdMap<Expression, Span>,
@@ -36,6 +36,10 @@ impl ExpressionData {
 
     pub fn get_span(&self, id: ExpressionId) -> Span {
         self.expression_spans.get(id).unwrap().clone()
+    }
+
+    pub fn expressions(&self) -> &Arena<Expression> {
+        &self.expressions
     }
 
     pub fn eq(&self, left: ExpressionId, right: ExpressionId) -> bool {
@@ -89,8 +93,8 @@ impl ExpressionData {
                         .all(|v| v);
             }
             (
-                Expression::Identifier { ident: l_ident },
-                Expression::Identifier { ident: r_ident },
+                Expression::Identifier { ident: l_ident, name_id: _ },
+                Expression::Identifier { ident: r_ident, name_id: _ },
             ) => {
                 return l_ident == r_ident;
             }
@@ -120,6 +124,7 @@ pub enum Expression {
     },
     Identifier {
         ident: M<String>,
+        name_id: NameId
     },
     Literal {
         value: M<Literal>,

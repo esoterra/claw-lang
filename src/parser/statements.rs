@@ -1,8 +1,9 @@
+use crate::ast::NameId;
 use crate::ast::expressions::ExpressionData;
 use crate::lexer::Token;
 use crate::ast::{
-    M, MBox,
-    statements::{
+    M,
+    component::{
         Block, Statement
     }
 };
@@ -16,18 +17,17 @@ pub fn parse_block(input: &mut ParseInput, data: &mut ExpressionData) -> Result<
     let start_brace = input.assert_next(Token::LBrace, "Left brace '{'")?;
     let start_span = start_brace.clone();
 
-    let root_statement = if input.peek()?.token == Token::RBrace {
-        None
-    } else {
-        Some(parse_statement(input, data)?)
-    };
+    let mut statements = Vec::new();
+    while input.peek()?.token != Token::RBrace {
+        statements.push(parse_statement(input, data)?);
+    }
 
     let end_brace = input.assert_next(Token::RBrace, "Right brace '}'")?;
     let end_span = end_brace.clone();
-    Ok(M::new_range(Block { start_brace, root_statement, end_brace }, start_span, end_span))
+    Ok(M::new_range(Block { start_brace, statements, end_brace }, start_span, end_span))
 }
 
-pub fn parse_statement(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBox<Statement>, ParserError> {
+pub fn parse_statement(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {
     let checkpoint = input.checkpoint();
     if let Ok(value) = parse_return(input, data) {
         return Ok(value);
@@ -51,18 +51,7 @@ pub fn parse_statement(input: &mut ParseInput, data: &mut ExpressionData) -> Res
     }
 }
 
-pub fn try_parse_statement(input: &mut ParseInput, data: &mut ExpressionData) -> Option<MBox<Statement>> {
-    let checkpoint = input.checkpoint();
-    match parse_statement(input, data) {
-        Ok(statement) => Some(statement),
-        Err(_) => {
-            input.restore(checkpoint);
-            None
-        }
-    }
-}
-
-fn parse_let(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBox<Statement>, ParserError> {
+fn parse_let(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {
     // Prefix
     let let_kwd = input.assert_next(Token::Let, "Let keyword 'let'")?;
     let start_span = let_kwd.clone();
@@ -80,22 +69,19 @@ fn parse_let(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBox<S
     let expression = parse_expression(input, data)?;
     let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 
-    // Next Statement
-    let next = try_parse_statement(input, data);
-
     let statement = Statement::Let {
         let_kwd,
         mut_kwd,
         ident,
+        name_id: NameId::new(),
         annotation,
         assign_op,
-        expression,
-        next,
+        expression
     };
-    Ok(MBox::new_range(statement, start_span, semicolon))
+    Ok(M::new_range(statement, start_span, semicolon))
 }
 
-fn parse_return(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBox<Statement>, ParserError> {
+fn parse_return(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {
     let return_kwd = input.assert_next(Token::Return, "Return keyword 'return'")?;
     let expression = parse_expression(input, data)?;
     let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
@@ -104,38 +90,34 @@ fn parse_return(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBo
     let statement = Statement::Return {
         return_kwd, expression
     };
-    Ok(MBox::new_range(statement, span, semicolon))
+    Ok(M::new_range(statement, span, semicolon))
 }
 
-fn parse_assign(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBox<Statement>, ParserError> {
+fn parse_assign(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {
     let ident = parse_ident(input)?;
     let assign_op = input.assert_next(Token::Assign, "Assign '='")?;
     let expression = parse_expression(input, data)?;
     let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 
-    let next = try_parse_statement(input, data);
-
     let span = ident.span.clone();
     let statement = Statement::Assign {
-        ident, assign_op, expression, next
+        ident, name_id: NameId::new(), assign_op, expression
     };
-    Ok(MBox::new_range(statement, span, semicolon))
+    Ok(M::new_range(statement, span, semicolon))
 }
 
-fn parse_if(input: &mut ParseInput, data: &mut ExpressionData) -> Result<MBox<Statement>, ParserError> {
+fn parse_if(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {
     let if_kwd = input.assert_next(Token::If, "If keyword 'if'")?;
     let condition = parse_expression(input, data)?;
     let block = parse_block(input, data)?;
-
-    let next = try_parse_statement(input, data);
 
     let start_span = if_kwd.clone();
     let end_span = block.span.clone();
 
     let statement = Statement::If {
-        if_kwd, condition, block, next
+        if_kwd, condition, block
     };
-    Ok(MBox::new_range(statement, start_span, end_span))
+    Ok(M::new_range(statement, start_span, end_span))
 }
 
 #[cfg(test)]

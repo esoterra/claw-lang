@@ -1,3 +1,4 @@
+use crate::ast::NameId;
 use crate::ast::expressions::ExpressionId;
 use crate::lexer::Token;
 use crate::ast::{
@@ -51,7 +52,7 @@ fn parse_leaf(input: &mut ParseInput, data: &mut ExpressionData) -> Result<Expre
     input.restore(checkpoint);
     if let Ok(ident) = parse_ident(input) {
         let span = ident.span.clone();
-        return Ok(data.alloc(Expression::Identifier { ident }, span))
+        return Ok(data.alloc(Expression::Identifier { ident, name_id: NameId::new() }, span))
     }
     Err(input.unexpected_token("Parse Leaf"))
 }
@@ -183,19 +184,17 @@ mod tests {
         ];
         for (source, value, span) in cases {
             let parsed_literal = M::new(Literal::Integer(value), span.clone());
-            let expected_expression = Expression::Literal {
+            let expected_expression = data.alloc(Expression::Literal {
                 value: M::new(Literal::Integer(value), span.clone())
-            };
+            }, span);
             assert_eq!(
                 parse_literal(&mut make_input(source)).unwrap(),
                 parsed_literal
             );
             let found_leaf = parse_leaf(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_leaf), &expected_expression);
-            assert_eq!(data.get_span(found_leaf), span);
+            assert!(data.eq(found_leaf, expected_expression));
             let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_expression), &expected_expression);
-            assert_eq!(data.get_span(found_expression), span);
+            assert!(data.eq(found_expression, expected_expression));
         }
     }
 
@@ -209,15 +208,14 @@ mod tests {
             ("asdf2", make_span(0, 5))
         ];
         for (source, span) in cases {
-            let expected_expression = Expression::Identifier {
-                ident: M::new(source.to_string(), span.clone())
-            };
+            let expected_expression = data.alloc(Expression::Identifier {
+                ident: M::new(source.to_string(), span.clone()),
+                name_id: NameId::new()
+            }, span);
             let found_leaf = parse_leaf(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_leaf), &expected_expression);
-            assert_eq!(data.get_span(found_leaf), span);
+            assert!(data.eq(found_leaf, expected_expression));
             let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_expression), &expected_expression);
-            assert_eq!(data.get_span(found_expression), span);
+            assert!(data.eq(found_expression, expected_expression));
         }
     }
 
@@ -232,18 +230,16 @@ mod tests {
             ("(asdf2)", "asdf2", make_span(1, 5))
         ];
         for (source, ident, span) in cases {
-            let expected_expression = Expression::Identifier {
-                ident: M::new(ident.to_string(), span.clone())
-            };
+            let expected_expression = data.alloc(Expression::Identifier {
+                ident: M::new(ident.to_string(), span.clone()),
+                name_id: NameId::new()
+            }, span);
             let found_expression = parse_parenthetical(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_expression), &expected_expression);
-            assert_eq!(data.get_span(found_expression), span);
+            assert!(data.eq(found_expression, expected_expression));
             let found_expression = parse_leaf(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_expression), &expected_expression);
-            assert_eq!(data.get_span(found_expression), span);
+            assert!(data.eq(found_expression, expected_expression));
             let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert_eq!(data.get_exp(found_expression), &expected_expression);
-            assert_eq!(data.get_span(found_expression), span);
+            assert!(data.eq(found_expression, expected_expression));
         }
     }
 

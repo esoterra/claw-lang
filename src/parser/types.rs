@@ -11,6 +11,8 @@ pub fn parse_valtype(input: &mut ParseInput) -> Result<M<ValType>, ParserError> 
     let valtype = match next.token {
         Token::U32 => ValType::U32,
         Token::U64 => ValType::U64,
+        Token::F32 => ValType::F32,
+        Token::F64 => ValType::F64,
         _ => return Err(input.unsupported_error("Unsupported value type"))
     };
     Ok(M::new(valtype, span))

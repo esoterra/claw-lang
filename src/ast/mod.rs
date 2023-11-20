@@ -1,11 +1,17 @@
+use std::sync::atomic;
+use std::sync::atomic::AtomicUsize;
+
 pub mod expressions;
-pub mod module;
-pub mod statements;
+pub mod component;
 pub mod types;
 
 use miette::SourceSpan;
 
 pub type Span = SourceSpan;
+
+pub use expressions::*;
+pub use component::*;
+pub use types::*;
 
 /// The metadata wrapper type
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -60,4 +66,14 @@ pub fn merge(left: &Span, right: &Span) -> Span {
     let right_most = right.offset() + right.len();
     let len = right_most - left_most;
     Span::from((left_most, len))
+}
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NameId(usize);
+
+impl NameId {
+    pub fn new() -> Self {
+        static NAME_COUNTER: AtomicUsize = AtomicUsize::new(0usize);
+        NameId(NAME_COUNTER.fetch_add(1usize, atomic::Ordering::SeqCst))
+    }
 }

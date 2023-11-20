@@ -2,8 +2,8 @@ use crate::ast::expressions::ExpressionData;
 use crate::lexer::Token;
 use crate::ast::{
     M, Span,
-    module::{
-        Module, Item, Global,
+    component::{
+        Component, Global,
         Function, FunctionSignature 
     },
     types::ValType
@@ -15,32 +15,33 @@ use crate::parser::{
     expressions::parse_expression
 };
 
-pub fn parse_module(input: &mut ParseInput) -> Result<Module, ParserError> {
-    let mut module = Module::default();
+pub fn parse_component(input: &mut ParseInput) -> Result<Component, ParserError> {
+    let mut module = Component::default();
 
     while !input.done() {
-        let item = parse_item(input, &mut module.expressions)?;
-        module.items.push(item);
+        // Check for the export keyword
+        let export_kwd = input.next_if(Token::Export);
+
+        // Determine the kind of item and parse it
+        match input.peek()?.token {
+            Token::Let => {
+                module.globals.alloc(parse_global(export_kwd, input)?);
+            },
+            Token::Func => {
+                module.functions.alloc(parse_func(export_kwd, input)?);
+            },
+            _ => {
+                return Err(input.unsupported_error("Module Items"));
+            }
+        }
     }
 
     Ok(module)
 }
 
-fn parse_item(input: &mut ParseInput, data: &mut ExpressionData) -> Result<Item, ParserError> {
-    // Check for the export keyword
-    let export_kwd = input.next_if(Token::Export);
+fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Global, ParserError> {
+    let mut data = ExpressionData::default();
 
-    // Determine the kind of item and parse it
-    match input.peek()?.token {
-        Token::Let => parse_global(export_kwd, input, data)
-            .map(|global| Item::Global(global)),
-        Token::Func => parse_func(export_kwd, input, data)
-            .map(|function| Item::Function(function)),
-        _ => Err(input.unsupported_error("Module Items"))
-    }
-}
-
-fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput, data: &mut ExpressionData) -> Result<Global, ParserError> {
     let let_kwd = input.assert_next(Token::Let, "Let")?;
     let mut_kwd = input.next_if(Token::Mut);
 
@@ -51,11 +52,11 @@ fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput, data: &mut Exp
         _ => return Err(input.unexpected_token("Global Ident"))
     };
 
-    let _colon = input.assert_next(Token::Colon, "Colon: ':'");
+    let colon = input.assert_next(Token::Colon, "Colon: ':'")?;
     let valtype = parse_valtype(input)?;
 
     let assign = input.assert_next(Token::Assign, "Assign '='")?;
-    let init_value = parse_expression(input, data)?;
+    let init_value = parse_expression(input, &mut data)?;
     let semicolon = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 
     Ok(Global {
@@ -63,26 +64,30 @@ fn parse_global(export_kwd: Option<Span>, input: &mut ParseInput, data: &mut Exp
         let_kwd,
         mut_kwd,
         ident,
+        colon,
         valtype,
         assign,
         init_value,
-        semicolon
+        semicolon,
+        expressions: data
     })
 }
 
-fn parse_func(export_kwd: Option<Span>, input: &mut ParseInput, data: &mut ExpressionData) -> Result<Function, ParserError> {
+fn parse_func(export_kwd: Option<Span>, input: &mut ParseInput) -> Result<Function, ParserError> {
     let signature = parse_func_signature(input)?;
-    let body = parse_block(input, data)?;
+    let mut data = ExpressionData::default();
+    let body = parse_block(input, &mut data)?;
 
     Ok(Function {
         export_kwd,
         signature,
-        body
+        body,
+        expressions: data
     })
 }
 
 fn parse_func_signature(input: &mut ParseInput) -> Result<FunctionSignature, ParserError> {
-    let fn_kwd = input.assert_next(Token::Func, "Function keyword 'fn'")?;
+    let func_kwd = input.assert_next(Token::Func, "Function keyword 'fn'")?;
     let next = input.next()?;
     let name = match &next.token {
         Token::Identifier(name) => {
@@ -99,7 +104,7 @@ fn parse_func_signature(input: &mut ParseInput) -> Result<FunctionSignature, Par
     let return_type = parse_valtype(input)?;
 
     Ok(FunctionSignature {
-        fn_kwd,
+        func_kwd,
         name,
         arguments,
         arrow,
@@ -149,15 +154,14 @@ mod tests {
             return counter;
         }";
         let mut input = make_input(source);
-        let _module = parse_module(&mut input).unwrap();
+        let _component = parse_component(&mut input).unwrap();
     }
 
     #[test]
     fn test_basic_function() {
-        let mut data = ExpressionData::default();
         let source = "func increment() -> u32 {}";
-        let _func = parse_func(None, &mut make_input(source), &mut data).unwrap();
-        let _module = parse_module(&mut make_input(source)).unwrap();
+        let _func = parse_func(None, &mut make_input(source)).unwrap();
+        let _component = parse_component(&mut make_input(source)).unwrap();
     }
 
     #[test]
@@ -168,8 +172,7 @@ mod tests {
 
     #[test]
     fn test_parse_global() {
-        let mut data = ExpressionData::default();
         let source = "let mut counter: u32 = 0;";
-        let _func_sig = parse_global(None, &mut make_input(source), &mut data).unwrap();
+        let _global = parse_global(None, &mut make_input(source)).unwrap();
     }
 }

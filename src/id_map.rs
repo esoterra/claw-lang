@@ -2,7 +2,7 @@ use std::marker::PhantomData;
 
 use id_arena::Id;
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct IdMap<K, V> {
     values: Vec<Option<V>>,
     _phantom: PhantomData<K>
