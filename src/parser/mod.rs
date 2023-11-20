@@ -1,5 +1,5 @@
 mod expressions;
-mod module;
+mod component;
 mod statements;
 mod types;
 
@@ -12,7 +12,7 @@ use crate::ast::component::Component;
 use miette::{Diagnostic, SourceSpan, NamedSource};
 use thiserror::Error;
 
-use self::module::parse_component;
+use self::component::parse_component;
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParserError{

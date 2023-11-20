@@ -31,7 +31,7 @@ pub fn compile<SN: ToString, SC: ToString>(
     };
 
     let ast = match parser::parse(src.clone(), tokens) {
-        Ok(module) => module,
+        Ok(ast) => ast,
         Err(error) => {
             println!("{:?}", Report::new(error));
             return None;

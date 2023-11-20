@@ -59,7 +59,7 @@ impl Compile {
         };
     
         let ast = match parse(src.clone(), tokens) {
-            Ok(module) => module,
+            Ok(ast) => ast,
             Err(error) => {
                 println!("{:?}", Report::new(error));
                 return None;

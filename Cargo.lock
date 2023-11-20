@@ -211,6 +211,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "claw"
+version = "0.1.2"
+dependencies = [
+ "clap",
+ "id-arena",
+ "logos",
+ "miette",
+ "petgraph",
+ "pretty_assertions",
+ "thiserror",
+ "wasm-encoder 0.36.2",
+ "wasmtime",
+]
+
+[[package]]
 name = "cpp_demangle"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1794,21 +1809,6 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "unicode-xid",
-]
-
-[[package]]
-name = "wrought"
-version = "0.1.2"
-dependencies = [
- "clap",
- "id-arena",
- "logos",
- "miette",
- "petgraph",
- "pretty_assertions",
- "thiserror",
- "wasm-encoder 0.36.2",
- "wasmtime",
 ]
 
 [[package]]

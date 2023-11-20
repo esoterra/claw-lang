@@ -10,7 +10,7 @@ use super::{
     expressions::ExpressionId, NameId
 };
 
-/// Each Wrought source file represents a module
+/// Each Claw source file represents a Component
 /// and this struct represents the root of the AST.
 #[derive(Debug, Default)]
 pub struct Component {

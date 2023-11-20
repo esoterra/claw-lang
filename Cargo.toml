@@ -1,12 +1,11 @@
 [package]
-name = "wrought"
+name = "claw"
 version = "0.1.2"
 authors = ["Kyle Brown <kylebrw@gmail.com>"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
-description = "A Rust implementation of the Wrought compiler"
-homepage = "https://github.com/wrought-lang/wrought-rs"
-repository = "https://github.com/wrought-lang/wrought-rs"
+description = " The compiler for the Claw language "
+repository = "https://github.com/esoterra/claw-lang"
 readme = "README.md"
 
 [dependencies]

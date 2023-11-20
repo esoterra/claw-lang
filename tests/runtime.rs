@@ -1,4 +1,4 @@
-use wrought::{compile, codegen};
+use claw::{compile, codegen};
 
 use std::fs;
 
@@ -14,7 +14,7 @@ struct Runtime {
 
 impl Runtime {
     pub fn new(name: &str) -> Self {
-        let path = format!("./tests/programs/{}.wrt", name);
+        let path = format!("./tests/programs/{}.claw", name);
         let input = fs::read_to_string(path).unwrap();
         let output = compile(name, input);
         let output = match output {
