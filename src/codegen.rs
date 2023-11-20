@@ -199,7 +199,7 @@ fn encode_expression(
                 ast::BinaryOp::GT => todo!(),
                 ast::BinaryOp::GTE => todo!(),
                 ast::BinaryOp::EQ => encode_eq(valtype, builder),
-                ast::BinaryOp::NEQ => todo!(),
+                ast::BinaryOp::NEQ => encode_ne(valtype, builder),
                 ast::BinaryOp::BitAnd => todo!(),
                 ast::BinaryOp::BitXor => todo!(),
                 ast::BinaryOp::BitOr => todo!(),
@@ -286,6 +286,17 @@ fn encode_eq(valtype: &ValType, builder: &mut enc::Function) {
         enc::ValType::I64 => enc::Instruction::I64Eq,
         enc::ValType::F32 => enc::Instruction::F32Eq,
         enc::ValType::F64 => enc::Instruction::F64Eq,
+        _ => unimplemented!(),
+    };
+    builder.instruction(&instruction);
+}
+
+fn encode_ne(valtype: &ValType, builder: &mut enc::Function) {
+    let instruction = match core_type_of(&valtype) {
+        enc::ValType::I32 => enc::Instruction::I32Ne,
+        enc::ValType::I64 => enc::Instruction::I64Ne,
+        enc::ValType::F32 => enc::Instruction::F32Ne,
+        enc::ValType::F64 => enc::Instruction::F64Ne,
         _ => unimplemented!(),
     };
     builder.instruction(&instruction);

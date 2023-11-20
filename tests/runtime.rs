@@ -38,6 +38,33 @@ impl Runtime {
 }
 
 #[test]
+fn test_counter_s64() {
+    let mut runtime = Runtime::new("counter_s64");
+
+    let increment = runtime
+        .instance
+        .get_typed_func::<(), i64>(&mut runtime.store, "increment")
+        .unwrap();
+
+    let decrement = runtime
+        .instance
+        .get_typed_func::<(), i64>(&mut runtime.store, "decrement")
+        .unwrap();
+
+    for i in 1..200 {
+        // Increase by one
+        assert_eq!(increment.call(&mut runtime.store, ()).unwrap(), i);
+        // Increase then decrease by one
+        assert_eq!(increment.call(&mut runtime.store, ()).unwrap(), i+1);
+        assert_eq!(decrement.call(&mut runtime.store, ()).unwrap(), i);
+    }
+
+    for i in (1..200).rev() {
+        assert_eq!(decrement.call(&mut runtime.store, ()).unwrap(), i-1);
+    }
+}
+
+#[test]
 fn test_identity_u64() {
     let mut runtime = Runtime::new("identity_u64");
 
