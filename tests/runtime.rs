@@ -2,14 +2,15 @@ use claw::{compile, codegen};
 
 use std::fs;
 
-use wasmtime::{Engine, Instance, Module, Store};
+use wasmtime::{Engine, Store, Config};
+use wasmtime::component::{bindgen, Component, Linker};
 
 #[allow(dead_code)]
 struct Runtime {
     engine: Engine,
-    module: Module,
+    component: Component,
+    linker: Linker<()>,
     store: Store<()>,
-    instance: Instance,
 }
 
 impl Runtime {
@@ -23,102 +24,95 @@ impl Runtime {
         };
         let output = codegen::generate(output);
 
-        let engine = Engine::default();
-        let module = Module::new(&engine, output).unwrap();
-        let mut store = Store::new(&engine, ());
-        let instance = Instance::new(&mut store, &module, &[]).unwrap();
+        let mut config = Config::new();
+        config.wasm_component_model(true);
+        let engine = Engine::new(&config).unwrap();
+    
+        let component = Component::new(&engine, output).unwrap();
+        let linker = Linker::new(&engine);
+        let store = Store::new(&engine, ());
 
         Runtime {
             engine,
-            module,
-            store,
-            instance,
+            component,
+            linker,
+            store
         }
     }
 }
 
 #[test]
 fn test_counter_s64() {
+    bindgen!("counter-s64" in "tests/programs");
+
     let mut runtime = Runtime::new("counter_s64");
 
-    let increment = runtime
-        .instance
-        .get_typed_func::<(), i64>(&mut runtime.store, "increment")
-        .unwrap();
-
-    let decrement = runtime
-        .instance
-        .get_typed_func::<(), i64>(&mut runtime.store, "decrement")
-        .unwrap();
+    let (counter_s64, _) = CounterS64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in 1..200 {
         // Increase by one
-        assert_eq!(increment.call(&mut runtime.store, ()).unwrap(), i);
+        assert_eq!(counter_s64.call_increment(&mut runtime.store).unwrap(), i);
         // Increase then decrease by one
-        assert_eq!(increment.call(&mut runtime.store, ()).unwrap(), i+1);
-        assert_eq!(decrement.call(&mut runtime.store, ()).unwrap(), i);
+        assert_eq!(counter_s64.call_increment(&mut runtime.store).unwrap(), i+1);
+        assert_eq!(counter_s64.call_decrement(&mut runtime.store).unwrap(), i);
     }
 
     for i in (1..200).rev() {
-        assert_eq!(decrement.call(&mut runtime.store, ()).unwrap(), i-1);
+        assert_eq!(counter_s64.call_decrement(&mut runtime.store).unwrap(), i-1);
     }
 }
 
 #[test]
 fn test_identity_u64() {
+    bindgen!("identity-u64" in "tests/programs");
+
     let mut runtime = Runtime::new("identity_u64");
 
-    let identity_func = runtime
-        .instance
-        .get_typed_func::<u64, u64>(&mut runtime.store, "identity")
-        .unwrap();
+    let (identity_u64, _) = IdentityU64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in [0, 1, 2, 12, 5634, 34] {
-        assert_eq!(identity_func.call(&mut runtime.store, i).unwrap(), i);
+        assert_eq!(identity_u64.call_identity(&mut runtime.store, i).unwrap(), i);
     }
 }
 
 #[test]
 fn test_increment_u32() {
+    bindgen!("increment-u32" in "tests/programs");
+
     let mut runtime = Runtime::new("increment_u32");
 
-    let increment = runtime
-        .instance
-        .get_typed_func::<(), u32>(&mut runtime.store, "increment")
-        .unwrap();
+    let (increment_u32, _) = IncrementU32::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in 1..200 {
-        assert_eq!(increment.call(&mut runtime.store, ()).unwrap(), i);
+        assert_eq!(increment_u32.call_increment(&mut runtime.store).unwrap(), i);
     }
 }
 
 #[test]
 fn test_increment_u64() {
+    bindgen!("increment-u64" in "tests/programs");
+
     let mut runtime = Runtime::new("increment_u64");
 
-    let increment = runtime
-        .instance
-        .get_typed_func::<(), u64>(&mut runtime.store, "increment")
-        .unwrap();
+    let (increment_u64, _) = IncrementU64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in 1..200 {
-        assert_eq!(increment.call(&mut runtime.store, ()).unwrap(), i);
+        assert_eq!(increment_u64.call_increment(&mut runtime.store).unwrap(), i);
     }
 }
 
 #[test]
 fn test_min_u32() {
+    bindgen!("min-u32" in "tests/programs");
+
     let mut runtime = Runtime::new("min_u32");
 
-    let increment = runtime
-        .instance
-        .get_typed_func::<(u32, u32), u32>(&mut runtime.store, "min")
-        .unwrap();
+    let (min_u32, _) = MinU32::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in 1..200 {
         for j in 1..200 {
             let expected = std::cmp::min(i, j);
-            let actual = increment.call(&mut runtime.store, (i, j)).unwrap();
+            let actual = min_u32.call_min(&mut runtime.store, i, j).unwrap();
             assert_eq!(expected, actual);
         }
     }
@@ -126,34 +120,32 @@ fn test_min_u32() {
 
 #[test]
 fn test_quadratic_f64() {
+    bindgen!("quadratic-f64" in "tests/programs");
+
     let mut runtime = Runtime::new("quadratic_f64");
 
-    let quad = runtime
-        .instance
-        .get_typed_func::<(f64, f64, f64, f64), f64>(&mut runtime.store, "quad")
-        .unwrap();
+    let (quadratic_f64, _) = QuadraticF64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for x in 0..10 {
         let x = x as f64;
         let expected = 2.0 * x * x + 3.0 * x + 4.0;
-        let actual = quad.call(&mut runtime.store, (2.0, 3.0, 4.0, x)).unwrap();
+        let actual = quadratic_f64.call_quad(&mut runtime.store, 2.0, 3.0, 4.0, x).unwrap();
         assert_eq!(expected, actual);
     }
 }
 
 #[test]
 fn test_quadratic_let_f64() {
+    bindgen!("quadratic-f64" in "tests/programs");
+
     let mut runtime = Runtime::new("quadratic_let_f64");
 
-    let quad = runtime
-        .instance
-        .get_typed_func::<(f64, f64, f64, f64), f64>(&mut runtime.store, "quad")
-        .unwrap();
+    let (quadratic_f64, _) = QuadraticF64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for x in 0..10 {
         let x = x as f64;
         let expected = 2.0 * x * x + 3.0 * x + 4.0;
-        let actual = quad.call(&mut runtime.store, (2.0, 3.0, 4.0, x)).unwrap();
+        let actual = quadratic_f64.call_quad(&mut runtime.store, 2.0, 3.0, 4.0, x).unwrap();
         assert_eq!(expected, actual);
     }
 }

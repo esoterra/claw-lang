@@ -1,26 +1,109 @@
 use crate::{
     ast::{self, component::FunctionSignature, expressions::Literal, types::ValType, ExpressionId},
-    resolver::{FunctionResolver, ResolvedComponent, ItemId},
+    resolver::{FunctionResolver, ItemId, ResolvedComponent},
 };
 
 use wasm_encoder as enc;
 
-pub fn generate(component: ResolvedComponent) -> Vec<u8> {
+pub fn generate(resolved_comp: ResolvedComponent) -> Vec<u8> {
     let mut module = enc::Module::new();
-    let globals = encode_globals(&component);
-    let (types, functions, codes) = encode_functions(&component);
-    let exports = encode_exports(&component);
-    module.section(&types);
-    module.section(&functions);
-    module.section(&globals);
-    module.section(&exports);
-    module.section(&codes);
-    module.finish()
+    let mut component = enc::Component::new();
+
+    let mut module_globals = enc::GlobalSection::new();
+    let mut module_types = enc::TypeSection::new();
+    let mut module_funcs = enc::FunctionSection::new();
+    let mut module_code = enc::CodeSection::new();
+    let mut module_exports = enc::ExportSection::new();
+
+    let mut comp_alias = enc::ComponentAliasSection::new();
+    let mut comp_types = enc::ComponentTypeSection::new();
+    let mut comp_funcs = enc::CanonicalFunctionSection::new();
+    let mut comp_exports = enc::ComponentExportSection::new();
+
+    let mut mod_func_index = 0;
+    let mut comp_func_index = 0;
+
+    encode_globals(&resolved_comp, &mut module_globals);
+
+    for (id, function) in resolved_comp.component.functions.iter() {
+        // Encode module and component type sections
+        encode_mod_func_type(&function.signature, &mut module_types);
+
+        // Encode module function
+        module_funcs.function(mod_func_index);
+
+        // Encode module code
+        let resolver = resolved_comp.resolved_funcs.get(id).unwrap();
+        let locals = encode_locals(resolver);
+        let mut builder = enc::Function::new(locals);
+
+        for statement in function.body.as_ref().statements.iter() {
+            encode_statement(resolver, function, statement.as_ref(), &mut builder);
+        }
+        builder.instruction(&enc::Instruction::End);
+
+        module_code.function(&builder);
+
+        if function.export_kwd.is_some() {
+            // Export function from module
+            module_exports.export(
+                function.signature.name.as_ref(),
+                enc::ExportKind::Func,
+                id.index() as u32,
+            );
+            // Alias module instance export into component
+            const MODULE_INSTANCE_INDEX: u32 = 0;
+            comp_alias.alias(enc::Alias::CoreInstanceExport {
+                instance: MODULE_INSTANCE_INDEX,
+                kind: enc::ExportKind::Func,
+                name: function.signature.name.as_ref().as_str(),
+            });
+            // Encode component func type
+            encode_comp_func_type(&function.signature, &mut comp_types);
+            // Lift aliased function to component function
+            const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
+            comp_funcs.lift(mod_func_index, comp_func_index, NO_CANON_OPTS);
+            // Export component function
+            comp_exports.export(
+                function.signature.name.as_ref().as_str(),
+                enc::ComponentExportKind::Func,
+                comp_func_index,
+                Some(enc::ComponentTypeRef::Func(comp_func_index)),
+            );
+            comp_func_index += 1;
+        }
+
+        mod_func_index += 1;
+    }
+
+    // Combine module sections in order
+    module.section(&module_types);
+    module.section(&module_funcs);
+    module.section(&module_globals);
+    module.section(&module_exports);
+    module.section(&module_code);
+
+    // Build up component
+    // Embed module
+    component.section(&enc::ModuleSection(&module));
+    // Instantiate module
+    let mut comp_instantiate = enc::InstanceSection::new();
+    const NO_ARGS: [(String, enc::ModuleArg); 0] = [];
+    comp_instantiate.instantiate(0, NO_ARGS);
+    component.section(&comp_instantiate);
+    // Alias exports
+    component.section(&comp_alias);
+    // Encode function types and definitions
+    component.section(&comp_types);
+    component.section(&comp_funcs);
+    // Export component functions
+    component.section(&comp_exports);
+
+    // Produce final binary
+    component.finish()
 }
 
-fn encode_globals(component: &ResolvedComponent) -> enc::GlobalSection {
-    let mut section = enc::GlobalSection::new();
-
+fn encode_globals(component: &ResolvedComponent, module_globals: &mut enc::GlobalSection) {
     for (id, global) in component.component.globals.iter() {
         let valtype = global.valtype.as_ref();
 
@@ -35,59 +118,35 @@ fn encode_globals(component: &ResolvedComponent) -> enc::GlobalSection {
             panic!("Cannot generate WASM for unresolved global")
         };
 
-        section.global(global_type, &init_expr);
+        module_globals.global(global_type, &init_expr);
     }
-
-    section
 }
 
-fn encode_functions(
-    component: &ResolvedComponent,
-) -> (enc::TypeSection, enc::FunctionSection, enc::CodeSection) {
-    let mut type_section = enc::TypeSection::new();
-    let mut func_section = enc::FunctionSection::new();
-    let mut code_section = enc::CodeSection::new();
-
-    let mut next_type_index = 0;
-
-    for (id, function) in component.component.functions.iter() {
-        // Encode Type
-        encode_func_signature(&function.signature, &mut type_section);
-
-        func_section.function(next_type_index);
-        next_type_index += 1;
-
-        let resolver = component.resolved_funcs.get(id).unwrap();
-
-        let locals = encode_locals(resolver);
-        let mut builder = enc::Function::new(locals);
-
-        for statement in function.body.as_ref().statements.iter() {
-            encode_statement(resolver, function, statement.as_ref(), &mut builder);
-        }
-        builder.instruction(&enc::Instruction::End);
-
-        code_section.function(&builder);
-    }
-
-    (type_section, func_section, code_section)
-}
-
-fn encode_func_signature(signature: &FunctionSignature, type_section: &mut enc::TypeSection) {
+fn encode_mod_func_type(signature: &FunctionSignature, module_types: &mut enc::TypeSection) {
     let params = signature
         .arguments
         .iter()
         .map(|(_name, valtype)| encode_valtype(valtype.as_ref()));
 
     let result_type = encode_valtype(signature.return_type.as_ref());
-    let results = [result_type];
-
-    type_section.function(params, results);
+    module_types.function(params, [result_type]);
 }
 
-fn encode_locals(
-    resolver: &FunctionResolver,
-) -> Vec<(u32, enc::ValType)> {
+fn encode_comp_func_type(
+    signature: &FunctionSignature,
+    comp_types: &mut enc::ComponentTypeSection,
+) {
+    let params = signature.arguments.iter().map(|(name, valtype)| {
+        (
+            name.as_ref().as_str(),
+            encode_comp_valtype(valtype.as_ref()),
+        )
+    });
+    let result_type = encode_comp_valtype(signature.return_type.as_ref());
+    comp_types.function().params(params).result(result_type);
+}
+
+fn encode_locals(resolver: &FunctionResolver) -> Vec<(u32, enc::ValType)> {
     resolver
         .locals
         .iter()
@@ -99,22 +158,6 @@ fn encode_locals(
         .collect()
 }
 
-fn encode_exports(component: &ResolvedComponent) -> enc::ExportSection {
-    let mut section = enc::ExportSection::new();
-
-    for (id, func) in component.component.functions.iter() {
-        if func.export_kwd.is_some() {
-            section.export(
-                func.signature.name.as_ref(),
-                enc::ExportKind::Func,
-                id.index() as u32,
-            );
-        }
-    }
-
-    section
-}
-
 fn encode_statement(
     resolver: &FunctionResolver,
     func: &ast::Function,
@@ -123,29 +166,35 @@ fn encode_statement(
 ) {
     match statement {
         ast::Statement::Let {
-            ident: _, name_id, expression, ..
-        } | ast::Statement::Assign {
-            ident: _, name_id,
-            expression, ..
-        }=> {
+            ident: _,
+            name_id,
+            expression,
+            ..
+        }
+        | ast::Statement::Assign {
+            ident: _,
+            name_id,
+            expression,
+            ..
+        } => {
             encode_expression(resolver, func, *expression, builder);
             match resolver.bindings.get(name_id).unwrap() {
                 ItemId::Import(_) => unimplemented!(),
                 ItemId::Global(global) => {
                     builder.instruction(&enc::Instruction::GlobalSet(global.index() as u32));
-                },
+                }
                 ItemId::Param(param) => {
                     let local_index = param.0;
                     dbg!(param, local_index);
                     builder.instruction(&enc::Instruction::LocalSet(param.0 as u32));
-                },
+                }
                 ItemId::Local(local) => {
                     let local_index = local.index() + func.signature.arguments.len();
                     dbg!(local, local_index);
                     builder.instruction(&enc::Instruction::LocalSet(local_index as u32));
-                },
+                }
             }
-        },
+        }
         ast::Statement::If {
             if_kwd: _,
             condition,
@@ -157,14 +206,14 @@ fn encode_statement(
                 encode_statement(resolver, func, statement.as_ref(), builder);
             }
             builder.instruction(&enc::Instruction::End);
-        },
+        }
         ast::Statement::Return {
             return_kwd: _,
             expression,
         } => {
             encode_expression(resolver, func, *expression, builder);
             builder.instruction(&enc::Instruction::Return);
-        },
+        }
     };
 }
 
@@ -177,9 +226,13 @@ fn encode_expression(
     match func.expressions.get_exp(expression) {
         ast::Expression::Unary { .. } => {
             todo!()
-        },
+        }
 
-        ast::Expression::Binary { left, operator, right } => {
+        ast::Expression::Binary {
+            left,
+            operator,
+            right,
+        } => {
             encode_expression(resolver, func, *left, builder);
             encode_expression(resolver, func, *right, builder);
 
@@ -206,7 +259,7 @@ fn encode_expression(
                 ast::BinaryOp::LogicalAnd => todo!(),
                 ast::BinaryOp::LogicalOr => todo!(),
             };
-        },
+        }
 
         ast::Expression::Invocation { .. } => todo!(),
 
@@ -215,19 +268,19 @@ fn encode_expression(
                 ItemId::Import(_) => unimplemented!(),
                 ItemId::Global(global) => {
                     builder.instruction(&enc::Instruction::GlobalGet(global.index() as u32));
-                },
+                }
                 ItemId::Param(param) => {
                     let local_index = param.0;
                     dbg!(param, local_index);
                     builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
-                },
+                }
                 ItemId::Local(local) => {
                     let local_index = local.index() + func.signature.arguments.len();
                     dbg!(local, local_index);
                     builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
-                },
+                }
             }
-        },
+        }
 
         ast::Expression::Literal { value } => {
             let valtype = resolver.expression_types.get(expression).unwrap();
@@ -243,7 +296,7 @@ fn encode_expression(
                 _ => todo!(),
             };
             builder.instruction(&instruction);
-        },
+        }
     }
 }
 
@@ -356,4 +409,24 @@ fn encode_valtype(valtype: &ValType) -> enc::ValType {
         ValType::Bool => enc::ValType::I32,
         _ => panic!("Unsupported type for WAT output {:?}", valtype),
     }
+}
+
+fn encode_comp_valtype(valtype: &ValType) -> enc::ComponentValType {
+    use enc::PrimitiveValType;
+    let primitive = match valtype {
+        ValType::Result { ok: _, err: _ } => todo!(),
+        ValType::String => PrimitiveValType::String,
+        ValType::U64 => PrimitiveValType::U64,
+        ValType::U32 => PrimitiveValType::U32,
+        ValType::U16 => PrimitiveValType::U16,
+        ValType::U8 => PrimitiveValType::U8,
+        ValType::S64 => PrimitiveValType::S64,
+        ValType::S32 => PrimitiveValType::S32,
+        ValType::S16 => PrimitiveValType::S16,
+        ValType::S8 => PrimitiveValType::S8,
+        ValType::F32 => PrimitiveValType::Float32,
+        ValType::F64 => PrimitiveValType::Float64,
+        ValType::Bool => PrimitiveValType::Bool,
+    };
+    enc::ComponentValType::Primitive(primitive)
 }

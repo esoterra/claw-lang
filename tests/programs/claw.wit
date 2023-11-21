@@ -1,0 +1,26 @@
+package claw:samples;
+
+world counter-s64 {
+    export increment: func() -> s64;
+    export decrement: func() -> s64;
+}
+
+world identity-u64 {
+    export identity: func(value: u64) -> u64;
+}
+
+world increment-u32 {
+    export increment: func() -> u32;
+}
+
+world increment-u64 {
+    export increment: func() -> u64;
+}
+
+world min-u32 {
+    export min: func(left: u32, right: u32) -> u32;
+}
+
+world quadratic-f64 {
+    export quad: func(a: float64, b: float64, c: float64, x: float64) -> float64;
+}
