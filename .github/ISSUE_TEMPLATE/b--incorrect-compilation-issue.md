@@ -1,8 +1,8 @@
 ---
-name: B) Runtime bug
-about: Report a runtime error or issue with generated code
+name: B) Incorrect compilation issue
+about: Report an issue with generated code
 title: 'Runtime bug: *describe problem here*'
-labels: ''
+labels: incorrect-compilation
 assignees: ''
 
 ---

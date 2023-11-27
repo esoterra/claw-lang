@@ -1,8 +1,8 @@
 ---
-name: A) Compilation bug
-about: Report a compilation error or compiler crash
+name: A) Compilation error or crash
+about: Report an unexpected error or crash during compilation
 title: 'Compilation bug: *describe problem here*'
-labels: bug
+labels: ''
 assignees: ''
 
 ---
