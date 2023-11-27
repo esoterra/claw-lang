@@ -1,6 +1,6 @@
 ---
 name: Compilation bug
-about: Create a report to help us improve
+about: Report a compilation error or compiler crash
 title: 'Compilation bug: *describe problem here*'
 labels: bug
 assignees: ''

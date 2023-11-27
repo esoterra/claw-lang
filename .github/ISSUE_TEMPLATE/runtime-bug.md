@@ -1,6 +1,6 @@
 ---
 name: Runtime bug
-about: Create a report to help us improve
+about: Report a runtime error or issue with generated code
 title: 'Runtime bug: *describe problem here*'
 labels: ''
 assignees: ''
