@@ -1,5 +1,5 @@
 ---
-name: Feature request
+name: C) Feature request
 about: Suggest an addition to the claw compiler project
 title: ''
 labels: enhancement

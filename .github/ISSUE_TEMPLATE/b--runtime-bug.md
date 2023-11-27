@@ -1,5 +1,5 @@
 ---
-name: Runtime bug
+name: B) Runtime bug
 about: Report a runtime error or issue with generated code
 title: 'Runtime bug: *describe problem here*'
 labels: ''

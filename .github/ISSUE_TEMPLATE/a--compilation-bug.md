@@ -1,5 +1,5 @@
 ---
-name: Compilation bug
+name: A) Compilation bug
 about: Report a compilation error or compiler crash
 title: 'Compilation bug: *describe problem here*'
 labels: bug
