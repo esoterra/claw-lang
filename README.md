@@ -65,7 +65,7 @@ Claw could make it easy to write simple adapters or polyfills so that users can 
 
 ### Virtualizations & Mocks
 
-With components, we can achieve an incredible local dev experience where resources like file systems and key value stores
+With components, we can achieve an incredible local dev experience where resources like message buses and key value stores
 can be implemented as simple components and used to run applications for testing and development.
 
 Claw can be well suited to writing simple in-memory virtualizations that make testing and development easy.
