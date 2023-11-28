@@ -81,3 +81,17 @@ Claw can make writing these extensions easy while still generating really small 
 ### Simple Services
 
 TODO
+
+## Relationship with Other Projects
+
+There are several projects for representing different aspects of the Component Model
+
+* [WIT](https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md) - The official IDL for the Component Model
+* [WAC](https://github.com/peterhuene/wac/) - An extension of WIT that adds the ability to define how to wire components together
+* [WAVE](https://github.com/lann/wave) - A format for encoding Component-Model values in an idiomatic json-like way
+
+Claw will use WIT syntax for defining types, WAC syntax for defining composition, and WAVE syntax for literal expressions
+combining them all together so that it's intuitive to use these different tools.
+
+![image](https://github.com/esoterra/claw-lang/assets/3458116/de0673f1-7b92-48c6-b1c3-e52479797778)
+
