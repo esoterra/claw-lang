@@ -150,8 +150,7 @@ fn encode_locals(resolver: &FunctionResolver) -> Vec<(u32, enc::ValType)> {
     resolver
         .locals
         .iter()
-        .map(|(id, local)| {
-            dbg!(id, local);
+        .map(|(id, _)| {
             let valtype = resolver.local_types.get(id).unwrap();
             (1, encode_valtype(&valtype))
         })
@@ -184,13 +183,10 @@ fn encode_statement(
                     builder.instruction(&enc::Instruction::GlobalSet(global.index() as u32));
                 }
                 ItemId::Param(param) => {
-                    let local_index = param.0;
-                    dbg!(param, local_index);
                     builder.instruction(&enc::Instruction::LocalSet(param.0 as u32));
                 }
                 ItemId::Local(local) => {
                     let local_index = local.index() + func.signature.arguments.len();
-                    dbg!(local, local_index);
                     builder.instruction(&enc::Instruction::LocalSet(local_index as u32));
                 }
             }
@@ -247,10 +243,10 @@ fn encode_expression(
                 ast::BinaryOp::BitShiftL => todo!(),
                 ast::BinaryOp::BitShiftR => todo!(),
                 ast::BinaryOp::ArithShiftR => todo!(),
+                ast::BinaryOp::LTE => encode_le(inner_valtype, builder),
+                ast::BinaryOp::GT => encode_gt(inner_valtype, builder),
+                ast::BinaryOp::GTE => encode_ge(inner_valtype, builder),
                 ast::BinaryOp::LT => encode_lt(inner_valtype, builder),
-                ast::BinaryOp::LTE => todo!(),
-                ast::BinaryOp::GT => todo!(),
-                ast::BinaryOp::GTE => todo!(),
                 ast::BinaryOp::EQ => encode_eq(valtype, builder),
                 ast::BinaryOp::NEQ => encode_ne(valtype, builder),
                 ast::BinaryOp::BitAnd => todo!(),
@@ -271,12 +267,10 @@ fn encode_expression(
                 }
                 ItemId::Param(param) => {
                     let local_index = param.0;
-                    dbg!(param, local_index);
                     builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
                 }
                 ItemId::Local(local) => {
                     let local_index = local.index() + func.signature.arguments.len();
-                    dbg!(local, local_index);
                     builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
                 }
             }
@@ -367,6 +361,54 @@ fn encode_lt(valtype: &ValType, builder: &mut enc::Function) {
         ValType::F64 => enc::Instruction::F64Lt,
 
         vtype => unimplemented!("comparison '<' of type {:?}", vtype),
+    };
+    builder.instruction(&instruction);
+}
+
+fn encode_le(valtype: &ValType, builder: &mut enc::Function) {
+    let instruction = match valtype {
+        ValType::U64 => enc::Instruction::I64LeU,
+        ValType::S64 => enc::Instruction::I64LeS,
+
+        ValType::U32 | ValType::U16 | ValType::U8 => enc::Instruction::I32LeU,
+        ValType::S32 | ValType::S16 | ValType::S8 => enc::Instruction::I32LeS,
+
+        ValType::F32 => enc::Instruction::F32Le,
+        ValType::F64 => enc::Instruction::F64Le,
+
+        vtype => unimplemented!("comparison '<=' of type {:?}", vtype),
+    };
+    builder.instruction(&instruction);
+}
+
+fn encode_gt(valtype: &ValType, builder: &mut enc::Function) {
+    let instruction = match valtype {
+        ValType::U64 => enc::Instruction::I64GtU,
+        ValType::S64 => enc::Instruction::I64GtS,
+
+        ValType::U32 | ValType::U16 | ValType::U8 => enc::Instruction::I32GtU,
+        ValType::S32 | ValType::S16 | ValType::S8 => enc::Instruction::I32GtS,
+
+        ValType::F32 => enc::Instruction::F32Gt,
+        ValType::F64 => enc::Instruction::F64Gt,
+
+        vtype => unimplemented!("comparison '<' of type {:?}", vtype),
+    };
+    builder.instruction(&instruction);
+}
+
+fn encode_ge(valtype: &ValType, builder: &mut enc::Function) {
+    let instruction = match valtype {
+        ValType::U64 => enc::Instruction::I64GeU,
+        ValType::S64 => enc::Instruction::I64GeS,
+
+        ValType::U32 | ValType::U16 | ValType::U8 => enc::Instruction::I32GeU,
+        ValType::S32 | ValType::S16 | ValType::S8 => enc::Instruction::I32GeS,
+
+        ValType::F32 => enc::Instruction::F32Ge,
+        ValType::F64 => enc::Instruction::F64Ge,
+
+        vtype => unimplemented!("comparison '<=' of type {:?}", vtype),
     };
     builder.instruction(&instruction);
 }

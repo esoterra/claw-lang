@@ -21,6 +21,18 @@ world min-u32 {
     export min: func(left: u32, right: u32) -> u32;
 }
 
+world max-u32 {
+    export max: func(left: u32, right: u32) -> u32;
+}
+
 world quadratic-f64 {
     export quad: func(a: float64, b: float64, c: float64, x: float64) -> float64;
+}
+
+world less-equal-u32 {
+    export le: func(left: u32, right: u32) -> u32;
+}
+
+world greater-equal-u32 {
+    export ge: func(left: u32, right: u32) -> u32;
 }
