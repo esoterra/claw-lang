@@ -76,19 +76,14 @@ impl ExpressionData {
                 return self.eq(*l_left, *r_left) && l_op == r_op && self.eq(*l_right, *r_right);
             }
             (
-                Expression::Invocation {
-                    ident: l_ident,
-                    args: l_arg,
-                },
-                Expression::Invocation {
-                    ident: r_ident,
-                    args: r_arg,
-                },
+                Expression::Call { call: l_call },
+                Expression::Call { call: r_call },
             ) => {
-                return l_ident == r_ident
-                    && l_arg
+                return l_call.ident.as_ref() == r_call.ident.as_ref()
+                    && l_call.ident.span == r_call.ident.span
+                    && l_call.args
                         .iter()
-                        .zip(r_arg.iter())
+                        .zip(r_call.args.iter())
                         .map(|(l, r)| l == r)
                         .all(|v| v);
             }
@@ -98,7 +93,7 @@ impl ExpressionData {
             ) => {
                 return l_ident == r_ident;
             }
-            (Expression::Literal { value: l_value }, Expression::Literal { value: r_value }) => {
+            (Expression::Literal { literal: l_value }, Expression::Literal { literal: r_value }) => {
                 return l_value == r_value;
             }
             _ => false,
@@ -118,16 +113,15 @@ pub enum Expression {
         right: ExpressionId,
     },
     /// Function calls and variant case constructors.
-    Invocation {
-        ident: M<String>,
-        args: Vec<ExpressionId>,
+    Call {
+        call: Call
     },
     Identifier {
         ident: M<String>,
         name_id: NameId
     },
     Literal {
-        value: M<Literal>,
+        literal: M<Literal>,
     },
 }
 
@@ -170,4 +164,11 @@ pub enum BinaryOp {
 pub enum Literal {
     Integer(u64),
     Float(f64),
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct Call {
+    pub ident: M<String>,
+    pub name_id: NameId,
+    pub args: Vec<ExpressionId>,
 }

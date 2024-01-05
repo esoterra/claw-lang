@@ -1,5 +1,5 @@
 use crate::{
-    ast::{self, Expression, ExpressionId, ValType, M, NameId},
+    ast::{self, Call, Expression, ExpressionId, NameId, ValType, M},
     id_map::IdMap,
     stack_map::StackMap,
 };
@@ -37,16 +37,18 @@ pub enum ItemId {
     Global(GlobalId),
     Param(ParamId),
     Local(LocalId),
-    // Function(FunctionId),
+    Function(FunctionId),
 }
 
-type ImportId = Id<ast::Import>;
-type GlobalId = Id<ast::Global>;
+pub type ImportId = Id<ast::Import>;
+pub type GlobalId = Id<ast::Global>;
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ParamId(pub usize);
 
-type LocalId = Id<LocalInfo>;
+pub type LocalId = Id<LocalInfo>;
+
+pub type FunctionId = Id<ast::Function>;
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ResolverError {
@@ -64,6 +66,15 @@ pub enum ResolverError {
         #[source_code]
         src: Arc<NamedSource>,
         #[label("Name referenced here")]
+        span: SourceSpan,
+        ident: String,
+    },
+    #[diagnostic()]
+    #[error("Function call with wrong number of arguments \"{ident}\"")]
+    CallArgumentsMismatch {
+        #[source_code]
+        src: Arc<NamedSource>,
+        #[label("Here")]
         span: SourceSpan,
         ident: String,
     },
@@ -100,21 +111,21 @@ pub fn resolve(
 ) -> Result<ResolvedComponent, ResolverError> {
     let mut mappings: HashMap<String, ItemId> = Default::default();
 
-    for _import in component.imports.iter() {
-        todo!("Resolver: Scanning imports.");
+    for (id, import) in component.imports.iter() {
+        mappings.insert(import.name.value.clone(), ItemId::Import(id));
     }
     for (id, global) in component.globals.iter() {
         mappings.insert(global.ident.value.clone(), ItemId::Global(id));
     }
-    for (_id, _function) in component.functions.iter() {
-        // mappings.insert(function.signature.name.value, ItemId::Function(id));
+    for (id, function) in component.functions.iter() {
+        mappings.insert(function.signature.name.value.clone(), ItemId::Function(id));
     }
 
     let mut global_vals: IdMap<ast::Global, ast::Literal> = Default::default();
 
     for (id, global) in component.globals.iter() {
         let global_val = match global.expressions.get_exp(global.init_value) {
-            Expression::Literal { value } => value.value.clone(),
+            Expression::Literal { literal } => literal.value.clone(),
             _ => panic!("Only literal expressions allowed in global initializer"),
         };
         global_vals.insert(id, global_val);
@@ -140,7 +151,9 @@ pub fn resolve(
         resolved_funcs.insert(id, resolver);
     }
 
-    let ComponentContext { src, global_vals, .. } = context;
+    let ComponentContext {
+        src, global_vals, ..
+    } = context;
     Ok(ResolvedComponent {
         src,
         component,
@@ -151,7 +164,6 @@ pub fn resolve(
 
 pub struct FunctionResolver {
     // Name Resolution
-
     /// Entries for each unique local
     pub locals: Arena<LocalInfo>,
     /// The association between identifiers and their subjects during resolving
@@ -160,7 +172,6 @@ pub struct FunctionResolver {
     pub bindings: HashMap<NameId, ItemId>,
 
     // Type Resolution
-
     /// The type of each local variable
     pub local_types: IdMap<LocalInfo, ValType>,
     /// The type of each expression
@@ -189,7 +200,9 @@ impl FunctionResolver {
     fn new(context: &FuncContext) -> Self {
         let mut mapping: StackMap<String, ItemId> = context.parent.mappings.clone().into();
 
-        for (i, (ident, _valtype)) in context.func.signature.arguments.iter().enumerate() {
+        let fn_type = &context.func.signature.fn_type;
+
+        for (i, (ident, _valtype)) in fn_type.arguments.iter().enumerate() {
             mapping.insert(ident.value.clone(), ItemId::Param(ParamId(i)));
         }
 
@@ -265,6 +278,9 @@ impl FunctionResolver {
             } => {
                 self.resolve_assign(context, ident, *name_id, *expression)?;
             }
+            ast::Statement::Call { call } => {
+                self.resolve_call(context, call, None)?;
+            }
             ast::Statement::If {
                 if_kwd: _,
                 condition,
@@ -278,8 +294,10 @@ impl FunctionResolver {
                 return_kwd: _,
                 expression,
             } => {
+                let fn_type = &context.func.signature.fn_type;
+
                 self.resolve_expression(context, *expression)?;
-                let ret_valtype = context.func.signature.return_type.value.to_owned();
+                let ret_valtype = fn_type.return_type.value.to_owned();
                 self.set_implied_type(*expression, ret_valtype);
             }
         };
@@ -300,21 +318,19 @@ impl FunctionResolver {
             match item {
                 ItemId::Import(_) => {
                     unimplemented!()
-                },
+                }
                 ItemId::Global(global) => {
                     self.bind_global(expression, global);
                     Ok(())
-                },
+                }
                 ItemId::Param(_) => {
                     unimplemented!()
-                },
+                }
                 ItemId::Local(local) => {
                     self.bind_local(expression, local);
                     Ok(())
                 }
-                // ItemId::Function(_) => {
-                //     unimplemented!("Cannot bind variable identifier {} to function", ident.value);
-                // },
+                ItemId::Function(_) => unimplemented!(),
             }
         } else {
             Err(ResolverError::NameError {
@@ -332,7 +348,6 @@ impl FunctionResolver {
     ) -> Result<(), ResolverError> {
         let expression_ast = context.func.expressions.get_exp(expression);
         match expression_ast {
-            Expression::Literal { .. } => Ok(()),
             Expression::Identifier { ident, name_id } => {
                 if let Some(item) = self.mapping.lookup(ident.as_ref()) {
                     self.bindings.insert(*name_id, *item);
@@ -349,6 +364,7 @@ impl FunctionResolver {
                         ItemId::Local(local) => {
                             self.bind_local(expression, *local);
                         }
+                        ItemId::Function(_) => unimplemented!(),
                     };
                     Ok(())
                 } else {
@@ -399,7 +415,87 @@ impl FunctionResolver {
                 }
                 Ok(())
             }
+            Expression::Call { call } => self.resolve_call(context, call, Some(expression)),
+            Expression::Literal { .. } => Ok(()),
             _ => panic!("Unsupported expression type"),
+        }
+    }
+
+    fn resolve_call(
+        &mut self,
+        context: &FuncContext,
+        call: &Call,
+        expression: Option<ExpressionId>,
+    ) -> Result<(), ResolverError> {
+        // Resolve the argument expressions
+        for arg in call.args.iter() {
+            self.resolve_expression(context, *arg)?;
+        }
+
+        let item = self.lookup_name(context, &call.ident)?;
+        self.bindings.insert(call.name_id, item);
+
+        match item {
+            ItemId::Import(import) => {
+                let import = context.parent.component.imports.get(import).unwrap();
+                match &import.external_type {
+                    ast::ExternalType::Function(fn_type) => {
+                        if call.args.len() != fn_type.arguments.len() {
+                            return Err(ResolverError::CallArgumentsMismatch {
+                                src: context.parent.src.clone(),
+                                span: call.ident.span.clone(),
+                                ident: call.ident.value.clone(),
+                            });
+                        }
+
+                        for (arg_expr, (arg_name, arg_type)) in
+                            call.args.iter().zip(fn_type.arguments.iter())
+                        {
+                            let _ = arg_name;
+                            self.set_implied_type(*arg_expr, arg_type.value.clone());
+                        }
+
+                        if let Some(expression) = expression {
+                            self.set_implied_type(expression, fn_type.return_type.as_ref().clone());
+                        }
+                    }
+                }
+            }
+            ItemId::Function(function) => {
+                let function = context.parent.component.functions.get(function).unwrap();
+                let fn_type = &function.signature.fn_type;
+
+                for (arg_expr, (arg_name, arg_type)) in
+                    call.args.iter().zip(fn_type.arguments.iter())
+                {
+                    let _ = arg_name;
+                    self.set_implied_type(*arg_expr, arg_type.value.clone());
+                }
+
+                if let Some(expression) = expression {
+                    self.set_implied_type(expression, fn_type.return_type.as_ref().clone());
+                }
+            }
+            ItemId::Global(_) => todo!(),
+            ItemId::Param(_) => todo!(),
+            ItemId::Local(_) => todo!(),
+        }
+
+        return Ok(());
+    }
+
+    fn lookup_name(
+        &self,
+        context: &FuncContext,
+        ident: &M<String>,
+    ) -> Result<ItemId, ResolverError> {
+        match self.mapping.lookup(ident.as_ref()) {
+            Some(item) => Ok(*item),
+            None => Err(ResolverError::NameError {
+                src: context.parent.src.clone(),
+                span: ident.span.clone(),
+                ident: ident.value.clone(),
+            }),
         }
     }
 
@@ -422,10 +518,7 @@ impl FunctionResolver {
     }
 
     fn set_implied_type(&mut self, expression: ExpressionId, valtype: ValType) {
-        self.expression_types.insert(
-            expression,
-            valtype,
-        )
+        self.expression_types.insert(expression, valtype)
     }
 
     fn link_expressions(&mut self, a: ExpressionId, b: ExpressionId) {
@@ -481,7 +574,7 @@ impl FunctionResolver {
                 break;
             }
         }
-        
+
         if errors.is_empty() {
             Ok(())
         } else {
@@ -491,18 +584,31 @@ impl FunctionResolver {
 
     fn get_item_type(&self, context: &FuncContext, item: TypedItem) -> Option<ValType> {
         match item {
-            TypedItem::Global(global) => {
-                Some(context.parent.component.globals.get(global).unwrap().valtype.as_ref().clone())
-            },
-            TypedItem::Param(param) => {
-                Some(context.func.signature.arguments.get(param.0).unwrap().1.as_ref().clone())
-            },
-            TypedItem::Local(local) => {
-                self.local_types.get(local).cloned()
-            },
-            TypedItem::Expression(expression) => {
-                self.expression_types.get(expression).cloned()
-            },
+            TypedItem::Global(global) => Some(
+                context
+                    .parent
+                    .component
+                    .globals
+                    .get(global)
+                    .unwrap()
+                    .valtype
+                    .as_ref()
+                    .clone(),
+            ),
+            TypedItem::Param(param) => Some(
+                context
+                    .func
+                    .signature
+                    .fn_type
+                    .arguments
+                    .get(param.0)
+                    .unwrap()
+                    .1
+                    .as_ref()
+                    .clone(),
+            ),
+            TypedItem::Local(local) => self.local_types.get(local).cloned(),
+            TypedItem::Expression(expression) => self.expression_types.get(expression).cloned(),
         }
     }
 }

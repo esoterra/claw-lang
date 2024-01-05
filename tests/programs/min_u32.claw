@@ -1,4 +1,4 @@
-export func min(left: u32, right: u32) -> u32 {
+export min: func(left: u32, right: u32) -> u32 {
     if left < right {
         return left;
     }

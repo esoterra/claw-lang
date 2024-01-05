@@ -1,6 +1,6 @@
 let mut counter: u32 = 0;
 
-export func increment() -> u32 {
+export increment: func() -> u32 {
     counter = counter + 1;
     return counter;
 }

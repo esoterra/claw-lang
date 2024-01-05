@@ -1,4 +1,4 @@
-use super::{M, MBox};
+use super::{M, MBox, Span};
 
 /// The type for all values
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -22,6 +22,7 @@ pub enum ValType {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FnType {
-    pub param_types: Vec<M<ValType>>,
-    pub result_type: M<ValType>
+    pub arguments: Vec<(M<String>, M<ValType>)>,
+    pub arrow: Span,
+    pub return_type: M<ValType>
 }

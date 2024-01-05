@@ -1,7 +1,7 @@
 [package]
 name = "claw"
 version = "0.1.2"
-authors = ["Kyle Brown <kylebrw@gmail.com>"]
+authors = ["Robin Brown"]
 license = "MIT OR Apache-2.0"
 edition = "2018"
 description = " The compiler for the Claw language "
@@ -20,3 +20,4 @@ wasm-encoder = "0.38"
 [dev-dependencies]
 pretty_assertions = "1.1.0"
 wasmtime = { version = "15.0.0", features = ["component-model"]}
+wasmprinter = "0.2.75"

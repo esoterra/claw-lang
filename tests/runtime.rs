@@ -22,13 +22,17 @@ impl Runtime {
             Some(output) => output,
             None => panic!("Failed to compile '{}'", name),
         };
-        let output = codegen::generate(output);
+
+        let generator = codegen::CodeGenerator::default();
+        let component_bytes = generator.generate(&output);
+
+        println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());
 
         let mut config = Config::new();
         config.wasm_component_model(true);
         let engine = Engine::new(&config).unwrap();
     
-        let component = Component::new(&engine, output).unwrap();
+        let component = Component::new(&engine, &component_bytes).unwrap();
         let linker = Linker::new(&engine);
         let store = Store::new(&engine, ());
 
@@ -63,15 +67,28 @@ fn test_counter_s64() {
 }
 
 #[test]
-fn test_identity_u64() {
-    bindgen!("identity-u64" in "tests/programs");
+fn test_factorial_u64() {
+    bindgen!("factorial-u64" in "tests/programs");
 
-    let mut runtime = Runtime::new("identity_u64");
+    let mut runtime = Runtime::new("factorial_u64");
 
-    let (identity_u64, _) = IdentityU64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+    let (identity_u64, _) = FactorialU64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+
+    for (i, val) in [1, 1, 2, 6, 24, 120].iter().enumerate() {
+        assert_eq!(identity_u64.call_factorial(&mut runtime.store, i as u64).unwrap(), *val);
+    }
+}
+
+#[test]
+fn test_identity() {
+    bindgen!("identity" in "tests/programs");
+
+    let mut runtime = Runtime::new("identity");
+
+    let (identity, _) = Identity::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in [0, 1, 2, 12, 5634, 34] {
-        assert_eq!(identity_u64.call_identity(&mut runtime.store, i).unwrap(), i);
+        assert_eq!(identity.call_identity(&mut runtime.store, i).unwrap(), i);
     }
 }
 
@@ -115,6 +132,28 @@ fn test_min_u32() {
             let actual = min_u32.call_min(&mut runtime.store, i, j).unwrap();
             assert_eq!(expected, actual);
         }
+    }
+}
+
+#[test]
+fn test_proxy_call() {
+    bindgen!("proxy-call" in "tests/programs");
+
+    let mut runtime = Runtime::new("proxy_call");
+
+    impl ProxyCallImports for () {
+        fn imported(&mut self, a: u32) -> Result<u32, wasmtime::Error> {
+            Ok(a)
+        }
+    }
+
+    ProxyCall::add_to_linker(&mut runtime.linker, |s| s).unwrap();
+
+    let (proxy_call, _) = ProxyCall::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+
+    for x in 0..10 {
+        let actual = proxy_call.call_exported(&mut runtime.store, x).unwrap();
+        assert_eq!(x, actual);
     }
 }
 

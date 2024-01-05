@@ -5,7 +5,11 @@ world counter-s64 {
     export decrement: func() -> s64;
 }
 
-world identity-u64 {
+world factorial-u64 {
+    export factorial: func(n: u64) -> u64;
+}
+
+world identity {
     export identity: func(value: u64) -> u64;
 }
 
@@ -19,6 +23,11 @@ world increment-u64 {
 
 world min-u32 {
     export min: func(left: u32, right: u32) -> u32;
+}
+
+world proxy-call {
+    import imported: func(a: u32) -> u32;
+    export exported: func(a: u32) -> u32;
 }
 
 world quadratic-f64 {

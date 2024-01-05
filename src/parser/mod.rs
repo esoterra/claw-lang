@@ -102,12 +102,20 @@ impl ParseInput {
         self.src.clone()
     }
 
+    pub fn has(&self, num: usize) -> bool {
+        self.index + num <= self.tokens.len()
+    }
+
     pub fn done(&self) -> bool {
         self.index >= self.tokens.len()
     }
 
-    pub fn peek(&mut self) -> Result<&TokenData, ParserError> {
+    pub fn peek(&self) -> Result<&TokenData, ParserError> {
         self.tokens.get(self.index).ok_or(ParserError::EndOfInput)
+    }
+
+    pub fn peekn(&self, n: usize) -> Option<&Token> {
+        self.tokens.get(self.index + n).map(|t| &t.token)
     }
 
     pub fn next(&mut self) -> Result<&TokenData, ParserError> {
@@ -135,10 +143,6 @@ impl ParseInput {
         Some(self.next().ok()?.span.clone())
     }
 
-    pub fn has(&self, num: usize) -> bool {
-        self.index + num <= self.tokens.len()
-    }
-
     pub fn slice_next(&mut self, num: usize) -> Result<&[TokenData], ParserError> {
         if self.has(num) {
             let result = &self.tokens[self.index..self.index+num];
@@ -158,7 +162,7 @@ mod tests {
     use miette::NamedSource;
 
     use crate::{
-        lexer::tokenize,
+        lexer::{tokenize, Token},
         ast::Span,
         parser::ParseInput
     };
@@ -171,6 +175,30 @@ mod tests {
 
     pub fn make_span(start: usize, len: usize) -> Span {
         Span::new(start.into(), len.into())
+    }
+
+    #[test]
+    fn test_peek() {
+        let mut input = make_input("export func");
+        assert_eq!(input.peek().unwrap().token, Token::Export);
+        assert_eq!(input.peek().unwrap().token, Token::Export);
+        assert_eq!(input.peek().unwrap().token, Token::Export);
+        input.next().unwrap();
+        assert_eq!(input.peek().unwrap().token, Token::Func);
+        assert_eq!(input.peek().unwrap().token, Token::Func);
+        assert_eq!(input.peek().unwrap().token, Token::Func);
+    }
+
+    #[test]
+    fn test_peekn() {
+        let mut input = make_input("export func () -> {}");
+        assert_eq!(input.peekn(0).unwrap(), &Token::Export);
+        assert_eq!(input.peekn(1).unwrap(), &Token::Func);
+        assert_eq!(input.peekn(2).unwrap(), &Token::LParen);
+        input.next().unwrap();
+        assert_eq!(input.peekn(0).unwrap(), &Token::Func);
+        assert_eq!(input.peekn(1).unwrap(), &Token::LParen);
+        assert_eq!(input.peekn(2).unwrap(), &Token::RParen);
     }
 }
 
