@@ -1,4 +1,4 @@
-use crate::ast::NameId;
+use crate::ast::{NameId, Call};
 use crate::ast::expressions::ExpressionId;
 use crate::lexer::Token;
 use crate::ast::{
@@ -40,21 +40,25 @@ fn pratt_parse(input: &mut ParseInput, data: &mut ExpressionData, min_bp: u8) ->
 }
 
 fn parse_leaf(input: &mut ParseInput, data: &mut ExpressionData) -> Result<ExpressionId, ParserError> {
-    let checkpoint = input.checkpoint();
-    if let Ok(value) = parse_parenthetical(input, data) {
-        return Ok(value);
+    if input.peek()?.token == Token::LParen {
+        return parse_parenthetical(input, data);
     }
-    input.restore(checkpoint);
-    if let Ok(value) = parse_literal(input) {
-        let span = value.span.clone();
-        return Ok(data.alloc(Expression::Literal { value }, span))
+    if matches!(input.peekn(0), Some(Token::Identifier(_)))
+        && matches!(input.peekn(1), Some(Token::LParen))  {
+        let call = parse_call(input, data)?;
+        let id = data.alloc(Expression::Call { call: call.value.clone() }, call.span.clone());
+        return Ok(id);
     }
-    input.restore(checkpoint);
-    if let Ok(ident) = parse_ident(input) {
+    if matches!(input.peek()?.token, Token::Identifier(_)) {
+        let ident = parse_ident(input)?;
         let span = ident.span.clone();
-        return Ok(data.alloc(Expression::Identifier { ident, name_id: NameId::new() }, span))
+        let id = data.alloc(Expression::Identifier { ident, name_id: NameId::new() }, span);
+        return Ok(id);
     }
-    Err(input.unexpected_token("Parse Leaf"))
+    let literal = parse_literal(input)?;
+    let span = literal.span.clone();
+    let id = data.alloc(Expression::Literal { literal }, span);
+    return Ok(id)
 }
 
 fn parse_parenthetical(input: &mut ParseInput, data: &mut ExpressionData) -> Result<ExpressionId, ParserError> {
@@ -91,6 +95,33 @@ fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
         _ => return Err(input.unexpected_token("Parse Literal"))
     };
     Ok(M::new(value, next.span.clone()))
+}
+
+fn parse_call(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Call>, ParserError> {
+    let first = input.next()?;
+
+    let ident = match first.token.clone() {
+        Token::Identifier(ident) => ident,
+        _ => return Err(input.unexpected_token("Parse expression identifier"))
+    };
+    let ident = M::new(ident, first.span.clone());
+    let name_id = NameId::new();
+
+    let lparen = input.assert_next(Token::LParen, "Function arguments")?;
+
+    let mut args = Vec::new();
+    let rparen = loop {
+        args.push(parse_expression(input, data)?);
+
+        let token = input.next()?;
+        match token.token {
+            Token::Comma => continue,
+            Token::RParen => break token.span.clone(),
+            _ => return Err(input.unexpected_token("Argument list"))
+        }
+    };
+
+    Ok(M::new_range(Call { ident, name_id, args }, lparen, rparen))
 }
 
 fn try_parse_bin_op(input: &mut ParseInput) -> Option<M<BinaryOp>> {
@@ -185,7 +216,7 @@ mod tests {
         for (source, value, span) in cases {
             let parsed_literal = M::new(Literal::Integer(value), span.clone());
             let expected_expression = data.alloc(Expression::Literal {
-                value: M::new(Literal::Integer(value), span.clone())
+                literal: M::new(Literal::Integer(value), span.clone())
             }, span);
             assert_eq!(
                 parse_literal(&mut make_input(source)).unwrap(),
@@ -211,7 +242,9 @@ mod tests {
             let expected_expression = data.alloc(Expression::Identifier {
                 ident: M::new(source.to_string(), span.clone()),
                 name_id: NameId::new()
-            }, span);
+            }, span.clone());
+            let found_ident = parse_ident(&mut make_input(source)).unwrap();
+            assert_eq!(M::new(source.to_owned(), span.clone()), found_ident);
             let found_leaf = parse_leaf(&mut make_input(source), &mut data).unwrap();
             assert!(data.eq(found_leaf, expected_expression));
             let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
@@ -252,7 +285,7 @@ mod tests {
                 {
                     let expr = $val;
                     let span = make_span($span_l, $span_r);
-                    data.alloc(Expression::Literal { value: M::new(Literal::Integer(expr), span.clone()) }, span)
+                    data.alloc(Expression::Literal { literal: M::new(Literal::Integer(expr), span.clone()) }, span)
                 }
             };
         }
@@ -320,7 +353,7 @@ mod tests {
                 {
                     let expr = $val;
                     let span = make_span($span_l, $span_r);
-                    data.alloc(Expression::Literal { value: M::new(Literal::Integer(expr), span.clone()) }, span)
+                    data.alloc(Expression::Literal { literal: M::new(Literal::Integer(expr), span.clone()) }, span)
                 }
             };
         }

@@ -3,6 +3,6 @@
 // - Return statement
 // - Add / Multiply
 // - Precedence / Associativity
-export func quad(a: f64, b: f64, c: f64, x: f64) -> f64 {
+export quad: func(a: f64, b: f64, c: f64, x: f64) -> f64 {
     return a * x * x + b * x + c;
 }

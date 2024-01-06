@@ -1,11 +1,11 @@
 let mut counter: s64 = 0;
 
-export func increment() -> s64 {
+export increment: func() -> s64 {
     counter = counter + 1;
     return counter;
 }
 
-export func decrement() -> s64 {
+export decrement: func() -> s64 {
     counter = counter - 1;
     return counter;
 }

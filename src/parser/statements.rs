@@ -28,27 +28,12 @@ pub fn parse_block(input: &mut ParseInput, data: &mut ExpressionData) -> Result<
 }
 
 pub fn parse_statement(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {
-    let checkpoint = input.checkpoint();
-    if let Ok(value) = parse_return(input, data) {
-        return Ok(value);
-    }
-    input.restore(checkpoint);
-    if let Ok(value) = parse_assign(input, data) {
-        return Ok(value)
-    }
-    input.restore(checkpoint);
-    if let Ok(value) = parse_let(input, data) {
-        return Ok(value)
-    }
-    input.restore(checkpoint);
-    if let Ok(value) = parse_if(input, data) {
-        return Ok(value)
-    }
-    if input.done() {
-        Err(ParserError::EndOfInput)
-    } else {
-        Err(input.unexpected_token("Parse Statement"))
-    }
+    return match input.peek()?.token {
+        Token::Return => parse_return(input, data),
+        Token::Let => parse_let(input, data),
+        Token::If => parse_if(input, data),
+        _ => parse_assign(input, data)
+    };
 }
 
 fn parse_let(input: &mut ParseInput, data: &mut ExpressionData) -> Result<M<Statement>, ParserError> {

@@ -7,7 +7,7 @@ use super::{
     types::{
         FnType, ValType
     },
-    expressions::ExpressionId, NameId
+    expressions::ExpressionId, NameId, Call
 };
 
 /// Each Claw source file represents a Component
@@ -26,7 +26,7 @@ pub struct Import {
     pub import_kwd: Span,
     pub name: M<String>,
     pub colon: Span,
-    pub external_type: M<ExternalType>
+    pub external_type: ExternalType
 }
 
 /// 
@@ -46,11 +46,9 @@ pub struct Function {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FunctionSignature {
-    pub func_kwd: Span,
     pub name: M<String>,
-    pub arguments: Vec<(M<String>, M<ValType>)>,
-    pub arrow: Span,
-    pub return_type: M<ValType>
+    pub colon: Span,
+    pub fn_type: FnType
 }
 
 /// 
@@ -91,6 +89,9 @@ pub enum Statement {
         name_id: NameId,
         assign_op: Span,
         expression: ExpressionId
+    },
+    Call {
+        call: Call
     },
     If {
         if_kwd: Span,
