@@ -8,6 +8,14 @@ description = " The compiler for the Claw language "
 repository = "https://github.com/esoterra/claw-lang"
 readme = "README.md"
 
+[lib]
+name = "claw"
+path = "src/lib.rs"
+
+[[bin]]
+name = "claw"
+path = "src/bin.rs"
+
 [dependencies]
 clap = { version = "3.0.0-rc.7", features = ["derive"] }
 thiserror = "1.0.30"

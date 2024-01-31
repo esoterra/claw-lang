@@ -264,8 +264,7 @@ fn encode_locals(resolver: &FunctionResolver) -> Vec<(u32, enc::ValType)> {
     resolver
         .locals
         .iter()
-        .map(|(id, local)| {
-            dbg!(id, local);
+        .map(|(id, _local)| {
             let valtype = resolver.local_types.get(id).unwrap();
             (1, encode_valtype(&valtype))
         })
@@ -299,14 +298,13 @@ fn encode_statement(
                     builder.instruction(&enc::Instruction::GlobalSet(global.index() as u32));
                 }
                 ItemId::Param(param) => {
-                    let local_index = param.0;
-                    dbg!(param, local_index);
-                    builder.instruction(&enc::Instruction::LocalSet(param.0 as u32));
+                    let local_index = param.0 as u32;
+                    builder.instruction(&enc::Instruction::LocalSet(local_index));
                 }
                 ItemId::Local(local) => {
                     let local_index = local.index() + func.signature.fn_type.arguments.len();
-                    dbg!(local, local_index);
-                    builder.instruction(&enc::Instruction::LocalSet(local_index as u32));
+                    let local_index = local_index as u32;
+                    builder.instruction(&enc::Instruction::LocalSet(local_index));
                 }
                 ItemId::Function(_) => unimplemented!(),
             }

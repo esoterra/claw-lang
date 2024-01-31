@@ -2,17 +2,10 @@ use std::{path::PathBuf, sync::Arc, fs};
 
 use clap::{Parser, ArgEnum};
 
-pub mod ast;
-pub mod gen;
-pub mod ir;
-pub mod lexer;
-pub mod parser;
-pub mod resolver;
-
-use lexer::tokenize;
+use claw::lexer::tokenize;
 use miette::{Report, NamedSource};
-use parser::parse;
-use resolver::resolve;
+use claw::parser::parse;
+use claw::resolver::resolve;
 
 #[derive(Parser, Debug)]
 struct Arguments {
@@ -32,8 +25,6 @@ struct Compile {
     input: PathBuf,
     #[clap(short, long)]
     output: PathBuf,
-    #[clap(short, long, arg_enum)]
-    format: Format
 }
 
 #[derive(Debug, ArgEnum, Clone, Copy)]
@@ -73,22 +64,12 @@ impl Compile {
                 return None;
             }
         };
-    
-        match self.format {
-            Format::Wasm => {
-                let wasm = gen::generate_wasm(resolved);
-                match fs::write(&self.output, wasm) {
-                    Ok(_) => println!("Done"),
-                    Err(err) => println!("Error: {:?}", err),
-                }
-            },
-            Format::WAT => {
-                let wat = gen::generate_wat(resolved);
-                match fs::write(&self.output, wat) {
-                    Ok(_) => println!("Done"),
-                    Err(err) => println!("Error: {:?}", err),
-                }
-            },
+
+        let generator = claw::codegen::CodeGenerator::default();
+        let wasm = generator.generate(&resolved);
+        match fs::write(&self.output, wasm) {
+            Ok(_) => println!("Done"),
+            Err(err) => println!("Error: {:?}", err),
         }
     
         Some(())
