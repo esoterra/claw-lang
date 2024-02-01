@@ -1,6 +1,6 @@
 export quad: func(a: f64, b: f64, c: f64, x: f64) -> f64 {
-    let a_term = a * x * x;
-    let b_term = b * x;
-    let c_term = c;
-    return a_term + b_term + c_term;
+    let a-term = a * x * x;
+    let b-term = b * x;
+    let c-term = c;
+    return a-term + b-term + c-term;
 }

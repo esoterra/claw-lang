@@ -1,8 +1,12 @@
 use crate::{
-    ast::{self, expressions::Literal, types::ValType, ExpressionId, Import, FnType},
-    resolver::{FunctionId, FunctionResolver, ItemId, ResolvedComponent, ImportId},
+    ast::{
+        self, expressions::Literal, types::ValType, ExpressionId, FnType, FunctionId, Import,
+        ImportId,
+    },
+    resolver::{FunctionResolver, ItemId, ResolvedComponent},
 };
 
+use cranelift_entity::EntityRef;
 use enc::ModuleArg;
 use wasm_encoder as enc;
 
@@ -16,7 +20,6 @@ pub struct CodeGenerator {
     module: ModuleBuilder,
     component: ComponentBuilder,
 }
-
 
 /// Module Index Spaces
 /// - types: imports, funcs
@@ -44,7 +47,7 @@ pub struct ComponentBuilder {
     lower_funcs: enc::CanonicalFunctionSection,
     lift_funcs: enc::CanonicalFunctionSection,
     exports: enc::ComponentExportSection,
-    instantiate_args: Vec<(String, enc::ExportKind, u32)>
+    instantiate_args: Vec<(String, enc::ExportKind, u32)>,
 }
 
 impl CodeGenerator {
@@ -64,7 +67,7 @@ impl CodeGenerator {
 
     fn encode_import(&mut self, id: ImportId, import: &Import) {
         let import_func_idx = id.index() as u32;
-        let import_name = import.name.as_ref();
+        let import_name = import.name.as_ref().as_str();
 
         match &import.external_type {
             ast::ExternalType::Function(fn_type) => {
@@ -81,7 +84,11 @@ impl CodeGenerator {
                 // Lower the Import
                 self.component.lower_funcs.lower(import_func_idx, []);
 
-                self.component.instantiate_args.push((import_name.to_owned(), enc::ExportKind::Func, import_func_idx));
+                self.component.instantiate_args.push((
+                    import_name.to_owned(),
+                    enc::ExportKind::Func,
+                    import_func_idx,
+                ));
             }
         }
     }
@@ -95,7 +102,7 @@ impl CodeGenerator {
                 val_type: encode_valtype(valtype),
             };
 
-            let init_expr = if let Some(init_value) = component.global_vals.get(id) {
+            let init_expr = if let Some(init_value) = component.global_vals.get(&id) {
                 literal_to_constexpr(valtype, init_value)
             } else {
                 panic!("Cannot generate WASM for unresolved global")
@@ -121,7 +128,7 @@ impl CodeGenerator {
         self.module.funcs.function(func_idx);
 
         // Encode module code
-        let resolver = resolved_comp.resolved_funcs.get(id).unwrap();
+        let resolver = resolved_comp.resolved_funcs.get(&id).unwrap();
         let locals = encode_locals(resolver);
         let mut builder = enc::Function::new(locals);
 
@@ -154,20 +161,18 @@ impl CodeGenerator {
         self.component.alias.alias(enc::Alias::CoreInstanceExport {
             instance: MODULE_INSTANCE_IDX,
             kind: enc::ExportKind::Func,
-            name: function.signature.name.as_ref().as_str(),
+            name: function.signature.name.as_ref(),
         });
         // Encode component func type
         self.encode_comp_func_type(&function.signature.fn_type);
         // Lift aliased function to component function
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
-        self.component.lift_funcs.lift(
-            func_idx,
-            func_idx,
-            NO_CANON_OPTS,
-        );
+        self.component
+            .lift_funcs
+            .lift(func_idx, func_idx, NO_CANON_OPTS);
         // Export component function
         self.component.exports.export(
-            function.signature.name.as_ref().as_str(),
+            function.signature.name.as_ref(),
             enc::ComponentExportKind::Func,
             func_idx,
             Some(enc::ComponentTypeRef::Func(func_idx)),
@@ -198,7 +203,10 @@ impl CodeGenerator {
         // Instantiate module
         let mut comp_instantiate = enc::InstanceSection::new();
         comp_instantiate.export_items(self.component.instantiate_args);
-        comp_instantiate.instantiate(MODULE_IDX, [("claw", ModuleArg::Instance(INLINE_EXPORT_INSTANCE_IDX))]);
+        comp_instantiate.instantiate(
+            MODULE_IDX,
+            [("claw", ModuleArg::Instance(INLINE_EXPORT_INSTANCE_IDX))],
+        );
         component.section(&comp_instantiate);
         // Alias module exports
         component.section(&self.component.alias);
@@ -211,7 +219,8 @@ impl CodeGenerator {
     }
 
     fn encode_mod_import_type(&mut self, fn_type: &FnType) {
-        let params = fn_type.arguments
+        let params = fn_type
+            .arguments
             .iter()
             .map(|(_name, valtype)| encode_valtype(valtype.as_ref()));
 
@@ -220,12 +229,10 @@ impl CodeGenerator {
     }
 
     fn encode_comp_import_type(&mut self, fn_type: &FnType) {
-        let params = fn_type.arguments.iter().map(|(name, valtype)| {
-            (
-                name.as_ref().as_str(),
-                encode_comp_valtype(valtype.as_ref()),
-            )
-        });
+        let params = fn_type
+            .arguments
+            .iter()
+            .map(|(name, valtype)| (name.as_ref().as_str(), encode_comp_valtype(valtype.as_ref())));
         let result_type = encode_comp_valtype(fn_type.return_type.as_ref());
         self.component
             .types
@@ -245,12 +252,10 @@ impl CodeGenerator {
     }
 
     fn encode_comp_func_type(&mut self, fn_type: &FnType) {
-        let params = fn_type.arguments.iter().map(|(name, valtype)| {
-            (
-                name.as_ref().as_str(),
-                encode_comp_valtype(valtype.as_ref()),
-            )
-        });
+        let params = fn_type
+            .arguments
+            .iter()
+            .map(|(name, valtype)| (name.as_ref().as_str(), encode_comp_valtype(valtype.as_ref())));
         let result_type = encode_comp_valtype(fn_type.return_type.as_ref());
         self.component
             .types
@@ -265,7 +270,7 @@ fn encode_locals(resolver: &FunctionResolver) -> Vec<(u32, enc::ValType)> {
         .locals
         .iter()
         .map(|(id, _local)| {
-            let valtype = resolver.local_types.get(id).unwrap();
+            let valtype = resolver.local_types.get(&id).unwrap();
             (1, encode_valtype(&valtype))
         })
         .collect()
@@ -298,7 +303,7 @@ fn encode_statement(
                     builder.instruction(&enc::Instruction::GlobalSet(global.index() as u32));
                 }
                 ItemId::Param(param) => {
-                    let local_index = param.0 as u32;
+                    let local_index = param.index() as u32;
                     builder.instruction(&enc::Instruction::LocalSet(local_index));
                 }
                 ItemId::Local(local) => {
@@ -361,23 +366,23 @@ fn encode_expression(
             encode_expression(resolver, func, *left, builder);
             encode_expression(resolver, func, *right, builder);
 
-            let valtype = resolver.expression_types.get(expression).unwrap();
-            let inner_valtype = resolver.expression_types.get(*left).unwrap();
+            let valtype = resolver.expression_types.get(&expression).unwrap();
+            let inner_valtype = resolver.expression_types.get(left).unwrap();
             match operator.value {
-                ast::BinaryOp::Mult => encode_mul(valtype, builder),
+                ast::BinaryOp::Mult => encode_mul(&valtype, builder),
                 ast::BinaryOp::Div => todo!(),
                 ast::BinaryOp::Mod => todo!(),
-                ast::BinaryOp::Add => encode_add(valtype, builder),
-                ast::BinaryOp::Sub => encode_sub(valtype, builder),
+                ast::BinaryOp::Add => encode_add(&valtype, builder),
+                ast::BinaryOp::Sub => encode_sub(&valtype, builder),
                 ast::BinaryOp::BitShiftL => todo!(),
                 ast::BinaryOp::BitShiftR => todo!(),
                 ast::BinaryOp::ArithShiftR => todo!(),
-                ast::BinaryOp::LT => encode_lt(inner_valtype, builder),
+                ast::BinaryOp::LT => encode_lt(&inner_valtype, builder),
                 ast::BinaryOp::LTE => todo!(),
                 ast::BinaryOp::GT => todo!(),
                 ast::BinaryOp::GTE => todo!(),
-                ast::BinaryOp::EQ => encode_eq(inner_valtype, builder),
-                ast::BinaryOp::NEQ => encode_ne(inner_valtype, builder),
+                ast::BinaryOp::EQ => encode_eq(&inner_valtype, builder),
+                ast::BinaryOp::NEQ => encode_ne(&inner_valtype, builder),
                 ast::BinaryOp::BitAnd => todo!(),
                 ast::BinaryOp::BitXor => todo!(),
                 ast::BinaryOp::BitOr => todo!(),
@@ -405,7 +410,7 @@ fn encode_expression(
                     builder.instruction(&enc::Instruction::GlobalGet(global.index() as u32));
                 }
                 ItemId::Param(param) => {
-                    let local_index = param.0;
+                    let local_index = param.index();
                     builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
                 }
                 ItemId::Local(local) => {
@@ -417,7 +422,7 @@ fn encode_expression(
         }
 
         ast::Expression::Literal { literal } => {
-            let valtype = resolver.expression_types.get(expression).unwrap();
+            let valtype = resolver.expression_types.get(&expression).unwrap();
             let instruction = match (valtype, &literal.value) {
                 (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
                     enc::Instruction::I32Const(*value as i32)

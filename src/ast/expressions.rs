@@ -1,18 +1,21 @@
-use super::{merge, Span, M, NameId};
-use crate::id_map::IdMap;
-use id_arena::{Arena, Id};
+use std::collections::HashMap;
 
-pub type ExpressionId = Id<Expression>;
+use super::{merge, NameId, Span, M};
+use cranelift_entity::{entity_impl, PrimaryMap};
+
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ExpressionId(u32);
+entity_impl!(ExpressionId, "expression");
 
 #[derive(Clone, Debug, Default)]
 pub struct ExpressionData {
-    expressions: Arena<Expression>,
-    expression_spans: IdMap<Expression, Span>,
+    expressions: PrimaryMap<ExpressionId, Expression>,
+    expression_spans: HashMap<ExpressionId, Span>,
 }
 
 impl ExpressionData {
-    pub fn alloc(&mut self, expression: Expression, span: Span) -> Id<Expression> {
-        let id = self.expressions.alloc(expression);
+    pub fn alloc(&mut self, expression: Expression, span: Span) -> ExpressionId {
+        let id = self.expressions.push(expression);
         self.expression_spans.insert(id, span);
         id
     }
@@ -22,8 +25,8 @@ impl ExpressionData {
         expression: Expression,
         left: ExpressionId,
         right: ExpressionId,
-    ) -> Id<Expression> {
-        let id = self.expressions.alloc(expression);
+    ) -> ExpressionId {
+        let id = self.expressions.push(expression);
         let lhs = self.get_span(left);
         let rhs = self.get_span(right);
         self.expression_spans.insert(id, merge(&lhs, &rhs));
@@ -35,10 +38,10 @@ impl ExpressionData {
     }
 
     pub fn get_span(&self, id: ExpressionId) -> Span {
-        self.expression_spans.get(id).unwrap().clone()
+        self.expression_spans.get(&id).unwrap().clone()
     }
 
-    pub fn expressions(&self) -> &Arena<Expression> {
+    pub fn expressions(&self) -> &PrimaryMap<ExpressionId, Expression> {
         &self.expressions
     }
 
@@ -75,25 +78,32 @@ impl ExpressionData {
             ) => {
                 return self.eq(*l_left, *r_left) && l_op == r_op && self.eq(*l_right, *r_right);
             }
-            (
-                Expression::Call { call: l_call },
-                Expression::Call { call: r_call },
-            ) => {
+            (Expression::Call { call: l_call }, Expression::Call { call: r_call }) => {
                 return l_call.ident.as_ref() == r_call.ident.as_ref()
                     && l_call.ident.span == r_call.ident.span
-                    && l_call.args
+                    && l_call
+                        .args
                         .iter()
                         .zip(r_call.args.iter())
                         .map(|(l, r)| l == r)
                         .all(|v| v);
             }
             (
-                Expression::Identifier { ident: l_ident, name_id: _ },
-                Expression::Identifier { ident: r_ident, name_id: _ },
+                Expression::Identifier {
+                    ident: l_ident,
+                    name_id: _,
+                },
+                Expression::Identifier {
+                    ident: r_ident,
+                    name_id: _,
+                },
             ) => {
                 return l_ident == r_ident;
             }
-            (Expression::Literal { literal: l_value }, Expression::Literal { literal: r_value }) => {
+            (
+                Expression::Literal { literal: l_value },
+                Expression::Literal { literal: r_value },
+            ) => {
                 return l_value == r_value;
             }
             _ => false,
@@ -114,11 +124,11 @@ pub enum Expression {
     },
     /// Function calls and variant case constructors.
     Call {
-        call: Call
+        call: Call,
     },
     Identifier {
         ident: M<String>,
-        name_id: NameId
+        name_id: NameId,
     },
     Literal {
         literal: M<Literal>,
