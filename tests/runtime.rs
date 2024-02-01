@@ -46,45 +46,55 @@ impl Runtime {
 }
 
 #[test]
-fn test_counter_s64() {
-    bindgen!("counter-s64" in "tests/programs");
+fn test_counter() {
+    bindgen!("counter" in "tests/programs");
 
-    let mut runtime = Runtime::new("counter_s64");
+    let mut runtime = Runtime::new("counter");
 
     let (counter_s64, _) =
-        CounterS64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+        Counter::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in 1..200 {
         // Increase by one
-        assert_eq!(counter_s64.call_increment(&mut runtime.store).unwrap(), i);
+        assert_eq!(counter_s64.call_increment_s32(&mut runtime.store).unwrap(), i);
+        assert_eq!(counter_s64.call_increment_s64(&mut runtime.store).unwrap(), i as i64);
         // Increase then decrease by one
         assert_eq!(
-            counter_s64.call_increment(&mut runtime.store).unwrap(),
+            counter_s64.call_increment_s32(&mut runtime.store).unwrap(),
             i + 1
         );
-        assert_eq!(counter_s64.call_decrement(&mut runtime.store).unwrap(), i);
+        assert_eq!(
+            counter_s64.call_increment_s64(&mut runtime.store).unwrap(),
+            i as i64 + 1
+        );
+        assert_eq!(counter_s64.call_decrement_s32(&mut runtime.store).unwrap(), i);
+        assert_eq!(counter_s64.call_decrement_s64(&mut runtime.store).unwrap(), i as i64);
     }
 
     for i in (1..200).rev() {
         assert_eq!(
-            counter_s64.call_decrement(&mut runtime.store).unwrap(),
+            counter_s64.call_decrement_s32(&mut runtime.store).unwrap(),
             i - 1
+        );
+        assert_eq!(
+            counter_s64.call_decrement_s64(&mut runtime.store).unwrap(),
+            i as i64 - 1
         );
     }
 }
 
 #[test]
-fn test_factorial_u64() {
-    bindgen!("factorial-u64" in "tests/programs");
+fn test_factorial() {
+    bindgen!("factorial" in "tests/programs");
 
-    let mut runtime = Runtime::new("factorial_u64");
+    let mut runtime = Runtime::new("factorial");
 
-    let (identity_u64, _) =
-        FactorialU64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+    let (factorial, _) =
+        Factorial::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for (i, val) in [1, 1, 2, 6, 24, 120].iter().enumerate() {
         assert_eq!(
-            identity_u64
+            factorial
                 .call_factorial(&mut runtime.store, i as u64)
                 .unwrap(),
             *val
@@ -107,47 +117,31 @@ fn test_identity() {
 }
 
 #[test]
-fn test_increment_u32() {
-    bindgen!("increment-u32" in "tests/programs");
+fn test_compare() {
+    bindgen!("compare" in "tests/programs");
 
-    let mut runtime = Runtime::new("increment_u32");
+    let mut runtime = Runtime::new("compare");
 
-    let (increment_u32, _) =
-        IncrementU32::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
-
-    for i in 1..200 {
-        assert_eq!(increment_u32.call_increment(&mut runtime.store).unwrap(), i);
-    }
-}
-
-#[test]
-fn test_increment_u64() {
-    bindgen!("increment-u64" in "tests/programs");
-
-    let mut runtime = Runtime::new("increment_u64");
-
-    let (increment_u64, _) =
-        IncrementU64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
-
-    for i in 1..200 {
-        assert_eq!(increment_u64.call_increment(&mut runtime.store).unwrap(), i);
-    }
-}
-
-#[test]
-fn test_min_u32() {
-    bindgen!("min-u32" in "tests/programs");
-
-    let mut runtime = Runtime::new("min_u32");
-
-    let (min_u32, _) =
-        MinU32::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+    let (compare, _) =
+        Compare::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for i in 1..200 {
         for j in 1..200 {
-            let expected = std::cmp::min(i, j);
-            let actual = min_u32.call_min(&mut runtime.store, i, j).unwrap();
-            assert_eq!(expected, actual);
+            let expected_min = std::cmp::min(i, j);
+            let expected_max = std::cmp::max(i, j);
+            let actual_min = compare.call_min_u32(&mut runtime.store, i, j).unwrap();
+            let actual_max = compare.call_max_u32(&mut runtime.store, i, j).unwrap();
+            assert_eq!(expected_min, actual_min, "expected min({}, {}) to be {} not {}", i, j, expected_min, actual_min);
+            assert_eq!(expected_max, actual_max, "expected max({}, {}) to be {} not {}", i, j, expected_max, actual_max);
+            
+            let i = i as u64;
+            let j = j as u64;
+            let expected_min = expected_min as u64;
+            let expected_max = expected_max as u64;
+            let actual_min = compare.call_min_u64(&mut runtime.store, i, j).unwrap();
+            let actual_max = compare.call_max_u64(&mut runtime.store, i, j).unwrap();
+            assert_eq!(expected_min, actual_min, "expected min({}, {}) to be {} not {}", i, j, expected_min, actual_min);
+            assert_eq!(expected_max, actual_max, "expected max({}, {}) to be {} not {}", i, j, expected_max, actual_max);
         }
     }
 }
@@ -176,39 +170,32 @@ fn test_proxy_call() {
 }
 
 #[test]
-fn test_quadratic_f64() {
-    bindgen!("quadratic-f64" in "tests/programs");
+fn test_quadratic() {
+    bindgen!("quadratic" in "tests/programs");
 
-    let mut runtime = Runtime::new("quadratic_f64");
+    let mut runtime = Runtime::new("quadratic");
 
-    let (quadratic_f64, _) =
-        QuadraticF64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
-
-    for x in 0..10 {
-        let x = x as f64;
-        let expected = 2.0 * x * x + 3.0 * x + 4.0;
-        let actual = quadratic_f64
-            .call_quad(&mut runtime.store, 2.0, 3.0, 4.0, x)
-            .unwrap();
-        assert_eq!(expected, actual);
-    }
-}
-
-#[test]
-fn test_quadratic_let_f64() {
-    bindgen!("quadratic-f64" in "tests/programs");
-
-    let mut runtime = Runtime::new("quadratic_let_f64");
-
-    let (quadratic_f64, _) =
-        QuadraticF64::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+    let (quadratic, _) =
+        Quadratic::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for x in 0..10 {
-        let x = x as f64;
-        let expected = 2.0 * x * x + 3.0 * x + 4.0;
-        let actual = quadratic_f64
-            .call_quad(&mut runtime.store, 2.0, 3.0, 4.0, x)
+        let expected = 2 * x * x + 3 * x + 4;
+        let actual_f32 = quadratic
+            .call_quad_f32(&mut runtime.store, 2.0, 3.0, 4.0, x as f32)
             .unwrap();
-        assert_eq!(expected, actual);
+        let actual_f32_let = quadratic
+            .call_quad_f32_let(&mut runtime.store, 2.0, 3.0, 4.0, x as f32)
+            .unwrap();
+        let actual_f64 = quadratic
+            .call_quad_f64(&mut runtime.store, 2.0, 3.0, 4.0, x as f64)
+            .unwrap();
+        let actual_f64_let = quadratic
+            .call_quad_f64_let(&mut runtime.store, 2.0, 3.0, 4.0, x as f64)
+            .unwrap();
+
+        assert_eq!(expected as f32, actual_f32);
+        assert_eq!(expected as f32, actual_f32_let);
+        assert_eq!(expected as f64, actual_f64);
+        assert_eq!(expected as f64, actual_f64_let);
     }
 }

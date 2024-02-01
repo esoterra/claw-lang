@@ -1,11 +1,20 @@
 package claw:samples;
 
-world counter-s64 {
-    export increment: func() -> s64;
-    export decrement: func() -> s64;
+world compare {
+    export min-u32: func(left: u32, right: u32) -> u32;
+    export max-u32: func(left: u32, right: u32) -> u32;
+    export min-u64: func(left: u64, right: u64) -> u64;
+    export max-u64: func(left: u64, right: u64) -> u64;
 }
 
-world factorial-u64 {
+world counter {
+    export increment-s32: func() -> s32;
+    export decrement-s32: func() -> s32;
+    export increment-s64: func() -> s64;
+    export decrement-s64: func() -> s64;
+}
+
+world factorial {
     export factorial: func(n: u64) -> u64;
 }
 
@@ -13,23 +22,14 @@ world identity {
     export identity: func(value: u64) -> u64;
 }
 
-world increment-u32 {
-    export increment: func() -> u32;
-}
-
-world increment-u64 {
-    export increment: func() -> u64;
-}
-
-world min-u32 {
-    export min: func(left: u32, right: u32) -> u32;
-}
-
 world proxy-call {
     import imported: func(a: u32) -> u32;
     export exported: func(a: u32) -> u32;
 }
 
-world quadratic-f64 {
-    export quad: func(a: float64, b: float64, c: float64, x: float64) -> float64;
+world quadratic {
+    export quad-f32: func(a: float32, b: float32, c: float32, x: float32) -> float32;
+    export quad-f32-let: func(a: float32, b: float32, c: float32, x: float32) -> float32;
+    export quad-f64: func(a: float64, b: float64, c: float64, x: float64) -> float64;
+    export quad-f64-let: func(a: float64, b: float64, c: float64, x: float64) -> float64;
 }
