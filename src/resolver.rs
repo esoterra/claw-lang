@@ -1,22 +1,22 @@
 use crate::{
-    ast::{self, Call, Expression, ExpressionId, NameId, ValType, M},
-    id_map::IdMap,
+    ast::{
+        self, Call, Expression, ExpressionId, FunctionId, GlobalId, ImportId, NameId, ValType, M,
+    },
     stack_map::StackMap,
 };
+use cranelift_entity::{entity_impl, EntityRef, PrimaryMap};
 use std::{collections::HashMap, sync::Arc};
 
-use id_arena::{Arena, Id};
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use petgraph::{prelude::GraphMap, Undirected};
 use thiserror::Error;
 
 #[derive(Debug)]
-
 struct ComponentContext<'ctx> {
     src: Arc<NamedSource>,
     component: &'ctx ast::Component,
     mappings: HashMap<String, ItemId>,
-    global_vals: IdMap<ast::Global, ast::Literal>,
+    global_vals: HashMap<GlobalId, ast::Literal>,
 }
 
 struct FuncContext<'ctx> {
@@ -27,8 +27,8 @@ struct FuncContext<'ctx> {
 pub struct ResolvedComponent {
     pub src: Arc<NamedSource>,
     pub component: ast::Component,
-    pub global_vals: IdMap<ast::Global, ast::Literal>,
-    pub resolved_funcs: IdMap<ast::Function, FunctionResolver>,
+    pub global_vals: HashMap<GlobalId, ast::Literal>,
+    pub resolved_funcs: HashMap<FunctionId, FunctionResolver>,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
@@ -40,15 +40,13 @@ pub enum ItemId {
     Function(FunctionId),
 }
 
-pub type ImportId = Id<ast::Import>;
-pub type GlobalId = Id<ast::Global>;
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ParamId(u32);
+entity_impl!(ParamId, "param");
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ParamId(pub usize);
-
-pub type LocalId = Id<LocalInfo>;
-
-pub type FunctionId = Id<ast::Function>;
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct LocalId(u32);
+entity_impl!(LocalId, "local");
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ResolverError {
@@ -112,16 +110,16 @@ pub fn resolve(
     let mut mappings: HashMap<String, ItemId> = Default::default();
 
     for (id, import) in component.imports.iter() {
-        mappings.insert(import.name.value.clone(), ItemId::Import(id));
+        mappings.insert(import.name.as_ref().clone(), ItemId::Import(id));
     }
     for (id, global) in component.globals.iter() {
-        mappings.insert(global.ident.value.clone(), ItemId::Global(id));
+        mappings.insert(global.ident.as_ref().clone(), ItemId::Global(id));
     }
     for (id, function) in component.functions.iter() {
-        mappings.insert(function.signature.name.value.clone(), ItemId::Function(id));
+        mappings.insert(function.signature.name.as_ref().clone(), ItemId::Function(id));
     }
 
-    let mut global_vals: IdMap<ast::Global, ast::Literal> = Default::default();
+    let mut global_vals: HashMap<GlobalId, ast::Literal> = HashMap::new();
 
     for (id, global) in component.globals.iter() {
         let global_val = match global.expressions.get_exp(global.init_value) {
@@ -132,13 +130,13 @@ pub fn resolve(
     }
 
     let context = ComponentContext {
-        src,
+        src: src.clone(),
         component: &component,
         global_vals,
         mappings,
     };
 
-    let mut resolved_funcs: IdMap<ast::Function, FunctionResolver> = Default::default();
+    let mut resolved_funcs: HashMap<FunctionId, FunctionResolver> = HashMap::new();
 
     for (id, function) in component.functions.iter() {
         let func_context = FuncContext {
@@ -165,7 +163,7 @@ pub fn resolve(
 pub struct FunctionResolver {
     // Name Resolution
     /// Entries for each unique local
-    pub locals: Arena<LocalInfo>,
+    pub locals: PrimaryMap<LocalId, LocalInfo>,
     /// The association between identifiers and their subjects during resolving
     mapping: StackMap<String, ItemId>,
     /// The resolved bindings of expressions to subjects
@@ -173,14 +171,14 @@ pub struct FunctionResolver {
 
     // Type Resolution
     /// The type of each local variable
-    pub local_types: IdMap<LocalInfo, ValType>,
+    pub local_types: HashMap<LocalId, ValType>,
     /// The type of each expression
-    pub expression_types: IdMap<Expression, ValType>,
+    pub expression_types: HashMap<ExpressionId, ValType>,
     /// Types of items which are constrained to be equal
     type_constraints: GraphMap<TypedItem, (), Undirected>,
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 enum TypedItem {
     Global(GlobalId),
     Param(ParamId),
@@ -189,7 +187,7 @@ enum TypedItem {
 }
 
 #[allow(dead_code)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct LocalInfo {
     ident: M<String>,
     mutable: bool,
@@ -197,13 +195,13 @@ pub struct LocalInfo {
 }
 
 impl FunctionResolver {
-    fn new(context: &FuncContext) -> Self {
+    fn new(context: &FuncContext<'_>) -> Self {
         let mut mapping: StackMap<String, ItemId> = context.parent.mappings.clone().into();
 
         let fn_type = &context.func.signature.fn_type;
 
         for (i, (ident, _valtype)) in fn_type.arguments.iter().enumerate() {
-            mapping.insert(ident.value.clone(), ItemId::Param(ParamId(i)));
+            mapping.insert(ident.as_ref().to_owned(), ItemId::Param(ParamId(i as u32)));
         }
 
         FunctionResolver {
@@ -218,7 +216,10 @@ impl FunctionResolver {
         }
     }
 
-    fn resolve(&mut self, context: &FuncContext) -> Result<(), ResolverError> {
+    fn resolve<'ctx>(
+        &mut self,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
         self.resolve_block(context, context.func.body.as_ref())?;
         self.resolve_types(context)?;
 
@@ -227,9 +228,9 @@ impl FunctionResolver {
         Ok(())
     }
 
-    fn resolve_block(
+    fn resolve_block<'ctx>(
         &mut self,
-        context: &FuncContext,
+        context: &FuncContext<'ctx>,
         block: &ast::Block,
     ) -> Result<(), ResolverError> {
         // Take a checkpoint at the state of the mappings before this block
@@ -243,9 +244,9 @@ impl FunctionResolver {
         Ok(())
     }
 
-    fn resolve_statement(
+    fn resolve_statement<'ctx>(
         &mut self,
-        context: &FuncContext,
+        context: &FuncContext<'ctx>,
         statement: &ast::Statement,
     ) -> Result<(), ResolverError> {
         match &statement {
@@ -263,10 +264,10 @@ impl FunctionResolver {
                     mutable: mut_kwd.is_some(),
                     annotation: annotation.to_owned(),
                 };
-                let local = self.locals.alloc(info);
+                let local = self.locals.push(info);
                 let item_id = ItemId::Local(local);
                 self.bindings.insert(*name_id, item_id);
-                self.mapping.insert(ident.value.clone(), item_id);
+                self.mapping.insert(ident.as_ref().to_owned(), item_id);
                 self.resolve_expression(context, *expression)?;
                 self.bind_local(*expression, local);
             }
@@ -304,9 +305,9 @@ impl FunctionResolver {
         Ok(())
     }
 
-    fn resolve_assign(
+    fn resolve_assign<'ctx>(
         &mut self,
-        context: &FuncContext,
+        context: &FuncContext<'ctx>,
         ident: &M<String>,
         name_id: NameId,
         expression: ExpressionId,
@@ -336,17 +337,17 @@ impl FunctionResolver {
             Err(ResolverError::NameError {
                 src: context.parent.src.clone(),
                 span: ident.span.clone(),
-                ident: ident.value.clone(),
+                ident: ident.as_ref().to_owned(),
             })
         }
     }
 
-    fn resolve_expression<'fb, 'ast>(
+    fn resolve_expression<'ctx:>(
         &mut self,
-        context: &FuncContext,
+        context: &FuncContext<'ctx>,
         expression: ExpressionId,
     ) -> Result<(), ResolverError> {
-        let expression_ast = context.func.expressions.get_exp(expression);
+        let expression_ast: &Expression = context.func.expressions.get_exp(expression);
         match expression_ast {
             Expression::Identifier { ident, name_id } => {
                 if let Some(item) = self.mapping.lookup(ident.as_ref()) {
@@ -371,7 +372,7 @@ impl FunctionResolver {
                     Err(ResolverError::NameError {
                         src: context.parent.src.clone(),
                         span: ident.span.clone(),
-                        ident: ident.value.clone(),
+                        ident: ident.as_ref().to_owned(),
                     })
                 }
             }
@@ -415,15 +416,19 @@ impl FunctionResolver {
                 }
                 Ok(())
             }
-            Expression::Call { call } => self.resolve_call(context, call, Some(expression)),
+            Expression::Call { call } => {
+                let context: &FuncContext<'ctx> = context;
+                let call: &Call = call;
+                self.resolve_call(context, call, Some(expression))
+            },
             Expression::Literal { .. } => Ok(()),
             _ => panic!("Unsupported expression type"),
         }
     }
 
-    fn resolve_call(
+    fn resolve_call<'ctx>(
         &mut self,
-        context: &FuncContext,
+        context: &FuncContext<'ctx>,
         call: &Call,
         expression: Option<ExpressionId>,
     ) -> Result<(), ResolverError> {
@@ -444,7 +449,7 @@ impl FunctionResolver {
                             return Err(ResolverError::CallArgumentsMismatch {
                                 src: context.parent.src.clone(),
                                 span: call.ident.span.clone(),
-                                ident: call.ident.value.clone(),
+                                ident: call.ident.as_ref().to_owned(),
                             });
                         }
 
@@ -484,9 +489,9 @@ impl FunctionResolver {
         return Ok(());
     }
 
-    fn lookup_name(
+    fn lookup_name<'ctx>(
         &self,
-        context: &FuncContext,
+        context: &FuncContext<'ctx>,
         ident: &M<String>,
     ) -> Result<ItemId, ResolverError> {
         match self.mapping.lookup(ident.as_ref()) {
@@ -494,7 +499,7 @@ impl FunctionResolver {
             None => Err(ResolverError::NameError {
                 src: context.parent.src.clone(),
                 span: ident.span.clone(),
-                ident: ident.value.clone(),
+                ident: ident.as_ref().to_owned(),
             }),
         }
     }
@@ -517,8 +522,8 @@ impl FunctionResolver {
         self.type_constraints.add_edge(a, b, ());
     }
 
-    fn set_implied_type(&mut self, expression: ExpressionId, valtype: ValType) {
-        self.expression_types.insert(expression, valtype)
+    fn set_implied_type(&mut self, id: ExpressionId, valtype: ValType) {
+        self.expression_types.insert(id, valtype);
     }
 
     fn link_expressions(&mut self, a: ExpressionId, b: ExpressionId) {
@@ -527,14 +532,17 @@ impl FunctionResolver {
         self.type_constraints.add_edge(a, b, ());
     }
 
-    fn resolve_types(&mut self, context: &FuncContext) -> Result<(), ResolverError> {
+    fn resolve_types(
+        &mut self,
+        context: &FuncContext<'_>,
+    ) -> Result<(), ResolverError> {
         let mut errors = Vec::new();
         loop {
             let mut updated = false;
 
             for (id, _expression) in context.func.expressions.expressions().iter() {
                 let current = TypedItem::Expression(id);
-                let mut current_type = self.expression_types.get(id).cloned();
+                let mut current_type = self.expression_types.get(&id).cloned();
                 for neighbor in self.type_constraints.neighbors(current) {
                     let other_type = self.get_item_type(context, neighbor);
                     if let Some(other_type) = other_type {
@@ -553,7 +561,7 @@ impl FunctionResolver {
 
             for (id, _local) in self.locals.iter() {
                 let current = TypedItem::Local(id);
-                let mut current_type = self.local_types.get(id).cloned();
+                let mut current_type = self.local_types.get(&id).cloned();
                 for neighbor in self.type_constraints.neighbors(current) {
                     let other_type = self.get_item_type(context, neighbor);
                     if let Some(other_type) = other_type {
@@ -582,7 +590,7 @@ impl FunctionResolver {
         }
     }
 
-    fn get_item_type(&self, context: &FuncContext, item: TypedItem) -> Option<ValType> {
+    fn get_item_type(&self, context: &FuncContext<'_>, item: TypedItem) -> Option<ValType> {
         match item {
             TypedItem::Global(global) => Some(
                 context
@@ -601,14 +609,14 @@ impl FunctionResolver {
                     .signature
                     .fn_type
                     .arguments
-                    .get(param.0)
+                    .get(param.index())
                     .unwrap()
                     .1
                     .as_ref()
                     .clone(),
             ),
-            TypedItem::Local(local) => self.local_types.get(local).cloned(),
-            TypedItem::Expression(expression) => self.expression_types.get(expression).cloned(),
+            TypedItem::Local(local) => self.local_types.get(&local).cloned(),
+            TypedItem::Expression(expression) => self.expression_types.get(&expression).cloned(),
         }
     }
 }

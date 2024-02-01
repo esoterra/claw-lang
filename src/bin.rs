@@ -1,22 +1,22 @@
-use std::{path::PathBuf, sync::Arc, fs};
+use std::{fs, path::PathBuf, sync::Arc};
 
-use clap::{Parser, ArgEnum};
+use clap::{ArgEnum, Parser};
 
 use claw::lexer::tokenize;
-use miette::{Report, NamedSource};
 use claw::parser::parse;
 use claw::resolver::resolve;
+use miette::{NamedSource, Report};
 
 #[derive(Parser, Debug)]
 struct Arguments {
     #[clap(subcommand)]
-    command: Command
+    command: Command,
 }
 
 #[derive(Parser, Debug)]
 enum Command {
     Compile(Compile),
-    Check(Check)
+    Check(Check),
 }
 
 #[derive(Parser, Debug)]
@@ -30,7 +30,7 @@ struct Compile {
 #[derive(Debug, ArgEnum, Clone, Copy)]
 enum Format {
     Wasm,
-    WAT
+    WAT,
 }
 
 impl Compile {
@@ -38,17 +38,15 @@ impl Compile {
         let file_name = self.input.file_name()?.to_string_lossy().to_string();
         let file_string = std::fs::read_to_string(&self.input).ok()?;
         let src = Arc::new(NamedSource::new(file_name, file_string.clone()));
-    
-        let tokens = match tokenize(src.clone(), file_string) {
+
+        let tokens = match tokenize(src.clone(), &file_string) {
             Ok(token_data) => token_data,
-            Err(errors) => {
-                for error in errors {
-                    println!("{:?}", Report::new(error));
-                }
+            Err(error) => {
+                println!("{:?}", Report::new(error));
                 return None;
             }
         };
-    
+
         let ast = match parse(src.clone(), tokens) {
             Ok(ast) => ast,
             Err(error) => {
@@ -56,7 +54,7 @@ impl Compile {
                 return None;
             }
         };
-    
+
         let resolved = match resolve(src, ast) {
             Ok(ir) => ir,
             Err(error) => {
@@ -71,7 +69,7 @@ impl Compile {
             Ok(_) => println!("Done"),
             Err(err) => println!("Error: {:?}", err),
         }
-    
+
         Some(())
     }
 }
@@ -81,13 +79,13 @@ struct Check {
     #[clap(long)]
     input: PathBuf,
     #[clap(long, arg_enum)]
-    phase: Phase
+    phase: Phase,
 }
 
 #[derive(ArgEnum, Clone, Debug)]
 enum Phase {
     Lex,
-    Parse
+    Parse,
 }
 
 impl Check {
@@ -102,23 +100,24 @@ impl Check {
         let file_name = self.input.file_name()?.to_string_lossy().to_string();
         let file_string = std::fs::read_to_string(&self.input).ok()?;
         let src = Arc::new(NamedSource::new(file_name, file_string.clone()));
-    
-        match tokenize(src, file_string) {
+
+        match tokenize(src, &file_string) {
             Ok(tokens) => {
                 for token_data in tokens {
-                    println!("At {} matched {:?}", token_data.span.offset(), token_data.token);
-                }
-            },
-            Err(errors) => {
-                for error in errors {
-                    println!("{:?}", Report::new(error));
+                    println!(
+                        "At {} matched {:?}",
+                        token_data.span.offset(),
+                        token_data.token
+                    );
                 }
             }
+            Err(error) => {
+                println!("{:?}", Report::new(error));
+            }
         }
-    
+
         Some(())
     }
-    
 }
 
 fn main() {
@@ -126,7 +125,6 @@ fn main() {
 
     match args.command {
         Command::Check(check) => check.run(),
-        Command::Compile(compile) => compile.run()
+        Command::Compile(compile) => compile.run(),
     };
 }
-

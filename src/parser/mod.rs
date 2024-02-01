@@ -1,21 +1,21 @@
-mod expressions;
 mod component;
+mod expressions;
 mod statements;
 mod types;
 
 use std::sync::Arc;
 
-use crate::ast::Span;
-use crate::lexer::{TokenData, Token};
 use crate::ast::component::Component;
+use crate::ast::Span;
+use crate::lexer::{Token, TokenData};
 
-use miette::{Diagnostic, SourceSpan, NamedSource};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
 use self::component::parse_component;
 
 #[derive(Error, Debug, Diagnostic)]
-pub enum ParserError{
+pub enum ParserError {
     #[diagnostic()]
     #[error("Failed to parse")]
     Base {
@@ -32,36 +32,34 @@ pub enum ParserError{
         #[label("Here")]
         span: SourceSpan,
         description: String,
-        token: Token
+        token: Token,
     },
     #[diagnostic()]
     #[error("End of input reached")]
     EndOfInput,
     #[diagnostic()]
     #[error("Feature {feature} not supported yet at {token:?}")]
-    NotYetSupported {
-        feature: String,
-        token: Token
-    }
+    NotYetSupported { feature: String, token: Token },
 }
 
-
-pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Component, ParserError> {
-    let mut parse_input = ParseInput::new(src, tokens);
-    parse_component(&mut parse_input)
+pub fn parse(
+    src: Arc<NamedSource>,
+    tokens: Vec<TokenData>,
+) -> Result<Component, ParserError> {
+    let mut input = ParseInput::new(src, tokens);
+    parse_component(&mut input)
 }
-
 
 #[derive(Debug, Clone)]
 pub struct ParseInput {
-    src: Arc<NamedSource>, 
+    src: Arc<NamedSource>,
     tokens: Vec<TokenData>,
-    index: usize
+    index: usize,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Checkpoint {
-    index: usize
+    index: usize,
 }
 
 impl ParseInput {
@@ -69,24 +67,24 @@ impl ParseInput {
         ParseInput {
             src,
             tokens,
-            index: 0
+            index: 0,
         }
     }
 
     pub fn unsupported_error(&self, feature: &str) -> ParserError {
         ParserError::NotYetSupported {
             feature: feature.to_string(),
-            token: self.tokens[self.index].token.clone()
+            token: self.tokens[self.index].token.clone(),
         }
     }
 
     pub fn unexpected_token(&self, description: &str) -> ParserError {
-        let data = &self.tokens[self.index-1];
+        let data = &self.tokens[self.index - 1];
         ParserError::UnexpectedToken {
             src: self.src.clone(),
             span: data.span.clone(),
             description: description.to_string(),
-            token: data.token.clone()
+            token: data.token.clone(),
         }
     }
 
@@ -124,7 +122,11 @@ impl ParseInput {
         result.ok_or(ParserError::EndOfInput)
     }
 
-    pub fn assert_next(&mut self, token: Token, description: &str) -> Result<Span, ParserError> {
+    pub fn assert_next(
+        &mut self,
+        token: Token,
+        description: &str,
+    ) -> Result<Span, ParserError> {
         let next = self.next()?;
         if next.token == token {
             Ok(next.span.clone())
@@ -145,7 +147,7 @@ impl ParseInput {
 
     pub fn slice_next(&mut self, num: usize) -> Result<&[TokenData], ParserError> {
         if self.has(num) {
-            let result = &self.tokens[self.index..self.index+num];
+            let result = &self.tokens[self.index..self.index + num];
             self.index += num;
             Ok(result)
         } else {
@@ -154,22 +156,21 @@ impl ParseInput {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    
-    use std::sync::Arc;
+
     use miette::NamedSource;
+    use std::sync::Arc;
 
     use crate::{
-        lexer::{tokenize, Token},
         ast::Span,
-        parser::ParseInput
+        lexer::{tokenize, Token},
+        parser::ParseInput,
     };
 
-    pub fn make_input(source: &str) -> ParseInput {
+    pub fn make_input<'src>(source: &'src str) -> ParseInput {
         let src = Arc::new(NamedSource::new("test", source.to_string()));
-        let tokens = tokenize(src.clone(), source.to_string()).unwrap();
+        let tokens = tokenize(src.clone(), source).unwrap();
         ParseInput::new(src, tokens)
     }
 
@@ -201,4 +202,3 @@ mod tests {
         assert_eq!(input.peekn(2).unwrap(), &Token::RParen);
     }
 }
-

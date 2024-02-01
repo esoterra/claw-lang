@@ -2,16 +2,14 @@ use std::sync::Arc;
 
 use logos::Logos;
 
-use miette::{Diagnostic, SourceSpan, NamedSource};
+use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TokenData {
     pub token: Token,
-    pub span: SourceSpan
+    pub span: SourceSpan,
 }
-
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("The input did not match a token rule")]
@@ -23,42 +21,34 @@ pub struct LexerError {
     span: SourceSpan,
 }
 
+pub fn tokenize<'src>(
+    src: Arc<NamedSource>,
+    contents: &'src str,
+) -> Result<Vec<TokenData>, LexerError> {
+    let lexer = Token::lexer(&contents);
 
-
-pub fn tokenize(src: Arc<NamedSource>, contents: String) -> Result<Vec<TokenData>, Vec<LexerError>> {
-    let tokens: Vec<TokenData> = Token::lexer(&contents)
-        .spanned()
-        .map(|(token, span)| 
-            TokenData {
+    lexer.spanned()
+        .map(|(token, span)| match token {
+            Ok(token) => Ok(TokenData {
                 token,
-                span: SourceSpan::from(span)
-            }
-        )
-        .collect();
-
-    let errors: Vec<LexerError> = tokens.iter()
-        .filter(|token_data| token_data.token == Token::Error)
-        .map(|token_data|
-            LexerError {
+                span: SourceSpan::from(span),
+            }),
+            Err(_error) => Err(LexerError {
                 src: src.clone(),
-                span: token_data.span.clone()
-            }
-        )
-        .collect();
-
-    if errors.is_empty() {
-        Ok(tokens)
-    } else {
-        Err(errors)
-    }
+                span: span.into(),
+            }),
+        })
+        .collect()
 }
 
 /// The Token type for the language.
 #[derive(Logos, Debug, PartialEq, Clone)]
+#[logos(error = ())]
+#[logos(skip r"[ \t\r\n\f]+")]
+#[logos(skip r"//[^\n]*")]
+#[logos(subpattern word = r"[a-z][a-z0-9]*|[A-Z][A-Z0-9]*")]
+#[logos(subpattern id = r"%?(?&word)(-(?&word))*")]
 pub enum Token {
-    #[error]
-    #[regex(r"[ \n\t\f]+", logos::skip)]
-    #[regex(r"//[^\n]*", logos::skip)]
     Error,
 
     /// Double-quoted string literal
@@ -83,11 +73,10 @@ pub enum Token {
     HexLiteral(u64),
 
     /// An Identifier
-    #[regex(r"[_a-zA-Z][_a-zA-Z0-9]*", |lex| String::from(lex.slice()))]
+    #[regex(r"(?&id)", |lex| lex.slice().to_string())]
     Identifier(String),
 
     // Keywords -----------------------------------------
-
     /// The Export Keyword
     #[token("export")]
     Export,
@@ -140,43 +129,43 @@ pub enum Token {
     #[token("string")]
     String,
 
-    /// The Unsigned 8-bit Integer Type Keyword 
+    /// The Unsigned 8-bit Integer Type Keyword
     #[token("u8")]
     U8,
 
-    /// The Unsigned 16-bit Integer Type Keyword 
+    /// The Unsigned 16-bit Integer Type Keyword
     #[token("u16")]
     U16,
 
-    /// The Unsigned 32-bit Integer Type Keyword 
+    /// The Unsigned 32-bit Integer Type Keyword
     #[token("u32")]
     U32,
 
-    /// The Unsigned 64-bit Integer Type Keyword 
+    /// The Unsigned 64-bit Integer Type Keyword
     #[token("u64")]
     U64,
 
-    /// The Signed 8-bit Integer Type Keyword 
+    /// The Signed 8-bit Integer Type Keyword
     #[token("s8")]
     S8,
 
-    /// The Signed 16-bit Integer Type Keyword 
+    /// The Signed 16-bit Integer Type Keyword
     #[token("s16")]
     S16,
 
-    /// The Signed 32-bit Integer Type Keyword 
+    /// The Signed 32-bit Integer Type Keyword
     #[token("s32")]
     S32,
 
-    /// The Signed 32-bit Integer Type Keyword 
+    /// The Signed 32-bit Integer Type Keyword
     #[token("s64")]
     S64,
 
-    /// The 32-bit Integer Type Keyword 
+    /// The 32-bit Integer Type Keyword
     #[token("i32")]
     I32,
 
-    /// The 64-bit Integer Type Keyword 
+    /// The 64-bit Integer Type Keyword
     #[token("i64")]
     I64,
 
@@ -199,7 +188,7 @@ pub enum Token {
     /// The Let Keyword
     #[token("let")]
     Let,
-    
+
     /// The Mut Keyword
     #[token("mut")]
     Mut,
@@ -217,7 +206,6 @@ pub enum Token {
     False,
 
     // Symbols -----------------------------------------
-
     /// Left Parenthesis Symbol "("
     #[token("(")]
     LParen,
@@ -376,10 +364,8 @@ pub enum Token {
 
     // Not Equals Operator "!="
     #[token("!=")]
-    NEQ
+    NEQ,
 }
-
-
 
 /// Parses a string according to the JSON string format in ECMA-404.
 fn parse_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option<String> {
@@ -412,27 +398,27 @@ fn parse_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option<Str
 /// Parses an escaped character according to the JSON string format in ECMA-404.
 /// Takes in an iterator which starts after the beginning slash.
 /// If successful, returns the produced char and the length of input consumed.
-fn parse_escaped_char<'src>(lex: &mut std::str::Chars<'src>) -> Option<(char, usize)> {
+fn parse_escaped_char(lex: &mut std::str::Chars) -> Option<(char, usize)> {
     let res = match lex.next()? {
         '\"' => ('\"', 1),
         '\\' => ('\\', 1),
-        '/'  => ('/',  1),
-        'b'  => ('\u{0008}', 1),
-        'f'  => ('\u{000C}', 1),
-        'n'  => ('\n', 1),
-        'r'  => ('\r', 1),
-        't'  => ('\t', 1),
-        'u'  => {
+        '/' => ('/', 1),
+        'b' => ('\u{0008}', 1),
+        'f' => ('\u{000C}', 1),
+        'n' => ('\n', 1),
+        'r' => ('\r', 1),
+        't' => ('\t', 1),
+        'u' => {
             // Combine next for characters together, fail if they can't be found
             let next_4: [Option<char>; 4] = [lex.next(), lex.next(), lex.next(), lex.next()];
             let next_4: Option<Vec<char>> = next_4.iter().map(|c| *c).collect();
-            let next_4: String            = next_4?.into_iter().collect();
+            let next_4: String = next_4?.into_iter().collect();
 
             let code_point = u32::from_str_radix(&next_4, 16).ok()?;
             let new_c: char = std::char::from_u32(code_point)?;
 
             (new_c, 5)
-        },
+        }
         _ => return None,
     };
 
@@ -511,11 +497,11 @@ fn parse_decfloat_literal(s: &str) -> Option<f64> {
 }
 
 fn parse_bin_literal(s: &str) -> Option<u64> {
-    u64::from_str_radix(&s[2..].replace("_", ""),  2).ok()   
+    u64::from_str_radix(&s[2..].replace("_", ""), 2).ok()
 }
 
 fn parse_hex_literal(s: &str) -> Option<u64> {
-    u64::from_str_radix(&s[2..].replace("_", ""),  16).ok()
+    u64::from_str_radix(&s[2..].replace("_", ""), 16).ok()
 }
 
 #[cfg(test)]
@@ -525,52 +511,58 @@ mod test {
 
     #[test]
     fn tokenize_func_declaration() {
-        let contents: String = "func test(a: u32) -> u32".into();
-        let src = Arc::new(NamedSource::new(String::from("test"), contents.clone()));
-        let ident_test = Token::Identifier(String::from("test"));
-        let ident_a = Token::Identifier(String::from("a"));
+        let contents = "func test(a: u32) -> u32";
+        let src = Arc::new(NamedSource::new(String::from("test"), contents));
+        let ident_test = Token::Identifier("test".to_owned());
+        let ident_a = Token::Identifier("a".to_owned());
         let output = vec![
-            ( Token::Func,    SourceSpan::from(0..4) ),
-            ( ident_test,     SourceSpan::from(5..9) ),
-            ( Token::LParen,  SourceSpan::from(9..10) ),
-            ( ident_a,        SourceSpan::from(10..11) ),
-            ( Token::Colon,   SourceSpan::from(11..12) ),
-            ( Token::U32,     SourceSpan::from(13..16) ),
-            ( Token::RParen,  SourceSpan::from(16..17) ),
-            ( Token::Arrow,   SourceSpan::from(18..20) ),
-            ( Token::U32,     SourceSpan::from(21..24) )
-        ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
+            (Token::Func, SourceSpan::from(0..4)),
+            (ident_test, SourceSpan::from(5..9)),
+            (Token::LParen, SourceSpan::from(9..10)),
+            (ident_a, SourceSpan::from(10..11)),
+            (Token::Colon, SourceSpan::from(11..12)),
+            (Token::U32, SourceSpan::from(13..16)),
+            (Token::RParen, SourceSpan::from(16..17)),
+            (Token::Arrow, SourceSpan::from(18..20)),
+            (Token::U32, SourceSpan::from(21..24)),
+        ]
+        .into_iter()
+        .map(to_token_data)
+        .collect::<Vec<TokenData>>();
 
         match tokenize(src, contents) {
             Ok(tokens) => assert_eq!(output, tokens),
-            Err(_) => panic!("Should not have failed")
+            Err(_) => panic!("Should not have failed"),
         }
     }
 
     #[test]
     fn tokenize_let() {
-        let contents: String = r#"let a = "asdf\"";"#.into();
-        let src = Arc::new(NamedSource::new(String::from("test"), contents.clone()));
-        let ident_a = Token::Identifier(String::from("a"));
+        let contents = r#"let a = "asdf\"";"#;
+        let src = Arc::new(NamedSource::new(String::from("test"), contents));
+        let ident_a = Token::Identifier("a".to_owned());
         let string_asdf = Token::StringLiteral(String::from(r#"asdf""#));
         let output = vec![
-            ( Token::Let,       SourceSpan::from(0..3) ),
-            ( ident_a,          SourceSpan::from(4..5) ),
-            ( Token::Assign,    SourceSpan::from(6..7) ),
-            ( string_asdf,      SourceSpan::from(8..16) ),
-            ( Token::Semicolon, SourceSpan::from(16..17) )
-        ].into_iter().map(to_token_data).collect::<Vec<TokenData>>();
+            (Token::Let, SourceSpan::from(0..3)),
+            (ident_a, SourceSpan::from(4..5)),
+            (Token::Assign, SourceSpan::from(6..7)),
+            (string_asdf, SourceSpan::from(8..16)),
+            (Token::Semicolon, SourceSpan::from(16..17)),
+        ]
+        .into_iter()
+        .map(to_token_data)
+        .collect::<Vec<TokenData>>();
 
         match tokenize(src, contents) {
             Ok(tokens) => assert_eq!(output, tokens),
-            Err(_) => panic!("Should not have failed")
+            Err(_) => panic!("Should not have failed"),
         }
     }
 
     fn to_token_data(d: (Token, SourceSpan)) -> TokenData {
         TokenData {
             token: d.0,
-            span: d.1
+            span: d.1,
         }
     }
 }

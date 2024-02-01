@@ -1,23 +1,23 @@
 use std::sync::atomic;
 use std::sync::atomic::AtomicUsize;
 
-pub mod expressions;
 pub mod component;
+pub mod expressions;
 pub mod types;
 
 use miette::SourceSpan;
 
 pub type Span = SourceSpan;
 
-pub use expressions::*;
 pub use component::*;
+pub use expressions::*;
 pub use types::*;
 
 /// The metadata wrapper type
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct M<T> {
     pub span: Span,
-    pub value: T
+    pub value: T,
 }
 
 impl<T> AsRef<T> for M<T> {
@@ -41,17 +41,23 @@ impl<T> M<T> {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct MBox<T> {
     pub span: Span,
-    pub value: Box<T>
+    pub value: Box<T>,
 }
 
 impl<T> MBox<T> {
     pub fn new(value: T, span: Span) -> Self {
-        MBox { span, value: Box::new(value) }
+        MBox {
+            span,
+            value: Box::new(value),
+        }
     }
 
     pub fn new_range(value: T, left: Span, right: Span) -> Self {
         let span = merge(&left, &right);
-        MBox { span, value: Box::new(value) }
+        MBox {
+            span,
+            value: Box::new(value),
+        }
     }
 }
 

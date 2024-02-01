@@ -198,7 +198,7 @@ name = "claw"
 version = "0.1.2"
 dependencies = [
  "clap",
- "id-arena",
+ "cranelift-entity 0.104.0",
  "logos",
  "miette",
  "petgraph",
@@ -233,7 +233,7 @@ version = "0.102.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8e7e56668d2263f92b691cb9e4a2fcb186ca0384941fe420484322fa559c3329"
 dependencies = [
- "cranelift-entity",
+ "cranelift-entity 0.102.1",
 ]
 
 [[package]]
@@ -247,7 +247,7 @@ dependencies = [
  "cranelift-codegen-meta",
  "cranelift-codegen-shared",
  "cranelift-control",
- "cranelift-entity",
+ "cranelift-entity 0.102.1",
  "cranelift-isle",
  "gimli",
  "hashbrown 0.14.3",
@@ -292,6 +292,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "cranelift-entity"
+version = "0.104.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "177b6f94ae8de6348eb45bf977c79ab9e3c40fc3ac8cb7ed8109560ea39bee7d"
+
+[[package]]
 name = "cranelift-frontend"
 version = "0.102.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -327,7 +333,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c5f41a4af931b756be05af0dd374ce200aae2d52cea16b0beb07e8b52732c35"
 dependencies = [
  "cranelift-codegen",
- "cranelift-entity",
+ "cranelift-entity 0.102.1",
  "cranelift-frontend",
  "itertools",
  "log",
@@ -690,25 +696,34 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 
 [[package]]
 name = "logos"
-version = "0.12.1"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bf8b031682c67a8e3d5446840f9573eb7fe26efe7ec8d195c9ac4c0647c502f1"
+checksum = "c000ca4d908ff18ac99b93a062cb8958d331c3220719c52e77cb19cc6ac5d2c1"
 dependencies = [
  "logos-derive",
 ]
 
 [[package]]
-name = "logos-derive"
-version = "0.12.1"
+name = "logos-codegen"
+version = "0.13.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1d849148dbaf9661a6151d1ca82b13bb4c4c128146a88d05253b38d4e2f496c"
+checksum = "dc487311295e0002e452025d6b580b77bb17286de87b57138f3b5db711cded68"
 dependencies = [
  "beef",
  "fnv",
  "proc-macro2",
  "quote",
  "regex-syntax",
- "syn 1.0.109",
+ "syn 2.0.39",
+]
+
+[[package]]
+name = "logos-derive"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dbfc0d229f1f42d790440136d941afd806bc9e949e2bcb8faa813b0f00d1267e"
+dependencies = [
+ "logos-codegen",
 ]
 
 [[package]]
@@ -1429,7 +1444,7 @@ dependencies = [
  "cfg-if",
  "cranelift-codegen",
  "cranelift-control",
- "cranelift-entity",
+ "cranelift-entity 0.102.1",
  "cranelift-frontend",
  "cranelift-native",
  "cranelift-wasm",
@@ -1467,7 +1482,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6d33a9f421da810a070cd56add9bc51f852bd66afbb8b920489d6242f15b70e"
 dependencies = [
  "anyhow",
- "cranelift-entity",
+ "cranelift-entity 0.102.1",
  "gimli",
  "indexmap 2.1.0",
  "log",
@@ -1584,7 +1599,7 @@ version = "15.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b5778112fcab2dc3d4371f4203ab8facf0c453dd94312b0a88dd662955e64e0"
 dependencies = [
- "cranelift-entity",
+ "cranelift-entity 0.102.1",
  "serde",
  "serde_derive",
  "thiserror",

@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use std::cmp;
+use std::collections::HashMap;
 use std::hash::Hash;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct StackMap<K, V> {
     mapping: HashMap<K, V>,
-    history: Vec<(K, Option<V>)>
+    history: Vec<(K, Option<V>)>,
 }
 
 pub struct StackMapCheckpoint(usize);
@@ -14,15 +14,15 @@ impl<K, V> From<HashMap<K, V>> for StackMap<K, V> {
     fn from(value: HashMap<K, V>) -> Self {
         Self {
             mapping: value,
-            history: Default::default()
+            history: Default::default(),
         }
     }
 }
 
 impl<K, V> StackMap<K, V>
 where
-    K: Clone + cmp::Eq + Hash, 
-    V: Clone
+    K: Clone + cmp::Eq + Hash,
+    V: Clone,
 {
     pub fn insert(&mut self, key: K, value: V) {
         let previous = self.mapping.insert(key.clone(), value);
@@ -70,7 +70,7 @@ mod tests {
         assert_eq!(map.lookup(&"b"), Some(&2));
         assert_eq!(map.lookup(&"c"), Some(&3));
         let checkpoint1 = map.checkpoint();
-        
+
         map.insert("a", 4);
         map.insert("b", 5);
         map.insert("c", 6);
@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(map.lookup(&"b"), Some(&5));
         assert_eq!(map.lookup(&"c"), Some(&6));
         let checkpoint2 = map.checkpoint();
-        
+
         map.insert("a", 7);
         map.insert("b", 8);
         map.insert("c", 9);
