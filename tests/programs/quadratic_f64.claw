@@ -1,8 +1,0 @@
-// Features
-// - Parameters
-// - Return statement
-// - Add / Multiply
-// - Precedence / Associativity
-export quad: func(a: f64, b: f64, c: f64, x: f64) -> f64 {
-    return a * x * x + b * x + c;
-}

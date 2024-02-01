@@ -1,6 +1,0 @@
-let mut counter: u64 = 0;
-
-export increment: func() -> u64 {
-    counter = counter + 1;
-    return counter;
-}

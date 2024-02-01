@@ -1,0 +1,23 @@
+let mut counter-s32: s32 = 0;
+
+export increment-s32: func() -> s32 {
+    counter-s32 = counter-s32 + 1;
+    return counter-s32;
+}
+
+export decrement-s32: func() -> s32 {
+    counter-s32 = counter-s32 - 1;
+    return counter-s32;
+}
+
+let mut counter-s64: s64 = 0;
+
+export increment-s64: func() -> s64 {
+    counter-s64 = counter-s64 + 1;
+    return counter-s64;
+}
+
+export decrement-s64: func() -> s64 {
+    counter-s64 = counter-s64 - 1;
+    return counter-s64;
+}

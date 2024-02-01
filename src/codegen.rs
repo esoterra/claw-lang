@@ -1,7 +1,6 @@
 use crate::{
     ast::{
-        self, expressions::Literal, types::ValType, ExpressionId, FnType, FunctionId, Import,
-        ImportId,
+        self, expressions::Literal, types::ValType, BinaryOp, ExpressionId, FnType, FunctionId, Import, ImportId
     },
     resolver::{FunctionResolver, ItemId, ResolvedComponent},
 };
@@ -366,29 +365,8 @@ fn encode_expression(
             encode_expression(resolver, func, *left, builder);
             encode_expression(resolver, func, *right, builder);
 
-            let valtype = resolver.expression_types.get(&expression).unwrap();
             let inner_valtype = resolver.expression_types.get(left).unwrap();
-            match operator.value {
-                ast::BinaryOp::Mult => encode_mul(&valtype, builder),
-                ast::BinaryOp::Div => todo!(),
-                ast::BinaryOp::Mod => todo!(),
-                ast::BinaryOp::Add => encode_add(&valtype, builder),
-                ast::BinaryOp::Sub => encode_sub(&valtype, builder),
-                ast::BinaryOp::BitShiftL => todo!(),
-                ast::BinaryOp::BitShiftR => todo!(),
-                ast::BinaryOp::ArithShiftR => todo!(),
-                ast::BinaryOp::LT => encode_lt(&inner_valtype, builder),
-                ast::BinaryOp::LTE => todo!(),
-                ast::BinaryOp::GT => todo!(),
-                ast::BinaryOp::GTE => todo!(),
-                ast::BinaryOp::EQ => encode_eq(&inner_valtype, builder),
-                ast::BinaryOp::NEQ => encode_ne(&inner_valtype, builder),
-                ast::BinaryOp::BitAnd => todo!(),
-                ast::BinaryOp::BitXor => todo!(),
-                ast::BinaryOp::BitOr => todo!(),
-                ast::BinaryOp::LogicalAnd => todo!(),
-                ast::BinaryOp::LogicalOr => todo!(),
-            };
+            encode_bin_op(operator.as_ref(), inner_valtype, builder);
         }
 
         ast::Expression::Call { call } => {
@@ -423,89 +401,90 @@ fn encode_expression(
 
         ast::Expression::Literal { literal } => {
             let valtype = resolver.expression_types.get(&expression).unwrap();
-            let instruction = match (valtype, &literal.value) {
-                (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
-                    enc::Instruction::I32Const(*value as i32)
-                }
-                (ValType::S64 | ValType::U64, Literal::Integer(value)) => {
-                    enc::Instruction::I64Const(*value as i64)
-                }
-                (ValType::F32, Literal::Float(value)) => enc::Instruction::F32Const(*value as f32),
-                (ValType::F64, Literal::Float(value)) => enc::Instruction::F64Const(*value),
-                _ => todo!(),
-            };
-            builder.instruction(&instruction);
+            encode_literal_expr(builder, valtype, literal.as_ref());
         }
     }
 }
 
-fn encode_add(valtype: &ValType, builder: &mut enc::Function) {
-    let instruction = match core_type_of(&valtype) {
-        enc::ValType::I32 => enc::Instruction::I32Add,
-        enc::ValType::I64 => enc::Instruction::I64Add,
-        enc::ValType::F32 => enc::Instruction::F32Add,
-        enc::ValType::F64 => enc::Instruction::F64Add,
-        _ => unimplemented!(),
-    };
-    builder.instruction(&instruction);
-}
+fn encode_bin_op(bin_op: &BinaryOp, valtype: &ValType, builder: &mut enc::Function) {
+    let core_valtype = core_type_of(&valtype);
+    let signedness = signedness_of(&valtype);
 
-fn encode_sub(valtype: &ValType, builder: &mut enc::Function) {
-    let instruction = match core_type_of(&valtype) {
-        enc::ValType::I32 => enc::Instruction::I32Sub,
-        enc::ValType::I64 => enc::Instruction::I64Sub,
-        enc::ValType::F32 => enc::Instruction::F32Sub,
-        enc::ValType::F64 => enc::Instruction::F64Sub,
-        _ => unimplemented!(),
-    };
-    builder.instruction(&instruction);
-}
-
-fn encode_mul(valtype: &ValType, builder: &mut enc::Function) {
-    let instruction = match core_type_of(&valtype) {
-        enc::ValType::I32 => enc::Instruction::I32Mul,
-        enc::ValType::I64 => enc::Instruction::I64Mul,
-        enc::ValType::F32 => enc::Instruction::F32Mul,
-        enc::ValType::F64 => enc::Instruction::F64Mul,
-        _ => unimplemented!(),
-    };
-    builder.instruction(&instruction);
-}
-
-fn encode_eq(valtype: &ValType, builder: &mut enc::Function) {
-    let instruction = match core_type_of(&valtype) {
-        enc::ValType::I32 => enc::Instruction::I32Eq,
-        enc::ValType::I64 => enc::Instruction::I64Eq,
-        enc::ValType::F32 => enc::Instruction::F32Eq,
-        enc::ValType::F64 => enc::Instruction::F64Eq,
-        vtype => unimplemented!("Unsupported type {:?} for '=='", vtype),
-    };
-    builder.instruction(&instruction);
-}
-
-fn encode_ne(valtype: &ValType, builder: &mut enc::Function) {
-    let instruction = match core_type_of(&valtype) {
-        enc::ValType::I32 => enc::Instruction::I32Ne,
-        enc::ValType::I64 => enc::Instruction::I64Ne,
-        enc::ValType::F32 => enc::Instruction::F32Ne,
-        enc::ValType::F64 => enc::Instruction::F64Ne,
-        _ => unimplemented!(),
-    };
-    builder.instruction(&instruction);
-}
-
-fn encode_lt(valtype: &ValType, builder: &mut enc::Function) {
-    let instruction = match valtype {
-        ValType::U64 => enc::Instruction::I64LtU,
-        ValType::S64 => enc::Instruction::I64LtS,
-
-        ValType::U32 | ValType::U16 | ValType::U8 => enc::Instruction::I32LtU,
-        ValType::S32 | ValType::S16 | ValType::S8 => enc::Instruction::I32LtS,
-
-        ValType::F32 => enc::Instruction::F32Lt,
-        ValType::F64 => enc::Instruction::F64Lt,
-
-        vtype => unimplemented!("comparison '<' of type {:?}", vtype),
+    let instruction = match (bin_op, core_valtype, signedness) {
+        // Multiply
+        (ast::BinaryOp::Mult, enc::ValType::I32, _) => enc::Instruction::I32Mul,
+        (ast::BinaryOp::Mult, enc::ValType::I64, _) => enc::Instruction::I64Mul,
+        (ast::BinaryOp::Mult, enc::ValType::F32, _) => enc::Instruction::F32Mul,
+        (ast::BinaryOp::Mult, enc::ValType::F64, _) => enc::Instruction::F64Mul,
+        (ast::BinaryOp::Mult, vtype, _) => panic!("Cannot multiply type {:?}", vtype),
+        // Divide
+        (ast::BinaryOp::Div, enc::ValType::I32, S) => enc::Instruction::I32DivS,
+        (ast::BinaryOp::Div, enc::ValType::I32, U) => enc::Instruction::I32DivU,
+        (ast::BinaryOp::Div, enc::ValType::I64, S) => enc::Instruction::I64DivS,
+        (ast::BinaryOp::Div, enc::ValType::I64, U) => enc::Instruction::I64DivU,
+        (ast::BinaryOp::Div, enc::ValType::F32, _) => enc::Instruction::F32Div,
+        (ast::BinaryOp::Div, enc::ValType::F64, _) => enc::Instruction::F64Div,
+        (ast::BinaryOp::Div, vtype, _) => panic!("Cannot divide type {:?}", vtype),
+        // Modulo
+        (ast::BinaryOp::Mod, _, _) => todo!(),
+        // Addition
+        (ast::BinaryOp::Add, enc::ValType::I32, _) => enc::Instruction::I32Add,
+        (ast::BinaryOp::Add, enc::ValType::I64, _) => enc::Instruction::I64Add,
+        (ast::BinaryOp::Add, enc::ValType::F32, _) => enc::Instruction::F32Add,
+        (ast::BinaryOp::Add, enc::ValType::F64, _) => enc::Instruction::F64Add,
+        // Subtraction
+        (ast::BinaryOp::Sub, enc::ValType::I32, _) => enc::Instruction::I32Sub,
+        (ast::BinaryOp::Sub, enc::ValType::I64, _) => enc::Instruction::I64Sub,
+        (ast::BinaryOp::Sub, enc::ValType::F32, _) => enc::Instruction::F32Sub,
+        (ast::BinaryOp::Sub, enc::ValType::F64, _) => enc::Instruction::F64Sub,
+        (ast::BinaryOp::BitShiftL, _, _) => todo!(),
+        (ast::BinaryOp::BitShiftR, _, _) => todo!(),
+        (ast::BinaryOp::ArithShiftR, _, _) => todo!(),
+        // Less than
+        (ast::BinaryOp::LT, enc::ValType::I32, S) => enc::Instruction::I32LtS,
+        (ast::BinaryOp::LT, enc::ValType::I32, U) => enc::Instruction::I32LtU,
+        (ast::BinaryOp::LT, enc::ValType::I64, S) => enc::Instruction::I64LtS,
+        (ast::BinaryOp::LT, enc::ValType::I64, U) => enc::Instruction::I64LtU,
+        (ast::BinaryOp::LT, enc::ValType::F32, _) => enc::Instruction::F32Lt,
+        (ast::BinaryOp::LT, enc::ValType::F64, _) => enc::Instruction::F64Lt,
+        // Less than equal
+        (ast::BinaryOp::LTE, enc::ValType::I32, S) => enc::Instruction::I32LeS,
+        (ast::BinaryOp::LTE, enc::ValType::I32, U) => enc::Instruction::I32LeU,
+        (ast::BinaryOp::LTE, enc::ValType::I64, S) => enc::Instruction::I64LeS,
+        (ast::BinaryOp::LTE, enc::ValType::I64, U) => enc::Instruction::I64LeU,
+        (ast::BinaryOp::LTE, enc::ValType::F32, _) => enc::Instruction::F32Le,
+        (ast::BinaryOp::LTE, enc::ValType::F64, _) => enc::Instruction::F64Le,
+        // Greater than
+        (ast::BinaryOp::GT, enc::ValType::I32, S) => enc::Instruction::I32GtS,
+        (ast::BinaryOp::GT, enc::ValType::I32, U) => enc::Instruction::I32GtU,
+        (ast::BinaryOp::GT, enc::ValType::I64, S) => enc::Instruction::I64GtS,
+        (ast::BinaryOp::GT, enc::ValType::I64, U) => enc::Instruction::I64GtU,
+        (ast::BinaryOp::GT, enc::ValType::F32, _) => enc::Instruction::F32Gt,
+        (ast::BinaryOp::GT, enc::ValType::F64, _) => enc::Instruction::F64Gt,
+        // Greater than or equal
+        (ast::BinaryOp::GTE, enc::ValType::I32, S) => enc::Instruction::I32GeS,
+        (ast::BinaryOp::GTE, enc::ValType::I32, U) => enc::Instruction::I32GeU,
+        (ast::BinaryOp::GTE, enc::ValType::I64, S) => enc::Instruction::I64GeS,
+        (ast::BinaryOp::GTE, enc::ValType::I64, U) => enc::Instruction::I64GeU,
+        (ast::BinaryOp::GTE, enc::ValType::F32, _) => enc::Instruction::F32Ge,
+        (ast::BinaryOp::GTE, enc::ValType::F64, _) => enc::Instruction::F64Ge,
+        // Equal
+        (ast::BinaryOp::EQ, enc::ValType::I32, _) => enc::Instruction::I32Eq,
+        (ast::BinaryOp::EQ, enc::ValType::I64, _) => enc::Instruction::I64Eq,
+        (ast::BinaryOp::EQ, enc::ValType::F32, _) => enc::Instruction::F32Eq,
+        (ast::BinaryOp::EQ, enc::ValType::F64, _) => enc::Instruction::F64Eq,
+        // Not equal
+        (ast::BinaryOp::NEQ, enc::ValType::I32, _) => enc::Instruction::I32Eq,
+        (ast::BinaryOp::NEQ, enc::ValType::I64, _) => enc::Instruction::I64Eq,
+        (ast::BinaryOp::NEQ, enc::ValType::F32, _) => enc::Instruction::F32Eq,
+        (ast::BinaryOp::NEQ, enc::ValType::F64, _) => enc::Instruction::F64Eq,
+        // Bitwise and
+        (ast::BinaryOp::BitAnd, _, _) => todo!(),
+        (ast::BinaryOp::BitXor, _, _) => todo!(),
+        (ast::BinaryOp::BitOr, _, _) => todo!(),
+        (ast::BinaryOp::LogicalAnd, _, _) => todo!(),
+        (ast::BinaryOp::LogicalOr, _, _) => todo!(),
+        _ => todo!()
     };
     builder.instruction(&instruction);
 }
@@ -523,6 +502,39 @@ fn core_type_of(valtype: &ValType) -> enc::ValType {
 
         vtype => unimplemented!("Core type of {:?}", vtype),
     }
+}
+
+#[derive(PartialEq)]
+enum Signedness {
+    Unsigned,
+    Signed,
+    NotApplicable
+}
+
+const S: Signedness = Signedness::Signed;
+const U: Signedness = Signedness::Unsigned;
+
+fn signedness_of(valtype: &ValType) -> Signedness {
+    match valtype {
+        ValType::U64 | ValType::U32 | ValType::U16 | ValType::U8 => Signedness::Unsigned,
+        ValType::S64 | ValType::S32 | ValType::S16 | ValType::S8 => Signedness::Signed,
+        _ => Signedness::NotApplicable,
+    }
+}
+
+fn encode_literal_expr(builder: &mut enc::Function, valtype: &ValType, literal: &Literal) {
+    let instruction = match (valtype, &literal) {
+        (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
+            enc::Instruction::I32Const(*value as i32)
+        }
+        (ValType::S64 | ValType::U64, Literal::Integer(value)) => {
+            enc::Instruction::I64Const(*value as i64)
+        }
+        (ValType::F32, Literal::Float(value)) => enc::Instruction::F32Const(*value as f32),
+        (ValType::F64, Literal::Float(value)) => enc::Instruction::F64Const(*value),
+        _ => todo!(),
+    };
+    builder.instruction(&instruction);
 }
 
 fn literal_to_constexpr(valtype: &ValType, literal: &Literal) -> enc::ConstExpr {
