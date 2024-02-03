@@ -504,7 +504,7 @@ fn core_type_of(valtype: &ValType) -> enc::ValType {
     }
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 enum Signedness {
     Unsigned,
     Signed,
