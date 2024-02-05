@@ -11,11 +11,9 @@ use crate::parser::{
     ParserError,
 };
 
-use super::expressions::parse_ident;
+use super::statements::parse_ident;
 
-pub fn parse_component(
-    input: &mut ParseInput,
-) -> Result<Component, ParserError> {
+pub fn parse_component(input: &mut ParseInput) -> Result<Component, ParserError> {
     let mut module = Component::default();
 
     while !input.done() {
@@ -54,10 +52,7 @@ fn parse_import(input: &mut ParseInput) -> Result<Import, ParserError> {
     })
 }
 
-fn parse_global(
-    input: &mut ParseInput,
-    export_kwd: Option<Span>,
-) -> Result<Global, ParserError> {
+fn parse_global(input: &mut ParseInput, export_kwd: Option<Span>) -> Result<Global, ParserError> {
     let mut data = ExpressionData::default();
 
     let let_kwd = input.assert_next(Token::Let, "Let")?;
@@ -91,10 +86,7 @@ fn parse_global(
     })
 }
 
-fn parse_func(
-    input: &mut ParseInput,
-    export_kwd: Option<Span>,
-) -> Result<Function, ParserError> {
+fn parse_func(input: &mut ParseInput, export_kwd: Option<Span>) -> Result<Function, ParserError> {
     let signature = parse_func_signature(input)?;
     let mut data = ExpressionData::default();
     let body = parse_block(input, &mut data)?;
@@ -107,9 +99,7 @@ fn parse_func(
     })
 }
 
-fn parse_func_signature(
-    input: &mut ParseInput,
-) -> Result<FunctionSignature, ParserError> {
+fn parse_func_signature(input: &mut ParseInput) -> Result<FunctionSignature, ParserError> {
     let next = input.next()?;
     let name = match &next.token {
         Token::Identifier(name) => {
@@ -130,9 +120,7 @@ fn parse_func_signature(
     })
 }
 
-fn parse_argument(
-    input: &mut ParseInput,
-) -> Result<(M<String>, M<ValType>), ParserError> {
+fn parse_argument(input: &mut ParseInput) -> Result<(M<String>, M<ValType>), ParserError> {
     let next = input.next()?;
     let span = next.span.clone();
     let name = match &next.token {
@@ -144,9 +132,7 @@ fn parse_argument(
     Ok((name, valtype))
 }
 
-fn parse_external_type(
-    input: &mut ParseInput,
-) -> Result<ExternalType, ParserError> {
+fn parse_external_type(input: &mut ParseInput) -> Result<ExternalType, ParserError> {
     Ok(ExternalType::Function(parse_fn_type(input)?))
 }
 

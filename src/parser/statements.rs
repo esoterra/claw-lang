@@ -6,10 +6,26 @@ use crate::ast::{
 };
 use crate::lexer::Token;
 use crate::parser::{
-    expressions::{parse_expression, parse_ident},
+    expressions::parse_expression,
     types::parse_valtype,
     ParseInput, ParserError,
 };
+
+/// Parse an identifier
+pub fn parse_ident(
+    input: &mut ParseInput,
+) -> Result<M<String>, ParserError> {
+    let checkpoint = input.checkpoint();
+    let next = input.next()?;
+    let span = next.span.clone();
+    match next.token.clone() {
+        Token::Identifier(ident) => Ok(M::new(ident, span)),
+        _ => {
+            input.restore(checkpoint);
+            Err(input.unexpected_token("Expected identifier"))
+        }
+    }
+}
 
 pub fn parse_block(
     input: &mut ParseInput,

@@ -27,7 +27,8 @@ pub fn tokenize<'src>(
 ) -> Result<Vec<TokenData>, LexerError> {
     let lexer = Token::lexer(&contents);
 
-    lexer.spanned()
+    lexer
+        .spanned()
         .map(|(token, span)| match token {
             Ok(token) => Ok(TokenData {
                 token,

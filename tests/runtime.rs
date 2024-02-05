@@ -56,8 +56,14 @@ fn test_counter() {
 
     for i in 1..200 {
         // Increase by one
-        assert_eq!(counter_s64.call_increment_s32(&mut runtime.store).unwrap(), i);
-        assert_eq!(counter_s64.call_increment_s64(&mut runtime.store).unwrap(), i as i64);
+        assert_eq!(
+            counter_s64.call_increment_s32(&mut runtime.store).unwrap(),
+            i
+        );
+        assert_eq!(
+            counter_s64.call_increment_s64(&mut runtime.store).unwrap(),
+            i as i64
+        );
         // Increase then decrease by one
         assert_eq!(
             counter_s64.call_increment_s32(&mut runtime.store).unwrap(),
@@ -67,8 +73,14 @@ fn test_counter() {
             counter_s64.call_increment_s64(&mut runtime.store).unwrap(),
             i as i64 + 1
         );
-        assert_eq!(counter_s64.call_decrement_s32(&mut runtime.store).unwrap(), i);
-        assert_eq!(counter_s64.call_decrement_s64(&mut runtime.store).unwrap(), i as i64);
+        assert_eq!(
+            counter_s64.call_decrement_s32(&mut runtime.store).unwrap(),
+            i
+        );
+        assert_eq!(
+            counter_s64.call_decrement_s64(&mut runtime.store).unwrap(),
+            i as i64
+        );
     }
 
     for i in (1..200).rev() {
@@ -131,17 +143,33 @@ fn test_compare() {
             let expected_max = std::cmp::max(i, j);
             let actual_min = compare.call_min_u32(&mut runtime.store, i, j).unwrap();
             let actual_max = compare.call_max_u32(&mut runtime.store, i, j).unwrap();
-            assert_eq!(expected_min, actual_min, "expected min({}, {}) to be {} not {}", i, j, expected_min, actual_min);
-            assert_eq!(expected_max, actual_max, "expected max({}, {}) to be {} not {}", i, j, expected_max, actual_max);
-            
+            assert_eq!(
+                expected_min, actual_min,
+                "expected min({}, {}) to be {} not {}",
+                i, j, expected_min, actual_min
+            );
+            assert_eq!(
+                expected_max, actual_max,
+                "expected max({}, {}) to be {} not {}",
+                i, j, expected_max, actual_max
+            );
+
             let i = i as u64;
             let j = j as u64;
             let expected_min = expected_min as u64;
             let expected_max = expected_max as u64;
             let actual_min = compare.call_min_u64(&mut runtime.store, i, j).unwrap();
             let actual_max = compare.call_max_u64(&mut runtime.store, i, j).unwrap();
-            assert_eq!(expected_min, actual_min, "expected min({}, {}) to be {} not {}", i, j, expected_min, actual_min);
-            assert_eq!(expected_max, actual_max, "expected max({}, {}) to be {} not {}", i, j, expected_max, actual_max);
+            assert_eq!(
+                expected_min, actual_min,
+                "expected min({}, {}) to be {} not {}",
+                i, j, expected_min, actual_min
+            );
+            assert_eq!(
+                expected_max, actual_max,
+                "expected max({}, {}) to be {} not {}",
+                i, j, expected_max, actual_max
+            );
         }
     }
 }
