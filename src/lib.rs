@@ -11,10 +11,7 @@ pub mod resolver;
 
 pub mod stack_map;
 
-pub fn compile<'src>(
-    source_name: String,
-    source_code: &'src str,
-) -> Option<ResolvedComponent> {
+pub fn compile<'src>(source_name: String, source_code: &'src str) -> Option<ResolvedComponent> {
     let src = Arc::new(NamedSource::new(
         source_name,
         Box::leak(source_code.to_owned().into_boxed_str()) as &'static str,
@@ -23,8 +20,8 @@ pub fn compile<'src>(
     let tokens = match lexer::tokenize(src.clone(), source_code) {
         Ok(token_data) => token_data,
         Err(error) => {
-           println!("{:?}", Report::new(error));
-           return None;
+            println!("{:?}", Report::new(error));
+            return None;
         }
     };
 

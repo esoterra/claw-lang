@@ -1,8 +1,9 @@
 use crate::{
     ast::{
-        self, expressions::Literal, types::ValType, BinaryOp, ExpressionId, FnType, FunctionId, Import, ImportId
+        self, expressions::Literal, types::ValType, ExpressionId, FnType, FunctionId, Import,
+        ImportId, TypeId,
     },
-    resolver::{FunctionResolver, ItemId, ResolvedComponent},
+    resolver::{FunctionResolver, ItemId, ResolvedComponent, ResolvedType},
 };
 
 use cranelift_entity::EntityRef;
@@ -54,7 +55,7 @@ impl CodeGenerator {
         self.encode_globals(resolved_comp);
 
         for (id, import) in resolved_comp.component.imports.iter() {
-            self.encode_import(id, import);
+            self.encode_import(id, import, resolved_comp);
         }
 
         for (id, function) in resolved_comp.component.functions.iter() {
@@ -64,19 +65,19 @@ impl CodeGenerator {
         self.emit_bytes()
     }
 
-    fn encode_import(&mut self, id: ImportId, import: &Import) {
+    fn encode_import(&mut self, id: ImportId, import: &Import, resolved_comp: &ResolvedComponent) {
         let import_func_idx = id.index() as u32;
-        let import_name = import.name.as_ref().as_str();
+        let import_name = resolved_comp.component.arenas.get_name(import.ident);
 
         match &import.external_type {
             ast::ExternalType::Function(fn_type) => {
                 // Encode Module Type and Import
-                self.encode_mod_import_type(fn_type);
+                self.encode_mod_import_type(fn_type, resolved_comp);
                 let module_ty = enc::EntityType::Function(import_func_idx);
                 self.module.imports.import("claw", import_name, module_ty);
 
                 // Encode Component Type and Import
-                self.encode_comp_import_type(fn_type);
+                self.encode_comp_import_type(fn_type, resolved_comp);
                 let component_ty = enc::ComponentTypeRef::Func(import_func_idx);
                 self.component.imports.import(import_name, component_ty);
 
@@ -94,15 +95,14 @@ impl CodeGenerator {
 
     fn encode_globals(&mut self, component: &ResolvedComponent) {
         for (id, global) in component.component.globals.iter() {
-            let valtype = global.valtype.as_ref();
-
             let global_type = enc::GlobalType {
-                mutable: global.mut_kwd.is_some(),
-                val_type: encode_valtype(valtype),
+                mutable: global.mutable,
+                val_type: encode_valtype(global.type_id, component),
             };
 
             let init_expr = if let Some(init_value) = component.global_vals.get(&id) {
-                literal_to_constexpr(valtype, init_value)
+                let valtype = component.component.arenas.get_type(global.type_id);
+                init_value.to_constexpr(valtype)
             } else {
                 panic!("Cannot generate WASM for unresolved global")
             };
@@ -118,7 +118,7 @@ impl CodeGenerator {
         resolved_comp: &ResolvedComponent,
     ) {
         // Encode module and component type sections
-        self.encode_mod_func_type(&function.signature.fn_type);
+        self.encode_mod_func_type(&function.signature.fn_type, resolved_comp);
 
         let func_idx = resolved_comp.component.imports.len() + id.index();
         let func_idx = func_idx as u32;
@@ -128,42 +128,43 @@ impl CodeGenerator {
 
         // Encode module code
         let resolver = resolved_comp.resolved_funcs.get(&id).unwrap();
-        let locals = encode_locals(resolver);
+        let locals = encode_locals(resolver, resolved_comp);
         let mut builder = enc::Function::new(locals);
 
-        for statement in function.body.as_ref().statements.iter() {
-            encode_statement(
-                &resolved_comp,
-                resolver,
-                function,
-                statement.as_ref(),
-                &mut builder,
-            );
+        for statement in function.body.iter() {
+            let statement = resolved_comp.component.arenas.get_statement(*statement);
+            encode_statement(&resolved_comp, resolver, function, statement, &mut builder);
         }
         builder.instruction(&enc::Instruction::End);
 
         self.module.code.function(&builder);
 
-        if function.export_kwd.is_some() {
-            self.encode_func_export(func_idx, function);
+        if function.exported {
+            self.encode_func_export(func_idx, function, resolved_comp);
         }
     }
 
-    fn encode_func_export(&mut self, func_idx: u32, function: &ast::Function) {
+    fn encode_func_export(
+        &mut self,
+        func_idx: u32,
+        function: &ast::Function,
+        resolved_comp: &ResolvedComponent,
+    ) {
+        let ident = function.signature.ident;
+        let name = resolved_comp.component.arenas.get_name(ident);
+
         // Export function from module
-        self.module.exports.export(
-            function.signature.name.as_ref(),
-            enc::ExportKind::Func,
-            func_idx,
-        );
+        self.module
+            .exports
+            .export(name, enc::ExportKind::Func, func_idx);
         // Alias module instance export into component
         self.component.alias.alias(enc::Alias::CoreInstanceExport {
             instance: MODULE_INSTANCE_IDX,
             kind: enc::ExportKind::Func,
-            name: function.signature.name.as_ref(),
+            name,
         });
         // Encode component func type
-        self.encode_comp_func_type(&function.signature.fn_type);
+        self.encode_comp_func_type(&function.signature.fn_type, resolved_comp);
         // Lift aliased function to component function
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
         self.component
@@ -171,7 +172,7 @@ impl CodeGenerator {
             .lift(func_idx, func_idx, NO_CANON_OPTS);
         // Export component function
         self.component.exports.export(
-            function.signature.name.as_ref(),
+            name,
             enc::ComponentExportKind::Func,
             func_idx,
             Some(enc::ComponentTypeRef::Func(func_idx)),
@@ -217,22 +218,24 @@ impl CodeGenerator {
         component.finish()
     }
 
-    fn encode_mod_import_type(&mut self, fn_type: &FnType) {
+    fn encode_mod_import_type(&mut self, fn_type: &FnType, resolved_comp: &ResolvedComponent) {
         let params = fn_type
             .arguments
             .iter()
-            .map(|(_name, valtype)| encode_valtype(valtype.as_ref()));
+            .map(|(_name, valtype)| encode_valtype(*valtype, resolved_comp));
 
-        let result_type = encode_valtype(fn_type.return_type.as_ref());
+        let result_type = encode_valtype(fn_type.return_type, resolved_comp);
         self.module.types.function(params, [result_type]);
     }
 
-    fn encode_comp_import_type(&mut self, fn_type: &FnType) {
-        let params = fn_type
-            .arguments
-            .iter()
-            .map(|(name, valtype)| (name.as_ref().as_str(), encode_comp_valtype(valtype.as_ref())));
-        let result_type = encode_comp_valtype(fn_type.return_type.as_ref());
+    fn encode_comp_import_type(&mut self, fn_type: &FnType, resolved_comp: &ResolvedComponent) {
+        let params = fn_type.arguments.iter().map(|(name, type_id)| {
+            let name = resolved_comp.component.arenas.get_name(*name);
+            let valtype = resolved_comp.component.arenas.get_type(*type_id);
+            (name, encode_comp_valtype(valtype))
+        });
+        let valtype = resolved_comp.component.arenas.get_type(fn_type.return_type);
+        let result_type = encode_comp_valtype(valtype);
         self.component
             .types
             .function()
@@ -240,22 +243,24 @@ impl CodeGenerator {
             .result(result_type);
     }
 
-    fn encode_mod_func_type(&mut self, fn_type: &FnType) {
+    fn encode_mod_func_type(&mut self, fn_type: &FnType, resolved_comp: &ResolvedComponent) {
         let params = fn_type
             .arguments
             .iter()
-            .map(|(_name, valtype)| encode_valtype(valtype.as_ref()));
+            .map(|(_name, type_id)| encode_valtype(*type_id, resolved_comp));
 
-        let result_type = encode_valtype(fn_type.return_type.as_ref());
+        let result_type = encode_valtype(fn_type.return_type, resolved_comp);
         self.module.types.function(params, [result_type]);
     }
 
-    fn encode_comp_func_type(&mut self, fn_type: &FnType) {
-        let params = fn_type
-            .arguments
-            .iter()
-            .map(|(name, valtype)| (name.as_ref().as_str(), encode_comp_valtype(valtype.as_ref())));
-        let result_type = encode_comp_valtype(fn_type.return_type.as_ref());
+    fn encode_comp_func_type(&mut self, fn_type: &FnType, resolved_comp: &ResolvedComponent) {
+        let params = fn_type.arguments.iter().map(|(name, type_id)| {
+            let name = resolved_comp.component.arenas.get_name(*name);
+            let valtype = resolved_comp.component.arenas.get_type(*type_id);
+            (name, encode_comp_valtype(valtype))
+        });
+        let valtype = resolved_comp.component.arenas.get_type(fn_type.return_type);
+        let result_type = encode_comp_valtype(valtype);
         self.component
             .types
             .function()
@@ -264,13 +269,16 @@ impl CodeGenerator {
     }
 }
 
-fn encode_locals(resolver: &FunctionResolver) -> Vec<(u32, enc::ValType)> {
+fn encode_locals(
+    resolver: &FunctionResolver,
+    resolved_comp: &ResolvedComponent,
+) -> Vec<(u32, enc::ValType)> {
     resolver
         .locals
         .iter()
         .map(|(id, _local)| {
-            let valtype = resolver.local_types.get(&id).unwrap();
-            (1, encode_valtype(&valtype))
+            let inferred = *resolver.local_types.get(&id).unwrap();
+            (1, encode_inferred_type(&inferred, resolved_comp))
         })
         .collect()
 }
@@ -283,20 +291,14 @@ fn encode_statement(
     builder: &mut enc::Function,
 ) {
     match statement {
-        ast::Statement::Let {
-            ident: _,
-            name_id,
-            expression,
-            ..
-        }
-        | ast::Statement::Assign {
-            ident: _,
-            name_id,
-            expression,
-            ..
-        } => {
-            encode_expression(resolver, func, *expression, builder);
-            match resolver.bindings.get(name_id).unwrap() {
+        ast::Statement::Let(ast::Let {
+            ident, expression, ..
+        })
+        | ast::Statement::Assign(ast::Assign {
+            ident, expression, ..
+        }) => {
+            encode_expression(component, resolver, func, *expression, builder);
+            match resolver.bindings.get(ident).unwrap() {
                 ItemId::Import(_) => unimplemented!(),
                 ItemId::Global(global) => {
                     builder.instruction(&enc::Instruction::GlobalSet(global.index() as u32));
@@ -313,181 +315,128 @@ fn encode_statement(
                 ItemId::Function(_) => unimplemented!(),
             }
         }
-        ast::Statement::Call { call } => {
+        ast::Statement::Call(call) => {
             for arg in call.args.iter() {
-                encode_expression(resolver, func, *arg, builder);
+                encode_expression(component, resolver, func, *arg, builder);
             }
-            let index = match resolver.bindings.get(&call.name_id).unwrap() {
+            let index = match resolver.bindings.get(&call.ident).unwrap() {
                 ItemId::Import(import) => import.index(),
                 ItemId::Function(function) => function.index(),
                 _ => panic!(""),
             };
             builder.instruction(&enc::Instruction::Call(index as u32));
         }
-        ast::Statement::If {
-            if_kwd: _,
-            condition,
-            block,
-        } => {
-            encode_expression(resolver, func, *condition, builder);
+        ast::Statement::If(ast::If { condition, block }) => {
+            encode_expression(component, resolver, func, *condition, builder);
             builder.instruction(&enc::Instruction::If(enc::BlockType::Empty));
-            for statement in block.value.statements.iter() {
-                encode_statement(component, resolver, func, statement.as_ref(), builder);
+            for statement in block.iter() {
+                let statement = component.component.arenas.get_statement(*statement);
+                encode_statement(component, resolver, func, statement, builder);
             }
             builder.instruction(&enc::Instruction::End);
         }
-        ast::Statement::Return {
-            return_kwd: _,
-            expression,
-        } => {
-            encode_expression(resolver, func, *expression, builder);
+        ast::Statement::Return(ast::Return { expression }) => {
+            encode_expression(component, resolver, func, *expression, builder);
             builder.instruction(&enc::Instruction::Return);
         }
     };
 }
 
+/// A simple helper that calls EncodeExpression::encode
 fn encode_expression(
+    component: &ResolvedComponent,
     resolver: &FunctionResolver,
     func: &ast::Function,
     expression: ExpressionId,
     builder: &mut enc::Function,
 ) {
-    match func.expressions.get_exp(expression) {
-        ast::Expression::Unary { .. } => {
-            todo!()
-        }
-
-        ast::Expression::Binary {
-            left,
-            operator,
-            right,
-        } => {
-            encode_expression(resolver, func, *left, builder);
-            encode_expression(resolver, func, *right, builder);
-
-            let inner_valtype = resolver.expression_types.get(left).unwrap();
-            encode_bin_op(operator.as_ref(), inner_valtype, builder);
-        }
-
-        ast::Expression::Call { call } => {
-            for arg in call.args.iter() {
-                encode_expression(resolver, func, *arg, builder);
-            }
-            let index = match resolver.bindings.get(&call.name_id).unwrap() {
-                ItemId::Import(import) => import.index(),
-                ItemId::Function(function) => function.index(),
-                _ => panic!(""),
-            };
-            builder.instruction(&enc::Instruction::Call(index as u32));
-        }
-
-        ast::Expression::Identifier { ident: _, name_id } => {
-            match resolver.bindings.get(name_id).unwrap() {
-                ItemId::Import(_) => unimplemented!(),
-                ItemId::Global(global) => {
-                    builder.instruction(&enc::Instruction::GlobalGet(global.index() as u32));
-                }
-                ItemId::Param(param) => {
-                    let local_index = param.index();
-                    builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
-                }
-                ItemId::Local(local) => {
-                    let local_index = local.index() + func.signature.fn_type.arguments.len();
-                    builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
-                }
-                ItemId::Function(_) => unimplemented!(),
-            }
-        }
-
-        ast::Expression::Literal { literal } => {
-            let valtype = resolver.expression_types.get(&expression).unwrap();
-            encode_literal_expr(builder, valtype, literal.as_ref());
-        }
-    }
+    let valtype = resolver.expression_types.get(&expression).unwrap();
+    let expr = component.component.arenas.expr().get_exp(expression);
+    expr.encode(valtype, resolver, func, builder);
 }
 
-fn encode_bin_op(bin_op: &BinaryOp, valtype: &ValType, builder: &mut enc::Function) {
-    let core_valtype = core_type_of(&valtype);
-    let signedness = signedness_of(&valtype);
+// fn encode_bin_op(bin_op: &BinaryOp, valtype: &ValType, builder: &mut enc::Function) {
+//     let core_valtype = core_type_of(&valtype);
+//     let signedness = signedness_of(&valtype);
 
-    let instruction = match (bin_op, core_valtype, signedness) {
-        // Multiply
-        (ast::BinaryOp::Mult, enc::ValType::I32, _) => enc::Instruction::I32Mul,
-        (ast::BinaryOp::Mult, enc::ValType::I64, _) => enc::Instruction::I64Mul,
-        (ast::BinaryOp::Mult, enc::ValType::F32, _) => enc::Instruction::F32Mul,
-        (ast::BinaryOp::Mult, enc::ValType::F64, _) => enc::Instruction::F64Mul,
-        (ast::BinaryOp::Mult, vtype, _) => panic!("Cannot multiply type {:?}", vtype),
-        // Divide
-        (ast::BinaryOp::Div, enc::ValType::I32, S) => enc::Instruction::I32DivS,
-        (ast::BinaryOp::Div, enc::ValType::I32, U) => enc::Instruction::I32DivU,
-        (ast::BinaryOp::Div, enc::ValType::I64, S) => enc::Instruction::I64DivS,
-        (ast::BinaryOp::Div, enc::ValType::I64, U) => enc::Instruction::I64DivU,
-        (ast::BinaryOp::Div, enc::ValType::F32, _) => enc::Instruction::F32Div,
-        (ast::BinaryOp::Div, enc::ValType::F64, _) => enc::Instruction::F64Div,
-        (ast::BinaryOp::Div, vtype, _) => panic!("Cannot divide type {:?}", vtype),
-        // Modulo
-        (ast::BinaryOp::Mod, _, _) => todo!(),
-        // Addition
-        (ast::BinaryOp::Add, enc::ValType::I32, _) => enc::Instruction::I32Add,
-        (ast::BinaryOp::Add, enc::ValType::I64, _) => enc::Instruction::I64Add,
-        (ast::BinaryOp::Add, enc::ValType::F32, _) => enc::Instruction::F32Add,
-        (ast::BinaryOp::Add, enc::ValType::F64, _) => enc::Instruction::F64Add,
-        // Subtraction
-        (ast::BinaryOp::Sub, enc::ValType::I32, _) => enc::Instruction::I32Sub,
-        (ast::BinaryOp::Sub, enc::ValType::I64, _) => enc::Instruction::I64Sub,
-        (ast::BinaryOp::Sub, enc::ValType::F32, _) => enc::Instruction::F32Sub,
-        (ast::BinaryOp::Sub, enc::ValType::F64, _) => enc::Instruction::F64Sub,
-        (ast::BinaryOp::BitShiftL, _, _) => todo!(),
-        (ast::BinaryOp::BitShiftR, _, _) => todo!(),
-        (ast::BinaryOp::ArithShiftR, _, _) => todo!(),
-        // Less than
-        (ast::BinaryOp::LT, enc::ValType::I32, S) => enc::Instruction::I32LtS,
-        (ast::BinaryOp::LT, enc::ValType::I32, U) => enc::Instruction::I32LtU,
-        (ast::BinaryOp::LT, enc::ValType::I64, S) => enc::Instruction::I64LtS,
-        (ast::BinaryOp::LT, enc::ValType::I64, U) => enc::Instruction::I64LtU,
-        (ast::BinaryOp::LT, enc::ValType::F32, _) => enc::Instruction::F32Lt,
-        (ast::BinaryOp::LT, enc::ValType::F64, _) => enc::Instruction::F64Lt,
-        // Less than equal
-        (ast::BinaryOp::LTE, enc::ValType::I32, S) => enc::Instruction::I32LeS,
-        (ast::BinaryOp::LTE, enc::ValType::I32, U) => enc::Instruction::I32LeU,
-        (ast::BinaryOp::LTE, enc::ValType::I64, S) => enc::Instruction::I64LeS,
-        (ast::BinaryOp::LTE, enc::ValType::I64, U) => enc::Instruction::I64LeU,
-        (ast::BinaryOp::LTE, enc::ValType::F32, _) => enc::Instruction::F32Le,
-        (ast::BinaryOp::LTE, enc::ValType::F64, _) => enc::Instruction::F64Le,
-        // Greater than
-        (ast::BinaryOp::GT, enc::ValType::I32, S) => enc::Instruction::I32GtS,
-        (ast::BinaryOp::GT, enc::ValType::I32, U) => enc::Instruction::I32GtU,
-        (ast::BinaryOp::GT, enc::ValType::I64, S) => enc::Instruction::I64GtS,
-        (ast::BinaryOp::GT, enc::ValType::I64, U) => enc::Instruction::I64GtU,
-        (ast::BinaryOp::GT, enc::ValType::F32, _) => enc::Instruction::F32Gt,
-        (ast::BinaryOp::GT, enc::ValType::F64, _) => enc::Instruction::F64Gt,
-        // Greater than or equal
-        (ast::BinaryOp::GTE, enc::ValType::I32, S) => enc::Instruction::I32GeS,
-        (ast::BinaryOp::GTE, enc::ValType::I32, U) => enc::Instruction::I32GeU,
-        (ast::BinaryOp::GTE, enc::ValType::I64, S) => enc::Instruction::I64GeS,
-        (ast::BinaryOp::GTE, enc::ValType::I64, U) => enc::Instruction::I64GeU,
-        (ast::BinaryOp::GTE, enc::ValType::F32, _) => enc::Instruction::F32Ge,
-        (ast::BinaryOp::GTE, enc::ValType::F64, _) => enc::Instruction::F64Ge,
-        // Equal
-        (ast::BinaryOp::EQ, enc::ValType::I32, _) => enc::Instruction::I32Eq,
-        (ast::BinaryOp::EQ, enc::ValType::I64, _) => enc::Instruction::I64Eq,
-        (ast::BinaryOp::EQ, enc::ValType::F32, _) => enc::Instruction::F32Eq,
-        (ast::BinaryOp::EQ, enc::ValType::F64, _) => enc::Instruction::F64Eq,
-        // Not equal
-        (ast::BinaryOp::NEQ, enc::ValType::I32, _) => enc::Instruction::I32Eq,
-        (ast::BinaryOp::NEQ, enc::ValType::I64, _) => enc::Instruction::I64Eq,
-        (ast::BinaryOp::NEQ, enc::ValType::F32, _) => enc::Instruction::F32Eq,
-        (ast::BinaryOp::NEQ, enc::ValType::F64, _) => enc::Instruction::F64Eq,
-        // Bitwise and
-        (ast::BinaryOp::BitAnd, _, _) => todo!(),
-        (ast::BinaryOp::BitXor, _, _) => todo!(),
-        (ast::BinaryOp::BitOr, _, _) => todo!(),
-        (ast::BinaryOp::LogicalAnd, _, _) => todo!(),
-        (ast::BinaryOp::LogicalOr, _, _) => todo!(),
-        _ => todo!()
-    };
-    builder.instruction(&instruction);
-}
+//     let instruction = match (bin_op, core_valtype, signedness) {
+//         // Multiply
+//         (ast::BinaryOp::Mult, enc::ValType::I32, _) => enc::Instruction::I32Mul,
+//         (ast::BinaryOp::Mult, enc::ValType::I64, _) => enc::Instruction::I64Mul,
+//         (ast::BinaryOp::Mult, enc::ValType::F32, _) => enc::Instruction::F32Mul,
+//         (ast::BinaryOp::Mult, enc::ValType::F64, _) => enc::Instruction::F64Mul,
+//         (ast::BinaryOp::Mult, vtype, _) => panic!("Cannot multiply type {:?}", vtype),
+//         // Divide
+//         (ast::BinaryOp::Div, enc::ValType::I32, S) => enc::Instruction::I32DivS,
+//         (ast::BinaryOp::Div, enc::ValType::I32, U) => enc::Instruction::I32DivU,
+//         (ast::BinaryOp::Div, enc::ValType::I64, S) => enc::Instruction::I64DivS,
+//         (ast::BinaryOp::Div, enc::ValType::I64, U) => enc::Instruction::I64DivU,
+//         (ast::BinaryOp::Div, enc::ValType::F32, _) => enc::Instruction::F32Div,
+//         (ast::BinaryOp::Div, enc::ValType::F64, _) => enc::Instruction::F64Div,
+//         (ast::BinaryOp::Div, vtype, _) => panic!("Cannot divide type {:?}", vtype),
+//         // Modulo
+//         (ast::BinaryOp::Mod, _, _) => todo!(),
+//         // Addition
+//         (ast::BinaryOp::Add, enc::ValType::I32, _) => enc::Instruction::I32Add,
+//         (ast::BinaryOp::Add, enc::ValType::I64, _) => enc::Instruction::I64Add,
+//         (ast::BinaryOp::Add, enc::ValType::F32, _) => enc::Instruction::F32Add,
+//         (ast::BinaryOp::Add, enc::ValType::F64, _) => enc::Instruction::F64Add,
+//         // Subtraction
+//         (ast::BinaryOp::Sub, enc::ValType::I32, _) => enc::Instruction::I32Sub,
+//         (ast::BinaryOp::Sub, enc::ValType::I64, _) => enc::Instruction::I64Sub,
+//         (ast::BinaryOp::Sub, enc::ValType::F32, _) => enc::Instruction::F32Sub,
+//         (ast::BinaryOp::Sub, enc::ValType::F64, _) => enc::Instruction::F64Sub,
+//         (ast::BinaryOp::BitShiftL, _, _) => todo!(),
+//         (ast::BinaryOp::BitShiftR, _, _) => todo!(),
+//         (ast::BinaryOp::ArithShiftR, _, _) => todo!(),
+//         // Less than
+//         (ast::BinaryOp::LT, enc::ValType::I32, S) => enc::Instruction::I32LtS,
+//         (ast::BinaryOp::LT, enc::ValType::I32, U) => enc::Instruction::I32LtU,
+//         (ast::BinaryOp::LT, enc::ValType::I64, S) => enc::Instruction::I64LtS,
+//         (ast::BinaryOp::LT, enc::ValType::I64, U) => enc::Instruction::I64LtU,
+//         (ast::BinaryOp::LT, enc::ValType::F32, _) => enc::Instruction::F32Lt,
+//         (ast::BinaryOp::LT, enc::ValType::F64, _) => enc::Instruction::F64Lt,
+//         // Less than equal
+//         (ast::BinaryOp::LTE, enc::ValType::I32, S) => enc::Instruction::I32LeS,
+//         (ast::BinaryOp::LTE, enc::ValType::I32, U) => enc::Instruction::I32LeU,
+//         (ast::BinaryOp::LTE, enc::ValType::I64, S) => enc::Instruction::I64LeS,
+//         (ast::BinaryOp::LTE, enc::ValType::I64, U) => enc::Instruction::I64LeU,
+//         (ast::BinaryOp::LTE, enc::ValType::F32, _) => enc::Instruction::F32Le,
+//         (ast::BinaryOp::LTE, enc::ValType::F64, _) => enc::Instruction::F64Le,
+//         // Greater than
+//         (ast::BinaryOp::GT, enc::ValType::I32, S) => enc::Instruction::I32GtS,
+//         (ast::BinaryOp::GT, enc::ValType::I32, U) => enc::Instruction::I32GtU,
+//         (ast::BinaryOp::GT, enc::ValType::I64, S) => enc::Instruction::I64GtS,
+//         (ast::BinaryOp::GT, enc::ValType::I64, U) => enc::Instruction::I64GtU,
+//         (ast::BinaryOp::GT, enc::ValType::F32, _) => enc::Instruction::F32Gt,
+//         (ast::BinaryOp::GT, enc::ValType::F64, _) => enc::Instruction::F64Gt,
+//         // Greater than or equal
+//         (ast::BinaryOp::GTE, enc::ValType::I32, S) => enc::Instruction::I32GeS,
+//         (ast::BinaryOp::GTE, enc::ValType::I32, U) => enc::Instruction::I32GeU,
+//         (ast::BinaryOp::GTE, enc::ValType::I64, S) => enc::Instruction::I64GeS,
+//         (ast::BinaryOp::GTE, enc::ValType::I64, U) => enc::Instruction::I64GeU,
+//         (ast::BinaryOp::GTE, enc::ValType::F32, _) => enc::Instruction::F32Ge,
+//         (ast::BinaryOp::GTE, enc::ValType::F64, _) => enc::Instruction::F64Ge,
+//         // Equal
+//         (ast::BinaryOp::EQ, enc::ValType::I32, _) => enc::Instruction::I32Eq,
+//         (ast::BinaryOp::EQ, enc::ValType::I64, _) => enc::Instruction::I64Eq,
+//         (ast::BinaryOp::EQ, enc::ValType::F32, _) => enc::Instruction::F32Eq,
+//         (ast::BinaryOp::EQ, enc::ValType::F64, _) => enc::Instruction::F64Eq,
+//         // Not equal
+//         (ast::BinaryOp::NEQ, enc::ValType::I32, _) => enc::Instruction::I32Eq,
+//         (ast::BinaryOp::NEQ, enc::ValType::I64, _) => enc::Instruction::I64Eq,
+//         (ast::BinaryOp::NEQ, enc::ValType::F32, _) => enc::Instruction::F32Eq,
+//         (ast::BinaryOp::NEQ, enc::ValType::F64, _) => enc::Instruction::F64Eq,
+//         // Bitwise and
+//         (ast::BinaryOp::BitAnd, _, _) => todo!(),
+//         (ast::BinaryOp::BitXor, _, _) => todo!(),
+//         (ast::BinaryOp::BitOr, _, _) => todo!(),
+//         (ast::BinaryOp::LogicalAnd, _, _) => todo!(),
+//         (ast::BinaryOp::LogicalOr, _, _) => todo!(),
+//         _ => todo!(),
+//     };
+//     builder.instruction(&instruction);
+// }
 
 fn core_type_of(valtype: &ValType) -> enc::ValType {
     match valtype {
@@ -508,7 +457,7 @@ fn core_type_of(valtype: &ValType) -> enc::ValType {
 enum Signedness {
     Unsigned,
     Signed,
-    NotApplicable
+    NotApplicable,
 }
 
 const S: Signedness = Signedness::Signed;
@@ -522,36 +471,31 @@ fn signedness_of(valtype: &ValType) -> Signedness {
     }
 }
 
-fn encode_literal_expr(builder: &mut enc::Function, valtype: &ValType, literal: &Literal) {
-    let instruction = match (valtype, &literal) {
-        (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
-            enc::Instruction::I32Const(*value as i32)
+impl ast::Literal {
+    fn to_constexpr(&self, valtype: &ValType) -> enc::ConstExpr {
+        match (valtype, self) {
+            (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
+                enc::ConstExpr::i32_const(*value as i32)
+            }
+            (ValType::S64 | ValType::U64, Literal::Integer(value)) => {
+                enc::ConstExpr::i64_const(*value as i64)
+            }
+            (ValType::F32, Literal::Float(value)) => enc::ConstExpr::f32_const(*value as f32),
+            (ValType::F64, Literal::Float(value)) => enc::ConstExpr::f64_const(*value),
+            _ => todo!(),
         }
-        (ValType::S64 | ValType::U64, Literal::Integer(value)) => {
-            enc::Instruction::I64Const(*value as i64)
-        }
-        (ValType::F32, Literal::Float(value)) => enc::Instruction::F32Const(*value as f32),
-        (ValType::F64, Literal::Float(value)) => enc::Instruction::F64Const(*value),
-        _ => todo!(),
-    };
-    builder.instruction(&instruction);
-}
-
-fn literal_to_constexpr(valtype: &ValType, literal: &Literal) -> enc::ConstExpr {
-    match (valtype, &literal) {
-        (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
-            enc::ConstExpr::i32_const(*value as i32)
-        }
-        (ValType::S64 | ValType::U64, Literal::Integer(value)) => {
-            enc::ConstExpr::i64_const(*value as i64)
-        }
-        (ValType::F32, Literal::Float(value)) => enc::ConstExpr::f32_const(*value as f32),
-        (ValType::F64, Literal::Float(value)) => enc::ConstExpr::f64_const(*value),
-        _ => todo!(),
     }
 }
 
-fn encode_valtype(valtype: &ValType) -> enc::ValType {
+fn encode_inferred_type(inferred: &ResolvedType, component: &ResolvedComponent) -> enc::ValType {
+    match inferred {
+        ResolvedType::Bool => enc::ValType::I32,
+        ResolvedType::ValType(type_id) => encode_valtype(*type_id, component),
+    }
+}
+
+fn encode_valtype(type_id: TypeId, component: &ResolvedComponent) -> enc::ValType {
+    let valtype = component.component.arenas.get_type(type_id);
     match valtype {
         ValType::U32 | ValType::S32 => enc::ValType::I32,
         ValType::U64 | ValType::S64 => enc::ValType::I64,
@@ -580,4 +524,156 @@ fn encode_comp_valtype(valtype: &ValType) -> enc::ComponentValType {
         ValType::Bool => PrimitiveValType::Bool,
     };
     enc::ComponentValType::Primitive(primitive)
+}
+
+//
+
+trait EncodeExpression {
+    fn encode(
+        &self,
+        valtype: &ValType,
+        resolver: &FunctionResolver,
+        func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> ();
+}
+
+impl EncodeExpression for ast::Expression {
+    fn encode(
+        &self,
+        valtype: &ValType,
+        resolver: &FunctionResolver,
+        func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> () {
+        let expr: &dyn EncodeExpression = match self {
+            ast::Expression::Identifier(expr) => expr,
+            ast::Expression::Literal(expr) => expr,
+            ast::Expression::Call(expr) => expr,
+
+            _ => todo!(),
+        };
+        expr.encode(valtype, resolver, func, builder);
+    }
+}
+
+impl EncodeExpression for ast::Identifier {
+    fn encode(
+        &self,
+        _valtype: &ValType,
+        resolver: &FunctionResolver,
+        func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> () {
+        match resolver.bindings.get(&self.ident).unwrap() {
+            ItemId::Import(_) => unimplemented!(),
+            ItemId::Global(global) => {
+                builder.instruction(&enc::Instruction::GlobalGet(global.index() as u32));
+            }
+            ItemId::Param(param) => {
+                let local_index = param.index();
+                builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
+            }
+            ItemId::Local(local) => {
+                let local_index = local.index() + func.signature.fn_type.arguments.len();
+                builder.instruction(&enc::Instruction::LocalGet(local_index as u32));
+            }
+            ItemId::Function(_) => unimplemented!(),
+        }
+    }
+}
+
+impl EncodeExpression for ast::Literal {
+    fn encode(
+        &self,
+        valtype: &ValType,
+        _resolver: &FunctionResolver,
+        _func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> () {
+        let instruction = match (valtype, self) {
+            (ValType::S32 | ValType::U32, Literal::Integer(value)) => {
+                enc::Instruction::I32Const(*value as i32)
+            }
+            (ValType::S64 | ValType::U64, Literal::Integer(value)) => {
+                enc::Instruction::I64Const(*value as i64)
+            }
+            (ValType::F32, Literal::Float(value)) => enc::Instruction::F32Const(*value as f32),
+            (ValType::F64, Literal::Float(value)) => enc::Instruction::F64Const(*value),
+            _ => todo!(),
+        };
+        builder.instruction(&instruction);
+    }
+}
+
+impl EncodeExpression for ast::Call {
+    fn encode(
+        &self,
+        _valtype: &ValType,
+        resolver: &FunctionResolver,
+        func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> () {
+        for arg in self.args.iter() {
+            encode_expression(component, resolver, func, *arg, builder);
+        }
+        let index = match resolver.bindings.get(&self.ident).unwrap() {
+            ItemId::Import(import) => import.index(),
+            ItemId::Function(function) => function.index(),
+            _ => panic!(""),
+        };
+        builder.instruction(&enc::Instruction::Call(index as u32));
+    }
+}
+
+impl EncodeExpression for ast::Multiply {
+    fn encode(
+        &self,
+        valtype: &ValType,
+        resolver: &FunctionResolver,
+        func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> () {
+        let left = func.expressions.get_exp(self.left);
+        left.encode(valtype, resolver, func, builder);
+
+        let right = func.expressions.get_exp(self.right);
+        right.encode(valtype, resolver, func, builder);
+
+        let instruction = match core_type_of(valtype) {
+            enc::ValType::I32 => enc::Instruction::I32Mul,
+            enc::ValType::I64 => enc::Instruction::I64Mul,
+            enc::ValType::F32 => enc::Instruction::F32Mul,
+            enc::ValType::F64 => enc::Instruction::F64Mul,
+            vtype => panic!("Cannot multiply type {:?}", vtype),
+        };
+        builder.instruction(&instruction);
+    }
+}
+
+impl EncodeExpression for ast::Divide {
+    fn encode(
+        &self,
+        valtype: &ValType,
+        resolver: &FunctionResolver,
+        func: &ast::Function,
+        builder: &mut enc::Function,
+    ) -> () {
+        let left = func.exh.get_exp(self.left);
+        left.encode(valtype, resolver, func, builder);
+
+        let right = func.expressions.get_exp(self.right);
+        right.encode(valtype, resolver, func, builder);
+
+        let instruction = match (core_type_of(valtype), signedness_of(valtype)) {
+            (enc::ValType::I32, S) => enc::Instruction::I32DivS,
+            (enc::ValType::I32, U) => enc::Instruction::I32DivU,
+            (enc::ValType::I64, S) => enc::Instruction::I64DivS,
+            (enc::ValType::I64, U) => enc::Instruction::I64DivU,
+            (enc::ValType::F32, _) => enc::Instruction::F32Div,
+            (enc::ValType::F64, _) => enc::Instruction::F64Div,
+            _ => panic!("Cannot divide type {:?}", valtype),
+        };
+        builder.instruction(&instruction);
+    }
 }

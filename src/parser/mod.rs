@@ -42,10 +42,7 @@ pub enum ParserError {
     NotYetSupported { feature: String, token: Token },
 }
 
-pub fn parse(
-    src: Arc<NamedSource>,
-    tokens: Vec<TokenData>,
-) -> Result<Component, ParserError> {
+pub fn parse(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Result<Component, ParserError> {
     let mut input = ParseInput::new(src, tokens);
     parse_component(&mut input)
 }
@@ -122,11 +119,7 @@ impl ParseInput {
         result.ok_or(ParserError::EndOfInput)
     }
 
-    pub fn assert_next(
-        &mut self,
-        token: Token,
-        description: &str,
-    ) -> Result<Span, ParserError> {
+    pub fn assert_next(&mut self, token: Token, description: &str) -> Result<Span, ParserError> {
         let next = self.next()?;
         if next.token == token {
             Ok(next.span.clone())

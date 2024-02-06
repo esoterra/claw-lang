@@ -1,8 +1,8 @@
-use crate::ast::{types::ValType, M};
+use crate::ast::{Arenas, TypeId, ValType};
 use crate::lexer::Token;
 use crate::parser::{ParseInput, ParserError};
 
-pub fn parse_valtype(input: &mut ParseInput) -> Result<M<ValType>, ParserError> {
+pub fn parse_valtype(input: &mut ParseInput, arenas: &mut Arenas) -> Result<TypeId, ParserError> {
     let next = input.next()?;
     let span = next.span.clone();
     let valtype = match next.token {
@@ -14,5 +14,6 @@ pub fn parse_valtype(input: &mut ParseInput) -> Result<M<ValType>, ParserError> 
         Token::F64 => ValType::F64,
         _ => return Err(input.unsupported_error("Unsupported value type")),
     };
-    Ok(M::new(valtype, span))
+    let name_id = arenas.new_type(valtype, span);
+    Ok(name_id)
 }
