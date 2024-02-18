@@ -1,44 +1,37 @@
-use crate::ast::expressions::ExpressionId;
-use crate::ast::{
-    expressions::{BinaryOp, Expression, ExpressionData, Literal},
-    M,
-};
-use crate::ast::{Call, NameId};
+use crate::ast::Component;
+use crate::ast::{self, expressions::ExpressionId, merge, expressions::BinaryOp};
 use crate::lexer::Token;
 use crate::parser::{ParseInput, ParserError};
 
+use super::statements::parse_ident;
+
 pub fn parse_expression(
     input: &mut ParseInput,
-    data: &mut ExpressionData,
+    comp: &mut Component,
 ) -> Result<ExpressionId, ParserError> {
-    pratt_parse(input, data, 0)
+    pratt_parse(input, comp, 0)
 }
 
 /// Pratt parsing of expressions based on
 /// https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html
 fn pratt_parse(
     input: &mut ParseInput,
-    data: &mut ExpressionData,
+    comp: &mut Component,
     min_bp: u8,
 ) -> Result<ExpressionId, ParserError> {
-    let mut lhs = parse_leaf(input, data)?;
+    let mut lhs = parse_leaf(input, comp)?;
     loop {
         let checkpoint = input.checkpoint();
         if let Some(bin_op) = try_parse_bin_op(input) {
-            let (l_bp, r_bp) = infix_binding_power(bin_op.value);
+            let (l_bp, r_bp) = infix_binding_power(bin_op);
 
             if l_bp < min_bp {
                 input.restore(checkpoint);
                 break;
             }
 
-            let rhs = pratt_parse(input, data, r_bp)?;
-            let new_root = Expression::Binary {
-                left: lhs,
-                operator: bin_op,
-                right: rhs,
-            };
-            lhs = data.alloc_merge(new_root, lhs, rhs);
+            let rhs = pratt_parse(input, comp, r_bp)?;
+            lhs = comp.expr_mut().alloc_bin_op(bin_op, lhs, rhs);
         } else {
             break;
         }
@@ -46,60 +39,44 @@ fn pratt_parse(
     Ok(lhs)
 }
 
-fn parse_leaf(
-    input: &mut ParseInput,
-    data: &mut ExpressionData,
-) -> Result<ExpressionId, ParserError> {
+fn parse_leaf(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
     if input.peek()?.token == Token::LParen {
-        return parse_parenthetical(input, data);
+        return parse_parenthetical(input, comp);
     }
     if matches!(input.peekn(0), Some(Token::Identifier(_)))
         && matches!(input.peekn(1), Some(Token::LParen))
     {
-        let call = parse_call(input, data)?;
-        let id = data.alloc(
-            Expression::Call {
-                call: call.value.clone(),
-            },
-            call.span.clone(),
-        );
-        return Ok(id);
+        return parse_call(input, comp);
     }
     if matches!(input.peek()?.token, Token::Identifier(_)) {
-        let ident = parse_ident(input)?;
-        let span = ident.span.clone();
-        let id = data.alloc(
-            Expression::Identifier {
-                ident,
-                name_id: NameId::new(),
-            },
-            span,
-        );
-        return Ok(id);
+        return parse_ident_expr(input, comp);
     }
-    let literal = parse_literal(input)?;
-    let span = literal.span.clone();
-    let id = data.alloc(Expression::Literal { literal }, span);
-    return Ok(id);
+    parse_literal(input, comp)
 }
 
 fn parse_parenthetical(
     input: &mut ParseInput,
-    data: &mut ExpressionData,
+    comp: &mut Component,
 ) -> Result<ExpressionId, ParserError> {
     let _left = input.assert_next(Token::LParen, "Left parenthesis '('")?;
-    let inner = parse_expression(input, data)?;
+    let inner = parse_expression(input, comp)?;
     let _right = input.assert_next(Token::RParen, "Right parenthesis ')'")?;
     Ok(inner)
 }
 
 /// Parse an identifier
-pub fn parse_ident(input: &mut ParseInput) -> Result<M<String>, ParserError> {
+pub fn parse_ident_expr(
+    input: &mut ParseInput,
+    comp: &mut Component,
+) -> Result<ExpressionId, ParserError> {
     let checkpoint = input.checkpoint();
     let next = input.next()?;
     let span = next.span.clone();
     match next.token.clone() {
-        Token::Identifier(ident) => Ok(M::new(ident, span)),
+        Token::Identifier(ident) => {
+            let ident = comp.new_name(ident, span.clone());
+            Ok(comp.expr_mut().alloc_ident(ident, span))
+        }
         _ => {
             input.restore(checkpoint);
             Err(input.unexpected_token("Expected identifier"))
@@ -107,37 +84,27 @@ pub fn parse_ident(input: &mut ParseInput) -> Result<M<String>, ParserError> {
     }
 }
 
-fn parse_literal(input: &mut ParseInput) -> Result<M<Literal>, ParserError> {
+fn parse_literal(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
     let next = input.next()?;
-    let value = match &next.token {
+    let span = next.span.clone();
+    let literal = match &next.token {
         Token::StringLiteral(_value) => return Err(input.unsupported_error("StringLiteral")),
-        Token::DecIntLiteral(value) => Literal::Integer(*value),
-        Token::DecFloatLiteral(value) => Literal::Float(*value),
-        Token::BinLiteral(value) => Literal::Integer(*value),
-        Token::HexLiteral(value) => Literal::Integer(*value),
+        Token::DecIntLiteral(value) => ast::Literal::Integer(*value),
+        Token::DecFloatLiteral(value) => ast::Literal::Float(*value),
+        Token::BinLiteral(value) => ast::Literal::Integer(*value),
+        Token::HexLiteral(value) => ast::Literal::Integer(*value),
         _ => return Err(input.unexpected_token("Parse Literal")),
     };
-    Ok(M::new(value, next.span.clone()))
+    Ok(comp.expr_mut().alloc_literal(literal, span))
 }
 
-fn parse_call(
-    input: &mut ParseInput,
-    data: &mut ExpressionData,
-) -> Result<M<Call>, ParserError> {
-    let first = input.next()?;
-
-    let ident = match first.token.clone() {
-        Token::Identifier(ident) => ident,
-        _ => return Err(input.unexpected_token("Parse expression identifier")),
-    };
-    let ident = M::new(ident, first.span.clone());
-    let name_id = NameId::new();
-
+fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
+    let ident = parse_ident(input, comp)?;
     let lparen = input.assert_next(Token::LParen, "Function arguments")?;
 
     let mut args = Vec::new();
     let rparen = loop {
-        args.push(parse_expression(input, data)?);
+        args.push(parse_expression(input, comp)?);
 
         let token = input.next()?;
         match token.token {
@@ -147,20 +114,13 @@ fn parse_call(
         }
     };
 
-    Ok(M::new_range(
-        Call {
-            ident,
-            name_id,
-            args,
-        },
-        lparen,
-        rparen,
-    ))
+    let span = merge(&lparen, &rparen);
+
+    Ok(comp.expr_mut().alloc_call(ident, args, span))
 }
 
-fn try_parse_bin_op(input: &mut ParseInput) -> Option<M<BinaryOp>> {
+fn try_parse_bin_op(input: &mut ParseInput) -> Option<BinaryOp> {
     let next = input.peek().ok()?;
-    let span = next.span.clone();
     let op = match &next.token {
         Token::LogicalOr => BinaryOp::LogicalOr,
         Token::LogicalAnd => BinaryOp::LogicalAnd,
@@ -171,29 +131,29 @@ fn try_parse_bin_op(input: &mut ParseInput) -> Option<M<BinaryOp>> {
 
         Token::BitAnd => BinaryOp::BitAnd,
 
-        Token::EQ => BinaryOp::EQ,
-        Token::NEQ => BinaryOp::NEQ,
+        Token::EQ => BinaryOp::Equals,
+        Token::NEQ => BinaryOp::NotEquals,
 
-        Token::LT => BinaryOp::LT,
-        Token::LTE => BinaryOp::LTE,
-        Token::GT => BinaryOp::GT,
-        Token::GTE => BinaryOp::GTE,
+        Token::LT => BinaryOp::LessThan,
+        Token::LTE => BinaryOp::LessThanEqual,
+        Token::GT => BinaryOp::GreaterThan,
+        Token::GTE => BinaryOp::GreaterThanEqual,
 
         Token::BitShiftL => BinaryOp::BitShiftL,
         Token::BitShiftR => BinaryOp::BitShiftR,
         Token::ArithShiftR => BinaryOp::ArithShiftR,
 
         Token::Add => BinaryOp::Add,
-        Token::Sub => BinaryOp::Sub,
+        Token::Sub => BinaryOp::Subtract,
 
-        Token::Mult => BinaryOp::Mult,
-        Token::Div => BinaryOp::Div,
-        Token::Mod => BinaryOp::Mod,
+        Token::Mult => BinaryOp::Multiply,
+        Token::Div => BinaryOp::Divide,
+        Token::Mod => BinaryOp::Modulo,
 
         _ => return None,
     };
     let _ = input.next();
-    Some(M::new(op, span))
+    Some(op)
 }
 
 fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
@@ -207,29 +167,30 @@ fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
 
         BinaryOp::BitAnd => (50, 51),
 
-        BinaryOp::EQ | BinaryOp::NEQ => (60, 61),
+        BinaryOp::Equals | BinaryOp::NotEquals => (60, 61),
 
-        BinaryOp::LT | BinaryOp::LTE | BinaryOp::GT | BinaryOp::GTE => (70, 71),
+        BinaryOp::LessThan
+        | BinaryOp::LessThanEqual
+        | BinaryOp::GreaterThan
+        | BinaryOp::GreaterThanEqual => (70, 71),
 
         BinaryOp::BitShiftL | BinaryOp::BitShiftR | BinaryOp::ArithShiftR => (80, 81),
 
-        BinaryOp::Add | BinaryOp::Sub => (90, 91),
+        BinaryOp::Add | BinaryOp::Subtract => (90, 91),
 
-        BinaryOp::Mult | BinaryOp::Div | BinaryOp::Mod => (100, 101),
+        BinaryOp::Multiply | BinaryOp::Divide | BinaryOp::Modulo => (100, 101),
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::tests::{make_input, make_span};
-    use pretty_assertions::assert_eq;
+    use crate::parser::{make_input, make_span};
 
-    use crate::ast::expressions::{Expression, Literal};
+    use crate::ast::expressions::{ContextEq, Literal};
 
     #[test]
     fn parsing_supports_dec_integer() {
-        let mut data = ExpressionData::default();
         let cases = [
             ("0", 0, make_span(0, 1)),
             ("1", 1, make_span(0, 1)),
@@ -237,27 +198,23 @@ mod tests {
             ("129", 129, make_span(0, 3)),
         ];
         for (source, value, span) in cases {
-            let parsed_literal = M::new(Literal::Integer(value), span.clone());
-            let expected_expression = data.alloc(
-                Expression::Literal {
-                    literal: M::new(Literal::Integer(value), span.clone()),
-                },
-                span,
-            );
-            assert_eq!(
-                parse_literal(&mut make_input(source)).unwrap(),
-                parsed_literal
-            );
-            let found_leaf = parse_leaf(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_leaf, expected_expression));
-            let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_expression, expected_expression));
+            let (src, mut input) = make_input(source);
+            let mut comp = Component::new(src);
+            let expected_expression = comp
+                .expr_mut()
+                .alloc_literal(Literal::Integer(value), span.clone());
+
+            let found_literal = parse_literal(&mut input.clone(), &mut comp).unwrap();
+            assert!(found_literal.context_eq(&expected_expression, &comp));
+            let found_leaf = parse_leaf(&mut input.clone(), &mut comp).unwrap();
+            assert!(found_leaf.context_eq(&expected_expression, &comp));
+            let found_expression = parse_expression(&mut input, &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
         }
     }
 
     #[test]
     fn parsing_supports_idents() {
-        let mut data = ExpressionData::default();
         let cases = [
             ("foo", make_span(0, 3)),
             ("foobar", make_span(0, 6)),
@@ -265,26 +222,23 @@ mod tests {
             ("asdf2", make_span(0, 5)),
         ];
         for (source, span) in cases {
-            let expected_expression = data.alloc(
-                Expression::Identifier {
-                    ident: M::new(source.to_owned(), span.clone()),
-                    name_id: NameId::new(),
-                },
-                span.clone(),
-            );
-            let mut input = make_input(source);
-            let found_ident = parse_ident(&mut input).unwrap();
-            assert_eq!(M::new(source.to_owned(), span.clone()), found_ident);
-            let found_leaf = parse_leaf(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_leaf, expected_expression));
-            let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_expression, expected_expression));
+            let (src, mut input) = make_input(source);
+            let mut comp = Component::new(src);
+            let ident = comp.new_name(source.to_owned(), span.clone());
+            let expected_expression = comp.expr_mut().alloc_ident(ident, span.clone());
+            let found_ident = parse_ident_expr(&mut input.clone(), &mut comp).unwrap();
+            assert!(found_ident.context_eq(&expected_expression, &comp));
+
+            let found_leaf = parse_leaf(&mut input.clone(), &mut comp).unwrap();
+            assert!(found_leaf.context_eq(&expected_expression, &comp));
+
+            let found_expression = parse_expression(&mut input, &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
         }
     }
 
     #[test]
     fn parsing_supports_parenthesized_idents() {
-        let mut data = ExpressionData::default();
         // parenthesized, raw, raw-span
         let cases = [
             ("(foo)", "foo", make_span(1, 3)),
@@ -293,151 +247,100 @@ mod tests {
             ("(asdf2)", "asdf2", make_span(1, 5)),
         ];
         for (source, ident, span) in cases {
-            let expected_expression = data.alloc(
-                Expression::Identifier {
-                    ident: M::new(ident.to_owned(), span.clone()),
-                    name_id: NameId::new(),
-                },
-                span,
-            );
-            let found_expression = parse_parenthetical(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_expression, expected_expression));
-            let found_expression = parse_leaf(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_expression, expected_expression));
-            let found_expression = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(found_expression, expected_expression));
+            let (src, mut input) = make_input(source);
+            let mut comp = Component::new(src);
+            let ident = comp.new_name(ident.to_owned(), span.clone());
+            let expected_expression = comp.expr_mut().alloc_ident(ident, span.clone());
+            let found_expression =
+                parse_parenthetical(&mut input.clone(), &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
+            let found_expression = parse_leaf(&mut input.clone(), &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
+            let found_expression = parse_expression(&mut input, &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
         }
+    }
+
+    macro_rules! make_ast {
+        ($comp:expr, { $left:tt, $op:expr, $right:tt }) => {
+            {
+                let lhs = make_ast!($comp, $left);
+                let rhs = make_ast!($comp, $right);
+                $comp.expr_mut().alloc_bin_op($op, lhs, rhs)
+            }
+        };
+        ($comp:expr, ($val:expr => $span_l:expr, $span_r:expr)) => {
+            {
+                let expr = $val;
+                let span = make_span($span_l, $span_r);
+                $comp
+                    .expr_mut()
+                    .alloc_literal(Literal::Integer(expr), span)
+            }
+        };
     }
 
     #[test]
     fn parse_expression_respects_precedence() {
-        let mut data = ExpressionData::default();
-
-        macro_rules! lit {
-            ($val:expr => ($span_l:expr, $span_r:expr)) => {{
-                let expr = $val;
-                let span = make_span($span_l, $span_r);
-                data.alloc(
-                    Expression::Literal {
-                        literal: M::new(Literal::Integer(expr), span.clone()),
-                    },
-                    span,
-                )
-            }};
-        }
-
-        macro_rules! op {
-            ($op_val:expr => ($span_l:expr, $span_r:expr)) => {
-                M::new($op_val, make_span($span_l, $span_r))
-            };
-        }
-
-        macro_rules! bin {
-            ($left:expr, $op:expr, $right:expr) => {{
-                let lhs = $left;
-                let rhs = $right;
-                let bin_expr = Expression::Binary {
-                    left: lhs,
-                    operator: $op,
-                    right: rhs,
-                };
-                data.alloc_merge(bin_expr, lhs, rhs)
-            }};
-        }
-
         let source0 = "0 + 1 * 2";
-        let expected0 = bin!(
-            lit!(0 => (0, 1)),
-            op!(BinaryOp::Add => (2, 1)),
-            bin!(
-                lit!(1 => (4, 1)),
-                op!(BinaryOp::Mult => (6, 1)),
-                lit!(2 => (8, 1))
-            )
-        );
+        let (src0, input0) = make_input(source0);
+        let mut comp0 = Component::new(src0);
+        let expected0 = make_ast!(comp0, {
+            (0 => 0, 1),
+            BinaryOp::Add,
+            {
+                (1 => 4, 1),
+                BinaryOp::Multiply,
+                (2 => 8, 1)
+            }
+        });
 
         let source1 = "0 * 1 + 2";
-        let expected1 = bin!(
-            bin!(
-                lit!(0 => (0, 1)),
-                op!(BinaryOp::Mult => (2, 1)),
-                lit!(1 => (4, 1))
-            ),
-            op!(BinaryOp::Add => (6, 1)),
-            lit!(2 => (8, 1))
-        );
+        let (src1, input1) = make_input(source1);
+        let mut comp1 = Component::new(src1);
+        let expected1 = make_ast!(comp1, {
+            {
+                (0 => 0, 1),
+                BinaryOp::Multiply,
+                (1 => 4, 1)
+            },
+            BinaryOp::Add,
+            (2 => 8, 1)
+        });
 
-        let cases = [(source0, expected0), (source1, expected1)];
+        let cases = [(input0, comp0, expected0), (input1, comp1, expected1)];
 
-        for (source, expected) in cases {
-            let result = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(result, expected));
+        for (mut input, mut comp, expected) in cases {
+            let result = parse_expression(&mut input, &mut comp).unwrap();
+            assert!(result.context_eq(&expected, &comp));
         }
     }
 
     #[test]
     fn parse_expression_respects_associativity() {
-        let mut data = ExpressionData::default();
-
-        macro_rules! lit {
-            ($val:expr => ($span_l:expr, $span_r:expr)) => {{
-                let expr = $val;
-                let span = make_span($span_l, $span_r);
-                data.alloc(
-                    Expression::Literal {
-                        literal: M::new(Literal::Integer(expr), span.clone()),
-                    },
-                    span,
-                )
-            }};
-        }
-
-        macro_rules! op {
-            ($op_val:expr => ($span_l:expr, $span_r:expr)) => {
-                M::new($op_val, make_span($span_l, $span_r))
-            };
-        }
-
-        macro_rules! bin {
-            ($left:expr, $op:expr, $right:expr) => {{
-                let lhs = $left;
-                let rhs = $right;
-                let bin_expr = Expression::Binary {
-                    left: lhs,
-                    operator: $op,
-                    right: rhs,
-                };
-                data.alloc_merge(bin_expr, lhs, rhs)
-            }};
-        }
-
         let source0 = "0 + 1 + 2";
-        let expected0 = bin!(
-            bin!(
-                lit!(0 => (0, 1)),
-                op!(BinaryOp::Add => (2, 1)),
-                lit!(1 => (4, 1))
-            ),
-            op!(BinaryOp::Add => (6, 1)),
-            lit!(2 => (8, 1))
-        );
+        let (src0, input0) = make_input(source0);
+        let mut comp0 = Component::new(src0);
+        let expected0 = make_ast!(comp0, {
+            { (0 => 0, 1), BinaryOp::Add, (1 => 4, 1) },
+            BinaryOp::Add,
+            (2 => 8, 1)
+        });
 
         let source1 = "0 * 1 * 2";
-        let expected1 = bin!(
-            bin!(
-                lit!(0 => (0, 1)),
-                op!(BinaryOp::Mult => (2, 1)),
-                lit!(1 => (4, 1))
-            ),
-            op!(BinaryOp::Mult => (6, 1)),
-            lit!(2 => (8, 1))
-        );
+        let (src1, input1) = make_input(source1);
+        let mut comp1 = Component::new(src1);
+        let expected1 = make_ast!(comp1, {
+            { (0 => 0, 1), BinaryOp::Multiply, (1 => 4, 1) },
+            BinaryOp::Multiply,
+            (2 => 8, 1)
+        });
 
-        let cases = [(source0, expected0), (source1, expected1)];
+        let cases = [(input0, comp0, expected0), (input1, comp1, expected1)];
 
-        for (source, expected) in cases {
-            let result = parse_expression(&mut make_input(source), &mut data).unwrap();
-            assert!(data.eq(result, expected));
+        for (mut input, mut comp, expected) in cases {
+            let result = parse_expression(&mut input, &mut comp).unwrap();
+            assert!(result.context_eq(&expected, &comp));
         }
     }
 }

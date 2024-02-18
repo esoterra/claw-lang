@@ -1,71 +1,17 @@
-use std::sync::atomic;
-use std::sync::atomic::AtomicUsize;
-
 pub mod component;
 pub mod expressions;
+pub mod statements;
 pub mod types;
 
+use cranelift_entity::entity_impl;
 use miette::SourceSpan;
 
 pub type Span = SourceSpan;
 
 pub use component::*;
 pub use expressions::*;
+pub use statements::*;
 pub use types::*;
-
-/// The metadata wrapper type
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct M<T> {
-    pub span: Span,
-    pub value: T,
-}
-
-impl<T> AsRef<T> for M<T> {
-    fn as_ref(&self) -> &T {
-        &self.value
-    }
-}
-
-impl<T> M<T> {
-    pub fn new(value: T, span: Span) -> Self {
-        M { span, value }
-    }
-
-    pub fn new_range(value: T, left: Span, right: Span) -> Self {
-        let span = merge(&left, &right);
-        M { span, value }
-    }
-}
-
-/// The metadata wrapper type
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
-pub struct MBox<T> {
-    pub span: Span,
-    pub value: Box<T>,
-}
-
-impl<T> MBox<T> {
-    pub fn new(value: T, span: Span) -> Self {
-        MBox {
-            span,
-            value: Box::new(value),
-        }
-    }
-
-    pub fn new_range(value: T, left: Span, right: Span) -> Self {
-        let span = merge(&left, &right);
-        MBox {
-            span,
-            value: Box::new(value),
-        }
-    }
-}
-
-impl<T> AsRef<T> for MBox<T> {
-    fn as_ref(&self) -> &T {
-        &self.value
-    }
-}
 
 pub fn merge(left: &Span, right: &Span) -> Span {
     let left_most = left.offset();
@@ -74,12 +20,21 @@ pub fn merge(left: &Span, right: &Span) -> Span {
     Span::from((left_most, len))
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct NameId(usize);
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct NameId(u32);
+entity_impl!(NameId, "name");
 
-impl NameId {
-    pub fn new() -> Self {
-        static NAME_COUNTER: AtomicUsize = AtomicUsize::new(0usize);
-        NameId(NAME_COUNTER.fetch_add(1usize, atomic::Ordering::SeqCst))
+#[cfg(test)]
+impl ContextEq<Component> for NameId {
+    fn context_eq(&self, other: &Self, context: &Component) -> bool {
+        let self_str = context.get_name(*self);
+        let other_str = context.get_name(*other);
+        let str_eq = self_str == other_str;
+
+        let self_span = context.name_span(*self);
+        let other_span = context.name_span(*other);
+        let span_eq = self_span == other_span;
+
+        str_eq && span_eq
     }
 }

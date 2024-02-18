@@ -64,7 +64,14 @@ impl Compile {
         };
 
         let generator = claw::codegen::CodeGenerator::default();
-        let wasm = generator.generate(&resolved);
+        let wasm = match generator.generate(&resolved) {
+            Ok(wasm) => wasm,
+            Err(error) => {
+                println!("{:?}", Report::new(error));
+                return None;
+            },
+        };
+
         match fs::write(&self.output, wasm) {
             Ok(_) => println!("Done"),
             Err(err) => println!("Error: {:?}", err),
