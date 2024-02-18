@@ -1,31 +1,53 @@
 use crate::{
     ast::{
-        self, Call, Expression, ExpressionId, FunctionId, GlobalId, ImportId, NameId, ValType, M,
-    },
-    stack_map::StackMap,
+        self, ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, StatementId, TypeId
+    }, context::{WithContext, C}, stack_map::StackMap
 };
-use cranelift_entity::{entity_impl, EntityRef, PrimaryMap};
-use std::{collections::HashMap, sync::Arc};
+use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
+use std::collections::{HashMap, VecDeque};
 
-use miette::{Diagnostic, NamedSource, SourceSpan};
-use petgraph::{prelude::GraphMap, Undirected};
+use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
 #[derive(Debug)]
 struct ComponentContext<'ctx> {
-    src: Arc<NamedSource>,
+    src: crate::Source,
     component: &'ctx ast::Component,
     mappings: HashMap<String, ItemId>,
     global_vals: HashMap<GlobalId, ast::Literal>,
 }
 
-struct FuncContext<'ctx> {
+pub struct FuncContext<'ctx> {
     parent: &'ctx ComponentContext<'ctx>,
     func: &'ctx ast::Function,
 }
 
+impl<'ctx> FuncContext<'ctx> {
+    fn comp(&self) -> &ast::Component {
+        &self.parent.component
+    }
+
+    fn name_error<T>(&self, ident: NameId) -> Result<T, ResolverError> {
+        let span = self.comp().name_span(ident);
+        let ident = self.comp().get_name(ident).to_owned();
+        Err(ResolverError::NameError {
+            src: self.parent.src.clone(),
+            span,
+            ident,
+        })
+    }
+
+    fn get_expr(&self, expression: ExpressionId) -> &ast::Expression {
+        self.comp().expr().get_exp(expression)
+    }
+
+    fn get_stmt(&self, statement: StatementId) -> &ast::Statement {
+        self.comp().get_statement(statement)
+    }
+}
+
 pub struct ResolvedComponent {
-    pub src: Arc<NamedSource>,
+    pub src: crate::Source,
     pub component: ast::Component,
     pub global_vals: HashMap<GlobalId, ast::Literal>,
     pub resolved_funcs: HashMap<FunctionId, FunctionResolver>,
@@ -50,80 +72,96 @@ entity_impl!(LocalId, "local");
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ResolverError {
-    #[diagnostic()]
     #[error("Failed to resolve")]
     Base {
         #[source_code]
-        src: Arc<NamedSource>,
+        src: crate::Source,
         #[label("This bit")]
         span: SourceSpan,
     },
-    #[diagnostic()]
     #[error("Failed to resolve name \"{ident}\"")]
     NameError {
         #[source_code]
-        src: Arc<NamedSource>,
+        src: crate::Source,
         #[label("Name referenced here")]
         span: SourceSpan,
         ident: String,
     },
-    #[diagnostic()]
     #[error("Function call with wrong number of arguments \"{ident}\"")]
     CallArgumentsMismatch {
         #[source_code]
-        src: Arc<NamedSource>,
+        src: crate::Source,
         #[label("Here")]
         span: SourceSpan,
         ident: String,
     },
-    #[diagnostic()]
-    #[error("Errors when resolving types")]
-    TypeErrors {
-        #[related]
-        errors: Vec<TypeError>,
-    },
-    #[diagnostic()]
-    #[error("Not yet supported")]
-    NotYetSupported,
+    #[error("{0} is not yet supported")]
+    NotYetSupported(String),
 }
 
 #[derive(Error, Debug, Diagnostic)]
-pub enum TypeError {
-    #[diagnostic()]
-    #[error("Could not determine type of expression")]
-    TypeUnknown {
+pub enum Notification {
+    #[error("Skipping already resolved expression")]
+    ExpressionSkipped {
         #[source_code]
-        src: Arc<NamedSource>,
-        #[label("Here")]
+        src: crate::Source,
+        #[label("here")]
         span: SourceSpan,
     },
-
-    #[diagnostic()]
-    #[error("Encountered conflicts when resolving types")]
-    TypeConflict,
+    #[error("Resolved type of expression")]
+    ExpressionResolved {
+        #[source_code]
+        src: crate::Source,
+        #[label("here")]
+        span: SourceSpan,
+    },
+    #[error("No parent exists to be updated for")]
+    ExpressionOrphan {
+        #[source_code]
+        src: crate::Source,
+        #[label("here")]
+        span: SourceSpan,
+    },
+    #[error("Skipping already resolved local")]
+    LocalSkipped {
+        #[source_code]
+        src: crate::Source,
+        #[label("here")]
+        span: SourceSpan,
+    },
+    #[error("Resolved type of local")]
+    LocalResolved {
+        #[source_code]
+        src: crate::Source,
+        #[label("here")]
+        span: SourceSpan,
+    },
 }
 
 pub fn resolve(
-    src: Arc<NamedSource>,
+    src: crate::Source,
     component: ast::Component,
 ) -> Result<ResolvedComponent, ResolverError> {
     let mut mappings: HashMap<String, ItemId> = Default::default();
 
     for (id, import) in component.imports.iter() {
-        mappings.insert(import.name.as_ref().clone(), ItemId::Import(id));
+        let name = component.get_name(import.ident);
+        mappings.insert(name.to_owned(), ItemId::Import(id));
     }
     for (id, global) in component.globals.iter() {
-        mappings.insert(global.ident.as_ref().clone(), ItemId::Global(id));
+        let name = component.get_name(global.ident);
+        mappings.insert(name.to_owned(), ItemId::Global(id));
     }
     for (id, function) in component.functions.iter() {
-        mappings.insert(function.signature.name.as_ref().clone(), ItemId::Function(id));
+        let name = component.get_name(function.signature.ident);
+        mappings.insert(name.to_owned(), ItemId::Function(id));
     }
 
     let mut global_vals: HashMap<GlobalId, ast::Literal> = HashMap::new();
 
     for (id, global) in component.globals.iter() {
-        let global_val = match global.expressions.get_exp(global.init_value) {
-            Expression::Literal { literal } => literal.value.clone(),
+        let global_val = match component.expr().get_exp(global.init_value) {
+            ast::Expression::Literal(literal) => literal.clone(),
             _ => panic!("Only literal expressions allowed in global initializer"),
         };
         global_vals.insert(id, global_val);
@@ -160,28 +198,38 @@ pub fn resolve(
     })
 }
 
+#[derive(Default)]
 pub struct FunctionResolver {
+    params: PrimaryMap<ParamId, TypeId>,
+
     // Name Resolution
     /// Entries for each unique local
     pub locals: PrimaryMap<LocalId, LocalInfo>,
+    /// The span for each unique local
+    pub local_spans: HashMap<LocalId, Span>,
     /// The association between identifiers and their subjects during resolving
     mapping: StackMap<String, ItemId>,
     /// The resolved bindings of expressions to subjects
     pub bindings: HashMap<NameId, ItemId>,
 
     // Type Resolution
-    /// The type of each local variable
-    pub local_types: HashMap<LocalId, ValType>,
+    resolver_queue: VecDeque<(ResolvedType, ResolverItem)>,
+
+    // The parent expression (if there is one) for each expression
+    expr_parent_map: HashMap<ExpressionId, ExpressionId>,
     /// The type of each expression
-    pub expression_types: HashMap<ExpressionId, ValType>,
-    /// Types of items which are constrained to be equal
-    type_constraints: GraphMap<TypedItem, (), Undirected>,
+    pub expression_types: HashMap<ExpressionId, ResolvedType>,
+
+    local_uses_list_pool: ListPool<ExpressionId>,
+    // The expressions which use a given local
+    local_uses: HashMap<LocalId, EntityList<ExpressionId>>,
+
+    // Tye type of each local
+    pub local_types: HashMap<LocalId, ResolvedType>,
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
-enum TypedItem {
-    Global(GlobalId),
-    Param(ParamId),
+enum ResolverItem {
     Local(LocalId),
     Expression(ExpressionId),
 }
@@ -189,38 +237,36 @@ enum TypedItem {
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct LocalInfo {
-    ident: M<String>,
+    ident: NameId,
     mutable: bool,
-    annotation: Option<M<ValType>>,
+    annotation: Option<TypeId>,
 }
 
 impl FunctionResolver {
     fn new(context: &FuncContext<'_>) -> Self {
+        let mut params = PrimaryMap::new();
         let mut mapping: StackMap<String, ItemId> = context.parent.mappings.clone().into();
 
         let fn_type = &context.func.signature.fn_type;
 
-        for (i, (ident, _valtype)) in fn_type.arguments.iter().enumerate() {
-            mapping.insert(ident.as_ref().to_owned(), ItemId::Param(ParamId(i as u32)));
+        for (_i, (ident, valtype)) in fn_type.arguments.iter().enumerate() {
+            let param = params.push(*valtype);
+            let name = context.comp().get_name(*ident).to_owned();
+            mapping.insert(name, ItemId::Param(param));
         }
 
         FunctionResolver {
-            // Name Resolution
-            locals: Default::default(),
+            params,
             mapping,
-            bindings: Default::default(),
-            // Type Resolution
-            local_types: Default::default(),
-            expression_types: Default::default(),
-            type_constraints: Default::default(),
+            ..Default::default()
         }
     }
 
-    fn resolve<'ctx>(
-        &mut self,
-        context: &FuncContext<'ctx>,
-    ) -> Result<(), ResolverError> {
-        self.resolve_block(context, context.func.body.as_ref())?;
+    fn resolve<'ctx>(&mut self, context: &FuncContext<'ctx>) -> Result<(), ResolverError> {
+        for statement in context.func.body.iter() {
+            let statement = context.get_stmt(*statement);
+            statement.setup_resolve(self, context)?;
+        }
         self.resolve_types(context)?;
 
         // TODO resolve locals layout
@@ -228,395 +274,674 @@ impl FunctionResolver {
         Ok(())
     }
 
-    fn resolve_block<'ctx>(
-        &mut self,
-        context: &FuncContext<'ctx>,
-        block: &ast::Block,
-    ) -> Result<(), ResolverError> {
-        // Take a checkpoint at the state of the mappings before this block
-        let checkpoint = self.mapping.checkpoint();
-        // Resolve all of the inner statements
-        for statement in block.statements.iter() {
-            self.resolve_statement(context, statement.as_ref())?;
-        }
-        // Restore the state of the mappings from before the block
-        self.mapping.restore(checkpoint);
-        Ok(())
-    }
-
-    fn resolve_statement<'ctx>(
-        &mut self,
-        context: &FuncContext<'ctx>,
-        statement: &ast::Statement,
-    ) -> Result<(), ResolverError> {
-        match &statement {
-            ast::Statement::Let {
-                let_kwd: _,
-                mut_kwd,
-                ident,
-                name_id,
-                annotation,
-                assign_op: _,
-                expression,
-            } => {
-                let info = LocalInfo {
-                    ident: ident.to_owned(),
-                    mutable: mut_kwd.is_some(),
-                    annotation: annotation.to_owned(),
-                };
-                let local = self.locals.push(info);
-                let item_id = ItemId::Local(local);
-                self.bindings.insert(*name_id, item_id);
-                self.mapping.insert(ident.as_ref().to_owned(), item_id);
-                self.resolve_expression(context, *expression)?;
-                self.bind_local(*expression, local);
-            }
-            ast::Statement::Assign {
-                ident,
-                name_id,
-                assign_op: _,
-                expression,
-            } => {
-                self.resolve_assign(context, ident, *name_id, *expression)?;
-            }
-            ast::Statement::Call { call } => {
-                self.resolve_call(context, call, None)?;
-            }
-            ast::Statement::If {
-                if_kwd: _,
-                condition,
-                block,
-            } => {
-                self.resolve_expression(context, *condition)?;
-                self.set_implied_type(*condition, ValType::Bool);
-                self.resolve_block(context, block.as_ref())?;
-            }
-            ast::Statement::Return {
-                return_kwd: _,
-                expression,
-            } => {
-                let fn_type = &context.func.signature.fn_type;
-
-                self.resolve_expression(context, *expression)?;
-                let ret_valtype = fn_type.return_type.value.to_owned();
-                self.set_implied_type(*expression, ret_valtype);
-            }
-        };
-        Ok(())
-    }
-
-    fn resolve_assign<'ctx>(
-        &mut self,
-        context: &FuncContext<'ctx>,
-        ident: &M<String>,
-        name_id: NameId,
-        expression: ExpressionId,
-    ) -> Result<(), ResolverError> {
-        if let Some(item) = self.mapping.lookup(ident.as_ref()) {
-            let item = *item;
-            self.resolve_expression(context, expression)?;
-            self.bindings.insert(name_id, item);
-            match item {
-                ItemId::Import(_) => {
-                    unimplemented!()
-                }
-                ItemId::Global(global) => {
-                    self.bind_global(expression, global);
-                    Ok(())
-                }
-                ItemId::Param(_) => {
-                    unimplemented!()
-                }
-                ItemId::Local(local) => {
-                    self.bind_local(expression, local);
-                    Ok(())
-                }
-                ItemId::Function(_) => unimplemented!(),
-            }
-        } else {
-            Err(ResolverError::NameError {
-                src: context.parent.src.clone(),
-                span: ident.span.clone(),
-                ident: ident.as_ref().to_owned(),
-            })
-        }
-    }
-
-    fn resolve_expression<'ctx:>(
-        &mut self,
-        context: &FuncContext<'ctx>,
-        expression: ExpressionId,
-    ) -> Result<(), ResolverError> {
-        let expression_ast: &Expression = context.func.expressions.get_exp(expression);
-        match expression_ast {
-            Expression::Identifier { ident, name_id } => {
-                if let Some(item) = self.mapping.lookup(ident.as_ref()) {
-                    self.bindings.insert(*name_id, *item);
-                    match item {
-                        ItemId::Import(_) => {
-                            unimplemented!("Cannot reference imports");
-                        }
-                        ItemId::Global(global) => {
-                            self.bind_global(expression, *global);
-                        }
-                        ItemId::Param(param) => {
-                            self.bind_param(expression, *param);
-                        }
-                        ItemId::Local(local) => {
-                            self.bind_local(expression, *local);
-                        }
-                        ItemId::Function(_) => unimplemented!(),
-                    };
-                    Ok(())
-                } else {
-                    Err(ResolverError::NameError {
-                        src: context.parent.src.clone(),
-                        span: ident.span.clone(),
-                        ident: ident.as_ref().to_owned(),
-                    })
-                }
-            }
-            Expression::Binary {
-                left,
-                operator,
-                right,
-            } => {
-                use ast::BinaryOp;
-                self.resolve_expression(context, *left)?;
-                self.resolve_expression(context, *right)?;
-                match operator.as_ref() {
-                    BinaryOp::Mult
-                    | BinaryOp::Div
-                    | BinaryOp::Mod
-                    | BinaryOp::Add
-                    | BinaryOp::Sub
-                    | BinaryOp::BitShiftL
-                    | BinaryOp::BitShiftR
-                    | BinaryOp::ArithShiftR
-                    | BinaryOp::BitAnd
-                    | BinaryOp::BitXor
-                    | BinaryOp::BitOr => {
-                        self.link_expressions(expression, *left);
-                        self.link_expressions(expression, *right);
-                    }
-                    BinaryOp::LT
-                    | BinaryOp::LTE
-                    | BinaryOp::GT
-                    | BinaryOp::GTE
-                    | BinaryOp::EQ
-                    | BinaryOp::NEQ => {
-                        self.set_implied_type(expression, ValType::Bool);
-                        self.link_expressions(*left, *right);
-                    }
-                    BinaryOp::LogicalAnd | BinaryOp::LogicalOr => {
-                        self.set_implied_type(expression, ValType::Bool);
-                        self.set_implied_type(*left, ValType::Bool);
-                        self.set_implied_type(*right, ValType::Bool);
-                    }
-                }
-                Ok(())
-            }
-            Expression::Call { call } => {
-                let context: &FuncContext<'ctx> = context;
-                let call: &Call = call;
-                self.resolve_call(context, call, Some(expression))
-            },
-            Expression::Literal { .. } => Ok(()),
-            _ => panic!("Unsupported expression type"),
-        }
-    }
-
-    fn resolve_call<'ctx>(
-        &mut self,
-        context: &FuncContext<'ctx>,
-        call: &Call,
-        expression: Option<ExpressionId>,
-    ) -> Result<(), ResolverError> {
-        // Resolve the argument expressions
-        for arg in call.args.iter() {
-            self.resolve_expression(context, *arg)?;
-        }
-
-        let item = self.lookup_name(context, &call.ident)?;
-        self.bindings.insert(call.name_id, item);
-
-        match item {
-            ItemId::Import(import) => {
-                let import = context.parent.component.imports.get(import).unwrap();
-                match &import.external_type {
-                    ast::ExternalType::Function(fn_type) => {
-                        if call.args.len() != fn_type.arguments.len() {
-                            return Err(ResolverError::CallArgumentsMismatch {
-                                src: context.parent.src.clone(),
-                                span: call.ident.span.clone(),
-                                ident: call.ident.as_ref().to_owned(),
-                            });
-                        }
-
-                        for (arg_expr, (arg_name, arg_type)) in
-                            call.args.iter().zip(fn_type.arguments.iter())
-                        {
-                            let _ = arg_name;
-                            self.set_implied_type(*arg_expr, arg_type.value.clone());
-                        }
-
-                        if let Some(expression) = expression {
-                            self.set_implied_type(expression, fn_type.return_type.as_ref().clone());
-                        }
-                    }
-                }
-            }
-            ItemId::Function(function) => {
-                let function = context.parent.component.functions.get(function).unwrap();
-                let fn_type = &function.signature.fn_type;
-
-                for (arg_expr, (arg_name, arg_type)) in
-                    call.args.iter().zip(fn_type.arguments.iter())
-                {
-                    let _ = arg_name;
-                    self.set_implied_type(*arg_expr, arg_type.value.clone());
-                }
-
-                if let Some(expression) = expression {
-                    self.set_implied_type(expression, fn_type.return_type.as_ref().clone());
-                }
-            }
-            ItemId::Global(_) => todo!(),
-            ItemId::Param(_) => todo!(),
-            ItemId::Local(_) => todo!(),
-        }
-
-        return Ok(());
-    }
-
     fn lookup_name<'ctx>(
         &self,
         context: &FuncContext<'ctx>,
-        ident: &M<String>,
+        ident: NameId,
     ) -> Result<ItemId, ResolverError> {
-        match self.mapping.lookup(ident.as_ref()) {
+        let name = context.comp().get_name(ident);
+        match self.mapping.lookup(&name.to_owned()) {
             Some(item) => Ok(*item),
-            None => Err(ResolverError::NameError {
-                src: context.parent.src.clone(),
-                span: ident.span.clone(),
-                ident: ident.as_ref().to_owned(),
-            }),
+            None => context.name_error(ident),
         }
     }
 
-    fn bind_global(&mut self, expression: ExpressionId, global: GlobalId) {
-        let a = TypedItem::Expression(expression);
-        let b = TypedItem::Global(global);
-        self.type_constraints.add_edge(a, b, ());
-    }
-
-    fn bind_param(&mut self, expression: ExpressionId, param: ParamId) {
-        let a = TypedItem::Expression(expression);
-        let b = TypedItem::Param(param);
-        self.type_constraints.add_edge(a, b, ());
-    }
-
-    fn bind_local(&mut self, expression: ExpressionId, local: LocalId) {
-        let a = TypedItem::Expression(expression);
-        let b = TypedItem::Local(local);
-        self.type_constraints.add_edge(a, b, ());
-    }
-
-    fn set_implied_type(&mut self, id: ExpressionId, valtype: ValType) {
-        self.expression_types.insert(id, valtype);
-    }
-
-    fn link_expressions(&mut self, a: ExpressionId, b: ExpressionId) {
-        let a = TypedItem::Expression(a);
-        let b = TypedItem::Expression(b);
-        self.type_constraints.add_edge(a, b, ());
-    }
-
-    fn resolve_types(
+    fn define_name<'ctx>(
         &mut self,
-        context: &FuncContext<'_>,
+        context: &FuncContext<'ctx>,
+        ident: NameId,
+        item: ItemId,
     ) -> Result<(), ResolverError> {
-        let mut errors = Vec::new();
-        loop {
-            let mut updated = false;
+        self.bindings.insert(ident, item);
+        let name = context.comp().get_name(ident);
+        self.mapping.insert(name.to_owned(), item);
+        Ok(())
+    }
 
-            for (id, _expression) in context.func.expressions.expressions().iter() {
-                let current = TypedItem::Expression(id);
-                let mut current_type = self.expression_types.get(&id).cloned();
-                for neighbor in self.type_constraints.neighbors(current) {
-                    let other_type = self.get_item_type(context, neighbor);
-                    if let Some(other_type) = other_type {
-                        if let Some(valtype) = current_type.clone() {
-                            if valtype != other_type {
-                                errors.push(TypeError::TypeConflict);
-                            }
-                        } else {
-                            updated = true;
-                            self.expression_types.insert(id, other_type.clone());
-                            current_type = Some(other_type);
-                        }
-                    }
-                }
-            }
+    fn use_name<'ctx>(
+        &mut self,
+        context: &FuncContext<'ctx>,
+        ident: NameId,
+    ) -> Result<ItemId, ResolverError> {
+        let item = self.lookup_name(context, ident)?;
+        self.bindings.insert(ident, item);
+        Ok(item)
+    }
 
-            for (id, _local) in self.locals.iter() {
-                let current = TypedItem::Local(id);
-                let mut current_type = self.local_types.get(&id).cloned();
-                for neighbor in self.type_constraints.neighbors(current) {
-                    let other_type = self.get_item_type(context, neighbor);
-                    if let Some(other_type) = other_type {
-                        if let Some(valtype) = current_type.clone() {
-                            if valtype != other_type {
-                                errors.push(TypeError::TypeConflict);
-                            }
-                        } else {
-                            updated = true;
-                            self.local_types.insert(id, other_type.clone());
-                            current_type = Some(other_type);
-                        }
-                    }
-                }
-            }
-
-            if !updated {
-                break;
-            }
-        }
-
-        if errors.is_empty() {
-            Ok(())
+    fn use_local<'ctx>(&mut self, local: LocalId, expression: ExpressionId) {
+        let existing_uses = self.local_uses.get_mut(&local);
+        if let Some(uses) = existing_uses {
+            uses.push(expression, &mut self.local_uses_list_pool);
         } else {
-            Err(ResolverError::TypeErrors { errors })
+            let mut uses = EntityList::new();
+            uses.push(expression, &mut self.local_uses_list_pool);
+            self.local_uses.insert(local, uses);
         }
     }
 
-    fn get_item_type(&self, context: &FuncContext<'_>, item: TypedItem) -> Option<ValType> {
-        match item {
-            TypedItem::Global(global) => Some(
-                context
-                    .parent
-                    .component
-                    .globals
-                    .get(global)
-                    .unwrap()
-                    .valtype
-                    .as_ref()
-                    .clone(),
-            ),
-            TypedItem::Param(param) => Some(
-                context
-                    .func
-                    .signature
-                    .fn_type
-                    .arguments
-                    .get(param.index())
-                    .unwrap()
-                    .1
-                    .as_ref()
-                    .clone(),
-            ),
-            TypedItem::Local(local) => self.local_types.get(&local).cloned(),
-            TypedItem::Expression(expression) => self.expression_types.get(&expression).cloned(),
+    fn set_expr_type(&mut self, id: ExpressionId, rtype: ResolvedType) {
+        self.resolver_queue
+            .push_back((rtype, ResolverItem::Expression(id)));
+    }
+
+    fn set_local_type(&mut self, id: LocalId, rtype: ResolvedType) {
+        self.resolver_queue
+            .push_back((rtype, ResolverItem::Local(id)));
+    }
+
+    fn resolve_types(&mut self, context: &FuncContext<'_>) -> Result<(), ResolverError> {
+        while let Some((next_type, next_item)) = self.resolver_queue.pop_front() {
+            match next_item {
+                ResolverItem::Expression(expression) => {
+                    // Apply the inferred type and detect conflicts
+                    if let Some(existing_type) = self.expression_types.get(&expression) {
+                        if !next_type.with(context.comp()).type_eq(existing_type) {
+                            panic!("Expression type error!!!");
+                        } else {
+                            {
+                                use miette::Report;
+                                let src = context.comp().src.clone();
+                                let span = context.comp().expr().get_span(expression);
+                                let notification = Notification::ExpressionSkipped { src, span };
+                                println!("{:?}", Report::new(notification));
+                            }
+                            continue;
+                        }
+                    } else {
+                        self.expression_types.insert(expression, next_type);
+                    }
+
+                    {
+                        use miette::Report;
+                        let src = context.comp().src.clone();
+                        let span = context.comp().expr().get_span(expression);
+                        let notification = Notification::ExpressionResolved { src, span };
+                        println!("{:?}", Report::new(notification));
+                    }
+
+                    let expression_val = context.comp().expr().get_exp(expression);
+                    expression_val.on_resolved(next_type, expression, self, context)?;
+
+                    if let Some(parent_id) = self.expr_parent_map.get(&expression) {
+                        let parent = context.comp().expr().get_exp(*parent_id);
+                        parent.on_child_resolved(next_type, *parent_id, self, context)?;
+                    } else {
+                        {
+                            use miette::Report;
+                            let src = context.comp().src.clone();
+                            let span = context.comp().expr().get_span(expression);
+                            let notification = Notification::ExpressionOrphan { src, span };
+                            println!("{:?}", Report::new(notification));
+                        }
+                    }
+                }
+                ResolverItem::Local(local) => {
+                    if let Some(existing_type) = self.local_types.get(&local) {
+                        if !next_type.with(context.comp()).type_eq(existing_type) {
+                            panic!("Local type error!!!");
+                        } else {
+                            {
+                                use miette::Report;
+                                let src = context.comp().src.clone();
+                                let span = self.local_spans.get(&local).unwrap().clone();
+                                let notification = Notification::LocalSkipped { src, span };
+                                println!("{:?}", Report::new(notification));
+                            }
+                            continue;
+                        }
+                    } else {
+                        self.local_types.insert(local, next_type);
+                    }
+
+                    {
+                        use miette::Report;
+                        let src = context.comp().src.clone();
+                        let span = self.local_spans.get(&local).unwrap().clone();
+                        let notification = Notification::LocalResolved { src, span };
+                        println!("{:?}", Report::new(notification));
+                    }
+
+                    if self.local_uses.contains_key(&local) {
+                        let uses_len = {
+                            let uses = self.local_uses.get(&local).unwrap();
+                            uses.len(&self.local_uses_list_pool)
+                        };
+                        for i in 0..uses_len {
+                            let local_use = {
+                                let uses = self.local_uses.get(&local).unwrap();
+                                uses.get(i, &self.local_uses_list_pool).unwrap()
+                            };
+                            self.set_expr_type(local_use, next_type);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn get_resolved_type(&self, expression: ExpressionId, context: &ast::Component) -> Result<ResolvedType, ResolverError> {
+        let rtype = self.expression_types.get(&expression);
+        match rtype {
+            Some(rtype) => Ok(*rtype),
+            None => {
+                let span = context.expr().get_span(expression);
+                Err(ResolverError::Base { src: context.src.clone(), span })
+            },
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum ResolvedType {
+    Primitive(ast::PrimitiveType),
+    ValType(TypeId),
+}
+
+impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
+    pub fn as_primitive(&self) -> Option<ast::PrimitiveType> {
+        match self.value {
+            ResolvedType::Primitive(s) => Some(*s),
+            ResolvedType::ValType(v) => match self.context.get_type(*v) {
+                ast::ValType::Result { .. } => None,
+                ast::ValType::String => None,
+                ast::ValType::Primitive(s) => Some(*s),
+            },
+        }
+    }
+
+    pub fn type_eq(&self, other: &ResolvedType) -> bool {
+        match (self.value, other) {
+            (ResolvedType::Primitive(left), ResolvedType::Primitive(right)) => left == right,
+            (ResolvedType::ValType(left), ResolvedType::ValType(right)) => {
+                let l_valtype = self.context.get_type(*left);
+                let r_valtype = self.context.get_type(*right);
+                l_valtype.eq(r_valtype, self.context)
+            }
+            _ => false,
+        }
+    }
+}
+
+impl From<TypeId> for ResolvedType {
+    fn from(value: TypeId) -> Self {
+        ResolvedType::ValType(value)
+    }
+}
+
+// Statements
+
+pub trait ResolveStatement {
+    /// Set up locals
+    /// * Add them to resolver.locals
+    /// * Identify the local_uses
+    ///
+    /// Perform name resolution
+    /// * Updates resolver.mapping as it goes
+    /// * Links identifiers to their targets in resolver.bindings
+    ///
+    /// Record expression parents
+    fn setup_resolve<'ctx>(
+        &self,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError>;
+}
+
+macro_rules! gen_resolve_statement {
+    ([$( $expr_type:ident ),*]) => {
+        impl ResolveStatement for ast::Statement {
+            fn setup_resolve<'ctx>(
+                &self,
+                resolver: &mut FunctionResolver,
+                context: &FuncContext<'ctx>,
+            ) -> Result<(), ResolverError> {
+                match self {
+                    $(ast::Statement::$expr_type(inner) => {
+                        let inner: &dyn ResolveStatement = inner;
+                        inner.setup_resolve(resolver, context)
+                    },)*
+                }
+            }
+        }
+    }
+}
+
+gen_resolve_statement!([Let, Assign, Call, If, Return]);
+
+impl ResolveStatement for ast::Let {
+    fn setup_resolve<'ctx>(
+        &self,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        let info = LocalInfo {
+            ident: self.ident.to_owned(),
+            mutable: self.mutable,
+            annotation: self.annotation.to_owned(),
+        };
+        let local = resolver.locals.push(info);
+        let span = context.comp().name_span(self.ident);
+        resolver.local_spans.insert(local, span);
+        let item = ItemId::Local(local);
+        resolver.define_name(context, self.ident, item)?;
+
+        context
+            .get_expr(self.expression)
+            .setup_resolve(self.expression, resolver, context)
+    }
+}
+
+impl ResolveStatement for ast::Assign {
+    fn setup_resolve<'ctx>(
+        &self,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        resolver.use_name(context, self.ident)?;
+        context
+            .get_expr(self.expression)
+            .setup_resolve(self.expression, resolver, context)
+    }
+}
+
+impl ResolveStatement for ast::Call {
+    fn setup_resolve<'ctx>(
+        &self,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        resolver.use_name(context, self.ident)?;
+        for arg in self.args.iter() {
+            context
+                .get_expr(*arg)
+                .setup_resolve(*arg, resolver, context)?;
+        }
+        Ok(())
+    }
+}
+
+const RESOLVED_BOOL: ResolvedType = ResolvedType::Primitive(ast::PrimitiveType::Bool);
+
+impl ResolveStatement for ast::If {
+    fn setup_resolve<'ctx>(
+        &self,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        resolver.set_expr_type(self.condition, RESOLVED_BOOL);
+
+        // Resolve condition in current context
+        context
+            .get_expr(self.condition)
+            .setup_resolve(self.condition, resolver, context)?;
+        // Take a checkpoint at the state of the mappings before this block
+        let checkpoint = resolver.mapping.checkpoint();
+        // Resolve all of the inner statements
+        for statement in self.block.iter() {
+            context
+                .get_stmt(*statement)
+                .setup_resolve(resolver, context)?;
+        }
+        // Restore the state of the mappings from before the block
+        resolver.mapping.restore(checkpoint);
+        Ok(())
+    }
+}
+
+impl ResolveStatement for ast::Return {
+    fn setup_resolve<'ctx>(
+        &self,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        let rtype = ResolvedType::ValType(context.func.signature.fn_type.return_type);
+        resolver.set_expr_type(self.expression, rtype);
+
+        context
+            .get_expr(self.expression)
+            .setup_resolve(self.expression, resolver, context)?;
+
+        Ok(())
+    }
+}
+
+// Expressions
+
+pub trait ResolveExpression {
+    /// Setup must
+    /// * Call `define_name` when introducing new names
+    /// * Call `use_name` when using a name
+    /// * Call `setup_child` on each expression that is a child of this one.
+    ///
+    /// Setup may
+    /// * Call `set_implied_type` if the type of an expression is known.
+    fn setup_resolve<'ctx>(
+        &self,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        _ = (expression, resolver, context);
+        Ok(())
+    }
+
+    /// Set up child and record parent-child relationship
+    fn setup_child<'ctx>(
+        &self,
+        parent: ExpressionId,
+        child: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        // Resolve the child
+        context
+            .get_expr(child)
+            .setup_resolve(child, resolver, context)?;
+
+        // Update the parent mapping
+        resolver.expr_parent_map.insert(child, parent);
+
+        Ok(())
+    }
+
+    fn on_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        _ = (rtype, expression, resolver, context);
+        Ok(())
+    }
+
+    fn on_child_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        _ = (rtype, expression, resolver, context);
+        Ok(())
+    }
+}
+
+macro_rules! gen_resolve_expression {
+    ([$( $expr_type:ident ),*]) => {
+        impl ResolveExpression for ast::Expression {
+            fn setup_resolve<'ctx>(
+                &self,
+                expression: ExpressionId,
+                resolver: &mut FunctionResolver,
+                context: &FuncContext<'ctx>,
+            ) -> Result<(), ResolverError> {
+                match self {
+                    $(ast::Expression::$expr_type(inner) => {
+                        let inner: &dyn ResolveExpression = inner;
+                        inner.setup_resolve(expression, resolver, context)
+                    },)*
+                }
+            }
+
+            fn on_resolved<'ctx>(&self,
+                rtype: ResolvedType,
+                expression: ExpressionId,
+                resolver: &mut FunctionResolver,
+                context: &FuncContext<'ctx>,
+            ) -> Result<(), ResolverError> {
+                match self {
+                    $(ast::Expression::$expr_type(inner) => inner.on_resolved(rtype, expression, resolver, context),)*
+                }
+            }
+
+            fn on_child_resolved<'ctx>(&self,
+                rtype: ResolvedType,
+                expression: ExpressionId,
+                resolver: &mut FunctionResolver,
+                context: &FuncContext<'ctx>,
+            ) -> Result<(), ResolverError> {
+                match self {
+                    $(ast::Expression::$expr_type(inner) => inner.on_child_resolved(rtype, expression, resolver, context),)*
+                }
+            }
+        }
+    }
+}
+
+gen_resolve_expression!([Identifier, Literal, Call, Unary, Binary]);
+
+impl ResolveExpression for ast::Identifier {
+    fn setup_resolve<'ctx>(
+        &self,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        let item = resolver.use_name(context, self.ident)?;
+        match item {
+            ItemId::Global(global) => {
+                let global = context.parent.component.globals.get(global).unwrap();
+                resolver.set_expr_type(expression, ResolvedType::ValType(global.type_id));
+            },
+            ItemId::Param(param) => {
+                let param_type = *resolver.params.get(param).unwrap();
+                resolver.set_expr_type(expression, ResolvedType::ValType(param_type));
+            },
+            ItemId::Local(local) => resolver.use_local(local, expression),
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn on_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        _expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        let item = resolver.lookup_name(context, self.ident)?;
+        match item {
+            ItemId::Local(local) => resolver.set_local_type(local, rtype),
+            _ => {}
+        }
+        Ok(())
+    }
+}
+
+impl ResolveExpression for ast::Literal {}
+
+impl<'ctx> C<'ctx, ItemId, ast::Component> {
+    fn get_fn_type(&self) -> Option<&ast::FnType> {
+        match self.value {
+            ItemId::Import(import) => {
+                let import = &self.context.imports[*import];
+                match &import.external_type {
+                    ast::ExternalType::Function(fn_type) => Some(fn_type),
+                }
+            },
+            ItemId::Function(function) => {
+                let function = &self.context.functions[*function];
+                Some(&function.signature.fn_type)
+            },
+            _ => None,
+        }
+    }
+}
+
+impl ResolveExpression for ast::Call {
+    fn setup_resolve<'ctx>(
+        &self,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        let item = resolver.use_name(context, self.ident)?;
+        let item = item.with(context.parent.component);
+        let fn_type = item.get_fn_type().unwrap();
+
+        setup_call(self, fn_type, resolver, context, expression)?;
+
+        for arg in self.args.iter() {
+            self.setup_child(expression, *arg, resolver, context)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ResolveExpression for ast::UnaryExpression {
+    fn setup_resolve<'ctx>(
+        &self,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        self.setup_child(expression, self.inner, resolver, context)
+    }
+
+    fn on_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        _ = (rtype, expression, resolver, context);
+        todo!()
+    }
+
+    fn on_child_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        _ = (rtype, expression, resolver, context);
+        todo!()
+    }
+}
+
+// Binary Operators
+
+impl ast::BinaryExpression {
+    fn is_relation(&self) -> bool {
+        use ast::BinaryOp as BE;
+        match self.op {
+            BE::Multiply
+            | BE::Divide
+            | BE::Modulo
+            | BE::Add
+            | BE::Subtract
+            | BE::BitShiftL
+            | BE::BitShiftR
+            | BE::ArithShiftR
+            | BE::BitAnd
+            | BE::BitXor
+            | BE::BitOr
+            | BE::LogicalAnd
+            | BE::LogicalOr => false,
+            _ => true,
+        }
+    }
+}
+
+impl ResolveExpression for ast::BinaryExpression {
+    fn setup_resolve<'ctx>(
+        &self,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        if self.is_relation() {
+            resolver.set_expr_type(expression, RESOLVED_BOOL);
+        }
+        self.setup_child(expression, self.left, resolver, context)?;
+        self.setup_child(expression, self.right, resolver, context)?;
+        Ok(())
+    }
+
+    fn on_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        _expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        _context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        if !self.is_relation() {
+            resolver.set_expr_type(self.left, rtype);
+            resolver.set_expr_type(self.right, rtype);
+        }
+        Ok(())
+    }
+
+    fn on_child_resolved<'ctx>(
+        &self,
+        rtype: ResolvedType,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+        _context: &FuncContext<'ctx>,
+    ) -> Result<(), ResolverError> {
+        if !self.is_relation() {
+            resolver.set_expr_type(expression, rtype);
+        }
+
+        let left = resolver.expression_types.get(&self.left).copied();
+        let right = resolver.expression_types.get(&self.right).copied();
+
+        match (left, right) {
+            (Some(_left), Some(_right)) => {
+                // Both types known, do nothing
+                println!("AAAA");
+            }
+            (Some(left), None) => {
+                println!("BBBB");
+                resolver.set_expr_type(self.right, left);
+            },
+            (None, Some(right)) => {
+                println!("CCCC");
+                resolver.set_expr_type(self.left, right);
+            },
+            (None, None) => {
+                // Neither types known... how did we get here?
+                unreachable!("DDDD: If a child has been resolved, at least one child shouldn't be None")
+            }
+        }
+
+        Ok(())
+    }
+}
+
+// Helpers
+
+fn setup_call<'ctx>(call: &ast::Call,
+    fn_type: &ast::FnType,
+    resolver: &mut FunctionResolver,
+    context: &FuncContext<'ctx>,
+    expression: ExpressionId) -> Result<(), ResolverError>
+{
+    if call.args.len() != fn_type.arguments.len() {
+        let span = context.comp().name_span(call.ident);
+        let ident = context.comp().get_name(call.ident).to_owned();
+        return Err(ResolverError::CallArgumentsMismatch {
+            src: context.parent.src.clone(),
+            span,
+            ident,
+        });
+    }
+
+    for (arg_expr, (_, arg_type)) in call.args.iter().zip(fn_type.arguments.iter())
+    {
+        let rtype = ResolvedType::ValType(*arg_type);
+        resolver.set_expr_type(*arg_expr, rtype);
+    }
+
+    let rtype = ResolvedType::ValType(fn_type.return_type);
+    resolver.set_expr_type(expression, rtype);
+
+    Ok(())
 }

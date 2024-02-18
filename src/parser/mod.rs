@@ -16,43 +16,36 @@ use self::component::parse_component;
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParserError {
-    #[diagnostic()]
     #[error("Failed to parse")]
     Base {
         #[source_code]
-        src: Arc<NamedSource>,
+        src: crate::Source,
         #[label("Unable to parse this code")]
         span: SourceSpan,
     },
-    #[diagnostic()]
     #[error("Unexpected token {token:?} with description '{description}'")]
     UnexpectedToken {
         #[source_code]
-        src: Arc<NamedSource>,
+        src: crate::Source,
         #[label("Here")]
         span: SourceSpan,
         description: String,
         token: Token,
     },
-    #[diagnostic()]
     #[error("End of input reached")]
     EndOfInput,
-    #[diagnostic()]
     #[error("Feature {feature} not supported yet at {token:?}")]
     NotYetSupported { feature: String, token: Token },
 }
 
-pub fn parse(
-    src: Arc<NamedSource>,
-    tokens: Vec<TokenData>,
-) -> Result<Component, ParserError> {
-    let mut input = ParseInput::new(src, tokens);
-    parse_component(&mut input)
+pub fn parse(src: crate::Source, tokens: Vec<TokenData>) -> Result<Component, ParserError> {
+    let mut input = ParseInput::new(src.clone(), tokens);
+    parse_component(src, &mut input)
 }
 
 #[derive(Debug, Clone)]
 pub struct ParseInput {
-    src: Arc<NamedSource>,
+    src: crate::Source,
     tokens: Vec<TokenData>,
     index: usize,
 }
@@ -63,7 +56,7 @@ pub struct Checkpoint {
 }
 
 impl ParseInput {
-    pub fn new(src: Arc<NamedSource>, tokens: Vec<TokenData>) -> Self {
+    pub fn new(src: crate::Source, tokens: Vec<TokenData>) -> Self {
         ParseInput {
             src,
             tokens,
@@ -96,7 +89,7 @@ impl ParseInput {
         self.index = checkpoint.index
     }
 
-    pub fn get_source(&self) -> Arc<NamedSource> {
+    pub fn get_source(&self) -> crate::Source {
         self.src.clone()
     }
 
@@ -122,11 +115,7 @@ impl ParseInput {
         result.ok_or(ParserError::EndOfInput)
     }
 
-    pub fn assert_next(
-        &mut self,
-        token: Token,
-        description: &str,
-    ) -> Result<Span, ParserError> {
+    pub fn assert_next(&mut self, token: Token, description: &str) -> Result<Span, ParserError> {
         let next = self.next()?;
         if next.token == token {
             Ok(next.span.clone())
@@ -156,31 +145,23 @@ impl ParseInput {
     }
 }
 
+pub fn make_input<'src>(source: &'src str) -> (crate::Source, ParseInput) {
+    let src = Arc::new(NamedSource::new("test", source.to_string()));
+    let tokens = crate::lexer::tokenize(src.clone(), source).unwrap();
+    (src.clone(), ParseInput::new(src, tokens))
+}
+
+pub fn make_span(start: usize, len: usize) -> Span {
+    Span::new(start.into(), len.into())
+}
+
 #[cfg(test)]
 mod tests {
-
-    use miette::NamedSource;
-    use std::sync::Arc;
-
-    use crate::{
-        ast::Span,
-        lexer::{tokenize, Token},
-        parser::ParseInput,
-    };
-
-    pub fn make_input<'src>(source: &'src str) -> ParseInput {
-        let src = Arc::new(NamedSource::new("test", source.to_string()));
-        let tokens = tokenize(src.clone(), source).unwrap();
-        ParseInput::new(src, tokens)
-    }
-
-    pub fn make_span(start: usize, len: usize) -> Span {
-        Span::new(start.into(), len.into())
-    }
+    use super::*;
 
     #[test]
     fn test_peek() {
-        let mut input = make_input("export func");
+        let (_src, mut input) = make_input("export func");
         assert_eq!(input.peek().unwrap().token, Token::Export);
         assert_eq!(input.peek().unwrap().token, Token::Export);
         assert_eq!(input.peek().unwrap().token, Token::Export);
@@ -192,7 +173,7 @@ mod tests {
 
     #[test]
     fn test_peekn() {
-        let mut input = make_input("export func () -> {}");
+        let (_src, mut input) = make_input("export func () -> {}");
         assert_eq!(input.peekn(0).unwrap(), &Token::Export);
         assert_eq!(input.peekn(1).unwrap(), &Token::Func);
         assert_eq!(input.peekn(2).unwrap(), &Token::LParen);

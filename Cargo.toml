@@ -19,9 +19,8 @@ path = "src/bin.rs"
 [dependencies]
 clap = { version = "3.0.0-rc.7", features = ["derive"] }
 thiserror = "1.0.30"
-miette = { version = "3.3.0", features = ["fancy"] }
+miette = { version = "7.1.0", features = ["fancy"] }
 logos = "0.13.0"
-petgraph = "0.6.4"
 wasm-encoder = "0.38"
 cranelift-entity = "0.104.0"
 

@@ -2,10 +2,19 @@ use std::cmp;
 use std::collections::HashMap;
 use std::hash::Hash;
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct StackMap<K, V> {
     mapping: HashMap<K, V>,
     history: Vec<(K, Option<V>)>,
+}
+
+impl<K, V> std::default::Default for StackMap<K, V> {
+    fn default() -> Self {
+        Self {
+            mapping: Default::default(),
+            history: Default::default(),
+        }
+    }
 }
 
 pub struct StackMapCheckpoint(usize);
