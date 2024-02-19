@@ -75,7 +75,7 @@ impl Component {
     }
 
     pub fn name_span(&self, id: NameId) -> Span {
-        self.name_spans.get(&id).unwrap().clone()
+        *self.name_spans.get(&id).unwrap()
     }
 
     pub fn new_type(&mut self, valtype: ValType, span: Span) -> TypeId {
@@ -89,7 +89,7 @@ impl Component {
     }
 
     pub fn type_span(&self, id: TypeId) -> Span {
-        self.type_spans.get(&id).unwrap().clone()
+        *self.type_spans.get(&id).unwrap()
     }
 
     pub fn new_statement(&mut self, statement: ast::Statement, span: Span) -> StatementId {
@@ -103,7 +103,7 @@ impl Component {
     }
 
     pub fn statement_span(&self, id: StatementId) -> Span {
-        self.statement_spans.get(&id).unwrap().clone()
+        *self.statement_spans.get(&id).unwrap()
     }
 
     pub fn alloc_let(

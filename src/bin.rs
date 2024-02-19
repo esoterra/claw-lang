@@ -27,12 +27,6 @@ struct Compile {
     output: PathBuf,
 }
 
-#[derive(Debug, ArgEnum, Clone, Copy)]
-enum Format {
-    Wasm,
-    WAT,
-}
-
 impl Compile {
     fn run(&self) -> Option<()> {
         let file_name = self.input.file_name()?.to_string_lossy().to_string();

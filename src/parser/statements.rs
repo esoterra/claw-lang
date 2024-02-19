@@ -35,12 +35,12 @@ pub fn parse_statement(
     input: &mut ParseInput,
     comp: &mut Component,
 ) -> Result<StatementId, ParserError> {
-    return match input.peek()?.token {
+    match input.peek()?.token {
         Token::Return => parse_return(input, comp),
         Token::Let => parse_let(input, comp),
         Token::If => parse_if(input, comp),
         _ => parse_assign(input, comp),
-    };
+    }
 }
 
 fn parse_let(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {

@@ -243,7 +243,7 @@ fn test_unary() {
     let (unary, _) =
         Unary::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
-    for x in 0..(10 as i32) {
+    for x in 0..10_i32 {
         unary.call_set(&mut runtime.store, x).unwrap();
         let inverse = unary.call_get_inverse(&mut runtime.store).unwrap();
         assert_eq!(-x, inverse);

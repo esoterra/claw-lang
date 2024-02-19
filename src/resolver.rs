@@ -56,6 +56,16 @@ pub enum ResolverError {
         #[label("This bit")]
         span: SourceSpan,
     },
+    #[error("Conflicting types inferred for expression {type_a} != {type_b}")]
+    TypeConflict {
+        #[source_code]
+        src: crate::Source,
+        #[label("This bit")]
+        span: SourceSpan,
+
+        type_a: ResolvedType,
+        type_b: ResolvedType,
+    },
     #[error("Failed to resolve name \"{ident}\"")]
     NameError {
         #[source_code]
@@ -222,7 +232,7 @@ impl FunctionResolver {
 
         let sig = &context.func(id).signature;
 
-        for (_i, (ident, valtype)) in sig.arguments.iter().enumerate() {
+        for (ident, valtype) in sig.arguments.iter() {
             let param = params.push(*valtype);
             let name = context.component.get_name(*ident).to_owned();
             mapping.insert(name, ItemId::Param(param));
@@ -244,7 +254,7 @@ impl FunctionResolver {
         }
     }
 
-    fn resolve<'ctx>(&mut self, context: &ComponentContext<'ctx>) -> Result<(), ResolverError> {
+    fn resolve(&mut self, context: &ComponentContext<'_>) -> Result<(), ResolverError> {
         for statement in context.func(self.id).body.iter() {
             let statement = context.component.get_statement(*statement);
             statement.setup_resolve(self, context)?;
@@ -270,9 +280,9 @@ impl FunctionResolver {
         })
     }
 
-    fn lookup_name<'ctx>(
+    fn lookup_name(
         &self,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
         ident: NameId,
     ) -> Result<ItemId, ResolverError> {
         let name = context.component.get_name(ident);
@@ -282,9 +292,9 @@ impl FunctionResolver {
         }
     }
 
-    fn define_name<'ctx>(
+    fn define_name(
         &mut self,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
         ident: NameId,
         item: ItemId,
     ) -> Result<(), ResolverError> {
@@ -294,9 +304,9 @@ impl FunctionResolver {
         Ok(())
     }
 
-    fn use_name<'ctx>(
+    fn use_name(
         &mut self,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
         ident: NameId,
     ) -> Result<ItemId, ResolverError> {
         let item = self.lookup_name(context, ident)?;
@@ -304,7 +314,7 @@ impl FunctionResolver {
         Ok(item)
     }
 
-    fn use_local<'ctx>(&mut self, local: LocalId, expression: ExpressionId) {
+    fn use_local(&mut self, local: LocalId, expression: ExpressionId) {
         let existing_uses = self.local_uses.get_mut(&local);
         if let Some(uses) = existing_uses {
             uses.push(expression, &mut self.local_uses_list_pool);
@@ -332,7 +342,13 @@ impl FunctionResolver {
                     // Apply the inferred type and detect conflicts
                     if let Some(existing_type) = self.expression_types.get(&expression) {
                         if !next_type.with(context.component).type_eq(existing_type) {
-                            panic!("Expression type error!!!");
+                            let span = context.component.expr().get_span(expression);
+                            return Err(ResolverError::TypeConflict {
+                                src: context.src.clone(),
+                                span,
+                                type_a: *existing_type,
+                                type_b: next_type,
+                            });
                         } else {
                             {
                                 use miette::Report;
@@ -379,7 +395,7 @@ impl FunctionResolver {
                             {
                                 use miette::Report;
                                 let src = context.component.src.clone();
-                                let span = self.local_spans.get(&local).unwrap().clone();
+                                let span = *self.local_spans.get(&local).unwrap();
                                 let notification = Notification::LocalSkipped { src, span };
                                 println!("{:?}", Report::new(notification));
                             }
@@ -392,7 +408,7 @@ impl FunctionResolver {
                     {
                         use miette::Report;
                         let src = context.component.src.clone();
-                        let span = self.local_spans.get(&local).unwrap().clone();
+                        let span = *self.local_spans.get(&local).unwrap();
                         let notification = Notification::LocalResolved { src, span };
                         println!("{:?}", Report::new(notification));
                     }
@@ -443,6 +459,16 @@ pub enum ResolvedType {
     ValType(TypeId),
 }
 
+impl std::fmt::Display for ResolvedType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ResolvedType::Unit => f.write_str("Unit"),
+            ResolvedType::Primitive(p) => (p as &dyn std::fmt::Debug).fmt(f),
+            ResolvedType::ValType(v) => (v as &dyn std::fmt::Debug).fmt(f),
+        }
+    }
+}
+
 impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
     pub fn as_primitive(&self) -> Option<ast::PrimitiveType> {
         match self.value {
@@ -488,20 +514,20 @@ trait ResolveStatement {
     /// * Links identifiers to their targets in resolver.bindings
     ///
     /// Record expression parents
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError>;
 }
 
 macro_rules! gen_resolve_statement {
     ([$( $expr_type:ident ),*]) => {
         impl ResolveStatement for ast::Statement {
-            fn setup_resolve<'ctx>(
+            fn setup_resolve(
                 &self,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'ctx>,
+                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
                     $(ast::Statement::$expr_type(inner) => {
@@ -517,10 +543,10 @@ macro_rules! gen_resolve_statement {
 gen_resolve_statement!([Let, Assign, Call, If, Return]);
 
 impl ResolveStatement for ast::Let {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         let info = LocalInfo {
             ident: self.ident.to_owned(),
@@ -542,10 +568,10 @@ impl ResolveStatement for ast::Let {
 }
 
 impl ResolveStatement for ast::Assign {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.use_name(context, self.ident)?;
         context
@@ -557,10 +583,10 @@ impl ResolveStatement for ast::Assign {
 }
 
 impl ResolveStatement for ast::Call {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.use_name(context, self.ident)?;
         for arg in self.args.iter() {
@@ -577,10 +603,10 @@ impl ResolveStatement for ast::Call {
 const RESOLVED_BOOL: ResolvedType = ResolvedType::Primitive(ast::PrimitiveType::Bool);
 
 impl ResolveStatement for ast::If {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.set_expr_type(self.condition, RESOLVED_BOOL);
 
@@ -606,10 +632,10 @@ impl ResolveStatement for ast::If {
 }
 
 impl ResolveStatement for ast::Return {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         let return_type = context.func(resolver.id).signature.return_type;
         match (return_type, self.expression) {
@@ -648,23 +674,23 @@ trait ResolveExpression {
     ///
     /// Setup may
     /// * Call `set_implied_type` if the type of an expression is known.
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         _ = (expression, resolver, context);
         Ok(())
     }
 
     /// Set up child and record parent-child relationship
-    fn setup_child<'ctx>(
+    fn setup_child(
         &self,
         parent: ExpressionId,
         child: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         // Resolve the child
         context
@@ -679,23 +705,23 @@ trait ResolveExpression {
         Ok(())
     }
 
-    fn on_resolved<'ctx>(
+    fn on_resolved(
         &self,
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         _ = (rtype, expression, resolver, context);
         Ok(())
     }
 
-    fn on_child_resolved<'ctx>(
+    fn on_child_resolved(
         &self,
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         _ = (rtype, expression, resolver, context);
         Ok(())
@@ -705,11 +731,11 @@ trait ResolveExpression {
 macro_rules! gen_resolve_expression {
     ([$( $expr_type:ident ),*]) => {
         impl ResolveExpression for ast::Expression {
-            fn setup_resolve<'ctx>(
+            fn setup_resolve(
                 &self,
                 expression: ExpressionId,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'ctx>,
+                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
                     $(ast::Expression::$expr_type(inner) => {
@@ -719,22 +745,22 @@ macro_rules! gen_resolve_expression {
                 }
             }
 
-            fn on_resolved<'ctx>(&self,
+            fn on_resolved(&self,
                 rtype: ResolvedType,
                 expression: ExpressionId,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'ctx>,
+                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
                     $(ast::Expression::$expr_type(inner) => inner.on_resolved(rtype, expression, resolver, context),)*
                 }
             }
 
-            fn on_child_resolved<'ctx>(&self,
+            fn on_child_resolved(&self,
                 rtype: ResolvedType,
                 expression: ExpressionId,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'ctx>,
+                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
                     $(ast::Expression::$expr_type(inner) => inner.on_child_resolved(rtype, expression, resolver, context),)*
@@ -747,11 +773,11 @@ macro_rules! gen_resolve_expression {
 gen_resolve_expression!([Identifier, Literal, Call, Unary, Binary]);
 
 impl ResolveExpression for ast::Identifier {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         let item = resolver.use_name(context, self.ident)?;
         match item {
@@ -769,12 +795,12 @@ impl ResolveExpression for ast::Identifier {
         Ok(())
     }
 
-    fn on_resolved<'ctx>(
+    fn on_resolved(
         &self,
         rtype: ResolvedType,
         _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         let item = resolver.lookup_name(context, self.ident)?;
         match item {
@@ -806,11 +832,11 @@ impl<'ctx> C<'ctx, ItemId, ast::Component> {
 }
 
 impl ResolveExpression for ast::Call {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         let item = resolver.use_name(context, self.ident)?;
         let item: C<'_, ItemId, ast::Component> = item.with(context.component);
@@ -827,32 +853,32 @@ impl ResolveExpression for ast::Call {
 }
 
 impl ResolveExpression for ast::UnaryExpression {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         self.setup_child(expression, self.inner, resolver, context)
     }
 
-    fn on_resolved<'ctx>(
+    fn on_resolved(
         &self,
         rtype: ResolvedType,
         _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'ctx>,
+        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.set_expr_type(self.inner, rtype);
         Ok(())
     }
 
-    fn on_child_resolved<'ctx>(
+    fn on_child_resolved(
         &self,
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'ctx>,
+        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.set_expr_type(expression, rtype);
         Ok(())
@@ -864,31 +890,24 @@ impl ResolveExpression for ast::UnaryExpression {
 impl ast::BinaryExpression {
     fn is_relation(&self) -> bool {
         use ast::BinaryOp as BE;
-        match self.op {
-            BE::Multiply
-            | BE::Divide
-            | BE::Modulo
-            | BE::Add
-            | BE::Subtract
-            | BE::BitShiftL
-            | BE::BitShiftR
-            | BE::ArithShiftR
-            | BE::BitAnd
-            | BE::BitXor
-            | BE::BitOr
-            | BE::LogicalAnd
-            | BE::LogicalOr => false,
-            _ => true,
-        }
+        matches!(
+            self.op,
+            BE::LessThan
+                | BE::LessThanEqual
+                | BE::GreaterThan
+                | BE::GreaterThanEqual
+                | BE::Equals
+                | BE::NotEquals
+        )
     }
 }
 
 impl ResolveExpression for ast::BinaryExpression {
-    fn setup_resolve<'ctx>(
+    fn setup_resolve(
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'ctx>,
+        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         if self.is_relation() {
             resolver.set_expr_type(expression, RESOLVED_BOOL);
@@ -898,12 +917,12 @@ impl ResolveExpression for ast::BinaryExpression {
         Ok(())
     }
 
-    fn on_resolved<'ctx>(
+    fn on_resolved(
         &self,
         rtype: ResolvedType,
         _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'ctx>,
+        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         if !self.is_relation() {
             resolver.set_expr_type(self.left, rtype);
@@ -912,12 +931,12 @@ impl ResolveExpression for ast::BinaryExpression {
         Ok(())
     }
 
-    fn on_child_resolved<'ctx>(
+    fn on_child_resolved(
         &self,
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'ctx>,
+        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         if !self.is_relation() {
             resolver.set_expr_type(expression, rtype);
@@ -948,11 +967,11 @@ impl ResolveExpression for ast::BinaryExpression {
 
 // Helpers
 
-fn setup_call<'ctx>(
+fn setup_call(
     call: &ast::Call,
     fn_type: &dyn ast::FnTypeInfo,
     resolver: &mut FunctionResolver,
-    context: &ComponentContext<'ctx>,
+    context: &ComponentContext<'_>,
     expression: ExpressionId,
 ) -> Result<(), ResolverError> {
     if call.args.len() != fn_type.get_args().len() {

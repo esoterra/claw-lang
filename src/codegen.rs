@@ -112,21 +112,21 @@ impl CodeGenerator {
             ast::ExternalType::Function(fn_type) => {
                 // Encode Module Type and Import
                 self.encode_mod_func_type(fn_type, comp);
-                let module_ty = enc::EntityType::Function(id.to_inner_core_idx());
+                let module_ty = enc::EntityType::Function(id.as_inner_core_idx());
                 self.module.imports.import("claw", import_name, module_ty);
 
                 // Encode Component Type and Import
                 self.encode_comp_func_type(fn_type, comp);
-                let component_ty = enc::ComponentTypeRef::Func(id.to_comp_idx());
+                let component_ty = enc::ComponentTypeRef::Func(id.as_comp_idx());
                 self.component.imports.import(import_name, component_ty);
 
                 // Lower the Import
-                self.component.lower_funcs.lower(id.to_outer_core_idx(), []);
+                self.component.lower_funcs.lower(id.as_outer_core_idx(), []);
 
                 self.component.instantiate_args.push((
                     import_name.to_owned(),
                     enc::ExportKind::Func,
-                    id.to_outer_core_idx(),
+                    id.as_outer_core_idx(),
                 ));
             }
         }
@@ -138,7 +138,7 @@ impl CodeGenerator {
         for (id, global) in component.component.globals.iter() {
             let global_type = enc::GlobalType {
                 mutable: global.mutable,
-                val_type: global.type_id.with(comp).to_valtype(),
+                val_type: global.type_id.with(comp).as_valtype(),
             };
 
             let init_expr = if let Some(init_value) = component.global_vals.get(&id) {
@@ -169,7 +169,7 @@ impl CodeGenerator {
         // Encode module function
         self.module
             .funcs
-            .function(id.with(context).to_inner_core_idx());
+            .function(id.with(context).as_inner_core_idx());
 
         // Encode module code
         let resolver = context.resolved_funcs.get(&id).unwrap();
@@ -177,7 +177,7 @@ impl CodeGenerator {
         let mut builder = enc::Function::new(locals);
 
         for statement in function.body.iter() {
-            encode_statement(&context, *statement, id, &mut builder)?;
+            encode_statement(context, *statement, id, &mut builder)?;
         }
         builder.instruction(&Instruction::End);
 
@@ -203,7 +203,7 @@ impl CodeGenerator {
         self.module.exports.export(
             name,
             enc::ExportKind::Func,
-            id.with(context).to_inner_core_idx(),
+            id.with(context).as_inner_core_idx(),
         );
         // Alias module instance export into component
         self.component.alias.alias(enc::Alias::CoreInstanceExport {
@@ -216,16 +216,16 @@ impl CodeGenerator {
         // Lift aliased function to component function
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
         self.component.lift_funcs.lift(
-            id.with(context).to_outer_core_idx(),
-            id.with(context).to_outer_core_idx(),
+            id.with(context).as_outer_core_idx(),
+            id.with(context).as_outer_core_idx(),
             NO_CANON_OPTS,
         );
         // Export component function
         self.component.exports.export(
             name,
             enc::ComponentExportKind::Func,
-            id.with(context).to_comp_idx(),
-            Some(enc::ComponentTypeRef::Func(id.with(context).to_comp_idx())),
+            id.with(context).as_comp_idx(),
+            Some(enc::ComponentTypeRef::Func(id.with(context).as_comp_idx())),
         );
     }
 
@@ -285,11 +285,11 @@ impl CodeGenerator {
         let params = fn_type
             .get_args()
             .iter()
-            .map(|(_name, valtype)| valtype.with(comp).to_valtype());
+            .map(|(_name, valtype)| valtype.with(comp).as_valtype());
 
         match fn_type.get_return_type() {
             Some(return_type) => {
-                let result_type = return_type.with(comp).to_valtype();
+                let result_type = return_type.with(comp).as_valtype();
                 self.module.types.function(params, [result_type]);
             }
             None => {
@@ -302,7 +302,7 @@ impl CodeGenerator {
         let params = fn_type.get_args().iter().map(|(name, type_id)| {
             let name = comp.get_name(*name);
             let valtype = comp.get_type(*type_id);
-            (name, valtype.with(comp).to_comp_valtype())
+            (name, valtype.with(comp).as_comp_valtype())
         });
 
         let mut builder = self.component.types.function();
@@ -311,7 +311,7 @@ impl CodeGenerator {
         match fn_type.get_return_type() {
             Some(return_type) => {
                 let valtype = comp.get_type(return_type);
-                let result_type = valtype.with(comp).to_comp_valtype();
+                let result_type = valtype.with(comp).as_comp_valtype();
                 builder.result(result_type);
             }
             None => {
@@ -322,38 +322,36 @@ impl CodeGenerator {
 }
 
 impl ImportId {
-    fn to_inner_core_idx(&self) -> u32 {
-        let alloc_offset = 1 as u32;
+    fn as_inner_core_idx(&self) -> u32 {
+        let alloc_offset = 1_u32;
         let func_offset = self.index() as u32;
         alloc_offset + func_offset
     }
 
-    fn to_outer_core_idx(&self) -> u32 {
-        let func_offset = self.index() as u32;
-        func_offset
+    fn as_outer_core_idx(&self) -> u32 {
+        self.index() as u32
     }
 
-    fn to_comp_idx(&self) -> u32 {
-        let func_offset = self.index() as u32;
-        func_offset
+    fn as_comp_idx(&self) -> u32 {
+        self.index() as u32
     }
 }
 
 impl<'ctx> C<'ctx, FunctionId, ResolvedComponent> {
-    fn to_inner_core_idx(&self) -> u32 {
-        let alloc_offset = 1 as u32;
+    fn as_inner_core_idx(&self) -> u32 {
+        let alloc_offset = 1_u32;
         let import_offset = self.context.component.imports.len() as u32;
         let func_offset = self.value.index() as u32;
         alloc_offset + import_offset + func_offset
     }
 
-    fn to_outer_core_idx(&self) -> u32 {
+    fn as_outer_core_idx(&self) -> u32 {
         let import_offset = self.context.component.imports.len() as u32;
         let func_offset = self.value.index() as u32;
         import_offset + func_offset
     }
 
-    fn to_comp_idx(&self) -> u32 {
+    fn as_comp_idx(&self) -> u32 {
         let import_offset = self.context.component.imports.len() as u32;
         let func_offset = self.value.index() as u32;
         import_offset + func_offset
@@ -369,7 +367,7 @@ fn encode_locals(
         .iter()
         .map(|(id, _local)| {
             let rtype = *resolver.local_types.get(&id).unwrap();
-            (1, rtype.with(&resolved_comp.component).to_valtype())
+            (1, rtype.with(&resolved_comp.component).as_valtype())
         })
         .collect()
 }
@@ -390,7 +388,7 @@ fn encode_statement(
             ident, expression, ..
         }) => {
             encode_expression(component, *expression, func, builder)?;
-            match resolver.bindings.get(&ident).unwrap() {
+            match resolver.bindings.get(ident).unwrap() {
                 ItemId::Import(_) => unimplemented!(),
                 ItemId::Global(global) => {
                     builder.instruction(&Instruction::GlobalSet(global.index() as u32));
@@ -413,8 +411,8 @@ fn encode_statement(
                 encode_expression(component, *arg, func, builder)?;
             }
             let index = match resolver.bindings.get(&call.ident).unwrap() {
-                ItemId::Import(import) => import.to_inner_core_idx(),
-                ItemId::Function(function) => function.with(component).to_inner_core_idx(),
+                ItemId::Import(import) => import.as_inner_core_idx(),
+                ItemId::Function(function) => function.with(component).as_inner_core_idx(),
                 _ => panic!(""),
             };
             builder.instruction(&Instruction::Call(index as u32));
@@ -518,19 +516,19 @@ impl ast::Literal {
 
 #[allow(dead_code)]
 impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
-    fn to_valtype(&self) -> enc::ValType {
+    fn as_valtype(&self) -> enc::ValType {
         match self.value {
             ResolvedType::Unit => panic!("Not able to encode as valtype"),
-            ResolvedType::Primitive(p) => p.to_valtype(),
-            ResolvedType::ValType(type_id) => type_id.with(self.context).to_valtype(),
+            ResolvedType::Primitive(p) => p.as_valtype(),
+            ResolvedType::ValType(type_id) => type_id.with(self.context).as_valtype(),
         }
     }
 
-    fn to_comp_valtype(&self) -> enc::ComponentValType {
+    fn as_comp_valtype(&self) -> enc::ComponentValType {
         match self.value {
             ResolvedType::Unit => panic!("Not able to encode as valtype"),
-            ResolvedType::Primitive(p) => p.to_comp_valtype(),
-            ResolvedType::ValType(t) => t.with(self.context).to_comp_valtype(),
+            ResolvedType::Primitive(p) => p.as_comp_valtype(),
+            ResolvedType::ValType(t) => t.with(self.context).as_comp_valtype(),
         }
     }
 }
@@ -539,32 +537,32 @@ impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
 
 #[allow(dead_code)]
 impl<'ctx> C<'ctx, TypeId, ast::Component> {
-    fn to_valtype(&self) -> enc::ValType {
+    fn as_valtype(&self) -> enc::ValType {
         let valtype = self.context.get_type(*self.value);
-        valtype.with(self.context).to_valtype()
+        valtype.with(self.context).as_valtype()
     }
 
-    fn to_comp_valtype(&self) -> enc::ComponentValType {
+    fn as_comp_valtype(&self) -> enc::ComponentValType {
         let valtype = self.context.get_type(*self.value);
-        valtype.with(self.context).to_comp_valtype()
+        valtype.with(self.context).as_comp_valtype()
     }
 }
 
 // ast::ValType
 
 impl<'ctx> C<'ctx, ast::ValType, ast::Component> {
-    fn to_valtype(&self) -> enc::ValType {
+    fn as_valtype(&self) -> enc::ValType {
         match self.value {
-            ast::ValType::Primitive(p) => p.to_valtype(),
+            ast::ValType::Primitive(p) => p.as_valtype(),
             _ => panic!("Cannot encode non-primitive as a valtype"),
         }
     }
 
-    fn to_comp_valtype(&self) -> enc::ComponentValType {
+    fn as_comp_valtype(&self) -> enc::ComponentValType {
         match self.value {
             ast::ValType::Result { .. } => todo!(),
             ast::ValType::String => todo!(),
-            ast::ValType::Primitive(p) => p.to_comp_valtype(),
+            ast::ValType::Primitive(p) => p.as_comp_valtype(),
         }
     }
 }
@@ -572,7 +570,7 @@ impl<'ctx> C<'ctx, ast::ValType, ast::Component> {
 // PrimitiveType
 
 impl ast::PrimitiveType {
-    fn to_valtype(&self) -> enc::ValType {
+    fn as_valtype(&self) -> enc::ValType {
         use ast::PrimitiveType;
         match self {
             PrimitiveType::U32
@@ -590,7 +588,7 @@ impl ast::PrimitiveType {
         }
     }
 
-    fn to_primitive_valtype(&self) -> enc::PrimitiveValType {
+    fn as_primitive_valtype(&self) -> enc::PrimitiveValType {
         use ast::PrimitiveType;
         match self {
             PrimitiveType::U64 => enc::PrimitiveValType::U64,
@@ -607,8 +605,8 @@ impl ast::PrimitiveType {
         }
     }
 
-    fn to_comp_valtype(&self) -> enc::ComponentValType {
-        enc::ComponentValType::Primitive(self.to_primitive_valtype())
+    fn as_comp_valtype(&self) -> enc::ComponentValType {
+        enc::ComponentValType::Primitive(self.as_primitive_valtype())
     }
 }
 
@@ -616,11 +614,11 @@ impl ast::PrimitiveType {
 
 #[allow(dead_code)]
 impl ast::ValType {
-    fn to_comp_valtype(&self) -> enc::ComponentValType {
+    fn as_comp_valtype(&self) -> enc::ComponentValType {
         match self {
             ast::ValType::Result { .. } => todo!(),
             ast::ValType::String => todo!(),
-            ast::ValType::Primitive(p) => p.to_comp_valtype(),
+            ast::ValType::Primitive(p) => p.as_comp_valtype(),
         }
     }
 }
@@ -698,7 +696,7 @@ impl EncodeExpression for ast::Literal {
         let resolver = component.resolved_funcs.get(&func).unwrap();
 
         let rtype = resolver.get_resolved_type(expression, comp)?;
-        let valtype = rtype.with(comp).to_valtype();
+        let valtype = rtype.with(comp).as_valtype();
 
         use ast::Literal;
         let instruction = match (valtype, self) {
@@ -726,8 +724,8 @@ impl EncodeExpression for ast::Call {
         }
         let resolver = component.resolved_funcs.get(&func).unwrap();
         let index = match resolver.bindings.get(&self.ident).unwrap() {
-            ItemId::Import(import) => import.to_inner_core_idx(),
-            ItemId::Function(function) => function.with(component).to_inner_core_idx(),
+            ItemId::Import(import) => import.as_inner_core_idx(),
+            ItemId::Function(function) => function.with(component).as_inner_core_idx(),
             _ => panic!(""),
         };
         builder.instruction(&Instruction::Call(index as u32));
