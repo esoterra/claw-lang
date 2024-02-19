@@ -1,6 +1,6 @@
 use cranelift_entity::entity_impl;
 
-use super::{NameId, Component};
+use super::{Component, NameId};
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct TypeId(u32);

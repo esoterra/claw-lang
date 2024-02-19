@@ -19,11 +19,8 @@ pub struct LexerError {
     span: SourceSpan,
 }
 
-pub fn tokenize<'src>(
-    src: crate::Source,
-    contents: &'src str,
-) -> Result<Vec<TokenData>, LexerError> {
-    let lexer = Token::lexer(&contents);
+pub fn tokenize(src: crate::Source, contents: &str) -> Result<Vec<TokenData>, LexerError> {
+    let lexer = Token::lexer(contents);
 
     lexer
         .spanned()
@@ -367,7 +364,7 @@ pub enum Token {
 }
 
 /// Parses a string according to the JSON string format in ECMA-404.
-fn parse_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option<String> {
+fn parse_string_literal(lex: &mut logos::Lexer<'_, Token>) -> Option<String> {
     let mut c_iter = lex.remainder().chars();
     let mut buf = String::new();
 
@@ -410,7 +407,7 @@ fn parse_escaped_char(lex: &mut std::str::Chars) -> Option<(char, usize)> {
         'u' => {
             // Combine next for characters together, fail if they can't be found
             let next_4: [Option<char>; 4] = [lex.next(), lex.next(), lex.next(), lex.next()];
-            let next_4: Option<Vec<char>> = next_4.iter().map(|c| *c).collect();
+            let next_4: Option<Vec<char>> = next_4.iter().copied().collect();
             let next_4: String = next_4?.into_iter().collect();
 
             let code_point = u32::from_str_radix(&next_4, 16).ok()?;
@@ -425,7 +422,7 @@ fn parse_escaped_char(lex: &mut std::str::Chars) -> Option<(char, usize)> {
 }
 
 /// Parses a raw string literal
-fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option<String> {
+fn parse_raw_string_literal(lex: &mut logos::Lexer<'_, Token>) -> Option<String> {
     let mut c_iter = lex.remainder().chars();
     let mut buf = String::new();
 
@@ -488,19 +485,19 @@ fn parse_raw_string_literal<'src>(lex: &mut logos::Lexer<'src, Token>) -> Option
 }
 
 fn parse_decint_literal(s: &str) -> Option<u64> {
-    s.replace("_", "").parse().ok()
+    s.replace('_', "").parse().ok()
 }
 
 fn parse_decfloat_literal(s: &str) -> Option<f64> {
-    s.replace("_", "").parse().ok()
+    s.replace('_', "").parse().ok()
 }
 
 fn parse_bin_literal(s: &str) -> Option<u64> {
-    u64::from_str_radix(&s[2..].replace("_", ""), 2).ok()
+    u64::from_str_radix(&s[2..].replace('_', ""), 2).ok()
 }
 
 fn parse_hex_literal(s: &str) -> Option<u64> {
-    u64::from_str_radix(&s[2..].replace("_", ""), 16).ok()
+    u64::from_str_radix(&s[2..].replace('_', ""), 16).ok()
 }
 
 #[cfg(test)]

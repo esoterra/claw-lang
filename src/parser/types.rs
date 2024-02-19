@@ -4,7 +4,7 @@ use crate::parser::{ParseInput, ParserError};
 
 pub fn parse_valtype(input: &mut ParseInput, comp: &mut Component) -> Result<TypeId, ParserError> {
     let next = input.next()?;
-    let span = next.span.clone();
+    let span = next.span;
     let valtype = match next.token {
         Token::U32 => ValType::Primitive(PrimitiveType::U32),
         Token::U64 => ValType::Primitive(PrimitiveType::U64),

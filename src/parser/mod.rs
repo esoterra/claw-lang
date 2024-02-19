@@ -70,7 +70,7 @@ impl ParseInput {
         let data = &self.tokens[self.index - 1];
         ParserError::UnexpectedToken {
             src: self.src.clone(),
-            span: data.span.clone(),
+            span: data.span,
             description: description.to_string(),
             token: data.token.clone(),
         }
@@ -105,7 +105,7 @@ impl ParseInput {
     pub fn assert_next(&mut self, token: Token, description: &str) -> Result<Span, ParserError> {
         let next = self.next()?;
         if next.token == token {
-            Ok(next.span.clone())
+            Ok(next.span)
         } else {
             Err(self.unexpected_token(description))
         }
@@ -118,7 +118,7 @@ impl ParseInput {
                 return None;
             }
         }
-        Some(self.next().ok()?.span.clone())
+        Some(self.next().ok()?.span)
     }
 
     pub fn slice_next(&mut self, num: usize) -> Result<&[TokenData], ParserError> {
@@ -132,14 +132,14 @@ impl ParseInput {
     }
 }
 
-pub fn make_input<'src>(source: &'src str) -> (crate::Source, ParseInput) {
+pub fn make_input(source: &str) -> (crate::Source, ParseInput) {
     let src = Arc::new(NamedSource::new("test", source.to_string()));
     let tokens = crate::lexer::tokenize(src.clone(), source).unwrap();
     (src.clone(), ParseInput::new(src, tokens))
 }
 
 pub fn make_span(start: usize, len: usize) -> Span {
-    Span::new(start.into(), len.into())
+    Span::new(start.into(), len)
 }
 
 #[cfg(test)]

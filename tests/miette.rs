@@ -1,5 +1,5 @@
+use miette::{Diagnostic, NamedSource, Report, SourceSpan};
 use thiserror::Error;
-use miette::{NamedSource, Report, SourceSpan, Diagnostic};
 
 #[derive(Error, Debug, Diagnostic)]
 #[error("oops!")]
@@ -24,28 +24,37 @@ enum EnumError {
         // Snippets and highlights can be included in the diagnostic!
         #[label("This bit here")]
         bad_bit: SourceSpan,
-    }
+    },
 }
 
 #[derive(Error, Debug, Diagnostic)]
 enum NestedEnumError {
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Error(#[from] EnumError)
+    Error(#[from] EnumError),
 }
 
 #[test]
 fn test_miette_struct_error() {
     let src = NamedSource::new("foobar.txt", "[1.3, \"foobar\", false]".to_owned());
-    let error = StructError { src, bad_bit: SourceSpan::from((6, 8)) };
+    let error = StructError {
+        src,
+        bad_bit: SourceSpan::from((6, 8)),
+    };
     println!("{:?}", Report::new(error));
 
     let src = NamedSource::new("foobar.txt", "[1.3, \"foobar\", false]".to_owned());
-    let error = EnumError::Base { src, bad_bit: SourceSpan::from((6, 8)) };
+    let error = EnumError::Base {
+        src,
+        bad_bit: SourceSpan::from((6, 8)),
+    };
     println!("{:?}", Report::new(error));
 
     let src = NamedSource::new("foobar.txt", "[1.3, \"foobar\", false]".to_owned());
-    let error = EnumError::Base { src, bad_bit: SourceSpan::from((6, 8)) };
+    let error = EnumError::Base {
+        src,
+        bad_bit: SourceSpan::from((6, 8)),
+    };
     let error = NestedEnumError::Error(error);
     println!("{:?}", Report::new(error));
 

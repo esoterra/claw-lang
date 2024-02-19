@@ -21,9 +21,15 @@ jobs:
       run: |
         rustc --version
         cargo --version
-        
+
     - name: Build
       run: cargo build
+
+    - name: Format
+      run: cargo fmt --check
+
+    - name: Lint
+      run: cargo clippy
 
     - name: Run tests
       run: cargo test

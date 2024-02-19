@@ -1,4 +1,4 @@
-use crate::ast::{self, Span, merge, NameId, StatementId, Component};
+use crate::ast::{self, merge, Component, NameId, Span, StatementId};
 use crate::lexer::Token;
 use crate::parser::{expressions::parse_expression, types::parse_valtype, ParseInput, ParserError};
 
@@ -27,9 +27,7 @@ pub fn parse_ident(input: &mut ParseInput, comp: &mut Component) -> Result<NameI
             let span = input.next().unwrap().span;
             Ok(comp.new_name(ident, span))
         }
-        _ => {
-            Err(input.unexpected_token("Expected identifier"))
-        }
+        _ => Err(input.unexpected_token("Expected identifier")),
     }
 }
 
@@ -37,12 +35,12 @@ pub fn parse_statement(
     input: &mut ParseInput,
     comp: &mut Component,
 ) -> Result<StatementId, ParserError> {
-    return match input.peek()?.token {
+    match input.peek()?.token {
         Token::Return => parse_return(input, comp),
         Token::Let => parse_let(input, comp),
         Token::If => parse_if(input, comp),
         _ => parse_assign(input, comp),
-    };
+    }
 }
 
 fn parse_let(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {

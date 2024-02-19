@@ -1,5 +1,5 @@
+use crate::ast::{self, expressions::BinaryOp, expressions::ExpressionId, merge};
 use crate::ast::{Component, UnaryOp};
-use crate::ast::{self, expressions::ExpressionId, merge, expressions::BinaryOp};
 use crate::lexer::Token;
 use crate::parser::{ParseInput, ParserError};
 
@@ -22,12 +22,12 @@ fn pratt_parse(
     let mut lhs = match peek_unary_op(input) {
         Some(op) => {
             let ((), r_bp) = prefix_binding_power(op);
-            let start_span = input.next().unwrap().span.clone();
+            let start_span = input.next().unwrap().span;
             let rhs = pratt_parse(input, comp, r_bp)?;
             let end_span = comp.expr().get_span(rhs);
             let span = merge(&start_span, &end_span);
             comp.expr_mut().alloc_unary_op(op, rhs, span)
-        },
+        }
         None => parse_leaf(input, comp)?,
     };
 
@@ -83,18 +83,19 @@ pub fn parse_ident_expr(
         Token::Identifier(ident) => {
             let ident = ident.clone();
             let span = input.next().unwrap().span;
-            let ident = comp.new_name(ident, span.clone());
+            let ident = comp.new_name(ident, span);
             Ok(comp.expr_mut().alloc_ident(ident, span))
         }
-        _ => {
-            Err(input.unexpected_token("Expected identifier"))
-        }
+        _ => Err(input.unexpected_token("Expected identifier")),
     }
 }
 
-fn parse_literal(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
+fn parse_literal(
+    input: &mut ParseInput,
+    comp: &mut Component,
+) -> Result<ExpressionId, ParserError> {
     let next = input.next()?;
-    let span = next.span.clone();
+    let span = next.span;
     let literal = match &next.token {
         Token::StringLiteral(_value) => return Err(input.unsupported_error("StringLiteral")),
         Token::DecIntLiteral(value) => ast::Literal::Integer(*value),
@@ -117,7 +118,7 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
         let token = input.next()?;
         match token.token {
             Token::Comma => continue,
-            Token::RParen => break token.span.clone(),
+            Token::RParen => break token.span,
             _ => return Err(input.unexpected_token("Argument list")),
         }
     };
@@ -138,7 +139,7 @@ fn peek_unary_op(input: &mut ParseInput) -> Option<UnaryOp> {
 
 fn prefix_binding_power(op: UnaryOp) -> ((), u8) {
     match op {
-        UnaryOp::Negate => ((), 200)
+        UnaryOp::Negate => ((), 200),
     }
 }
 
@@ -224,9 +225,7 @@ mod tests {
         for (source, value, span) in cases {
             let (src, mut input) = make_input(source);
             let mut comp = Component::new(src);
-            let expected_expression = comp
-                .expr_mut()
-                .alloc_literal(Literal::Integer(value), span.clone());
+            let expected_expression = comp.expr_mut().alloc_literal(Literal::Integer(value), span);
 
             let found_literal = parse_literal(&mut input.clone(), &mut comp).unwrap();
             assert!(found_literal.context_eq(&expected_expression, &comp));
@@ -248,8 +247,8 @@ mod tests {
         for (source, span) in cases {
             let (src, mut input) = make_input(source);
             let mut comp = Component::new(src);
-            let ident = comp.new_name(source.to_owned(), span.clone());
-            let expected_expression = comp.expr_mut().alloc_ident(ident, span.clone());
+            let ident = comp.new_name(source.to_owned(), span);
+            let expected_expression = comp.expr_mut().alloc_ident(ident, span);
             let found_ident = parse_ident_expr(&mut input.clone(), &mut comp).unwrap();
             assert!(found_ident.context_eq(&expected_expression, &comp));
 
@@ -273,10 +272,9 @@ mod tests {
         for (source, ident, span) in cases {
             let (src, mut input) = make_input(source);
             let mut comp = Component::new(src);
-            let ident = comp.new_name(ident.to_owned(), span.clone());
-            let expected_expression = comp.expr_mut().alloc_ident(ident, span.clone());
-            let found_expression =
-                parse_parenthetical(&mut input.clone(), &mut comp).unwrap();
+            let ident = comp.new_name(ident.to_owned(), span);
+            let expected_expression = comp.expr_mut().alloc_ident(ident, span);
+            let found_expression = parse_parenthetical(&mut input.clone(), &mut comp).unwrap();
             assert!(found_expression.context_eq(&expected_expression, &comp));
             let found_expression = parse_leaf(&mut input.clone(), &mut comp).unwrap();
             assert!(found_expression.context_eq(&expected_expression, &comp));
@@ -286,22 +284,16 @@ mod tests {
     }
 
     macro_rules! make_ast {
-        ($comp:expr, { $left:tt, $op:expr, $right:tt }) => {
-            {
-                let lhs = make_ast!($comp, $left);
-                let rhs = make_ast!($comp, $right);
-                $comp.expr_mut().alloc_bin_op($op, lhs, rhs)
-            }
-        };
-        ($comp:expr, ($val:expr => $span_l:expr, $span_r:expr)) => {
-            {
-                let expr = $val;
-                let span = make_span($span_l, $span_r);
-                $comp
-                    .expr_mut()
-                    .alloc_literal(Literal::Integer(expr), span)
-            }
-        };
+        ($comp:expr, { $left:tt, $op:expr, $right:tt }) => {{
+            let lhs = make_ast!($comp, $left);
+            let rhs = make_ast!($comp, $right);
+            $comp.expr_mut().alloc_bin_op($op, lhs, rhs)
+        }};
+        ($comp:expr, ($val:expr => $span_l:expr, $span_r:expr)) => {{
+            let expr = $val;
+            let span = make_span($span_l, $span_r);
+            $comp.expr_mut().alloc_literal(Literal::Integer(expr), span)
+        }};
     }
 
     #[test]

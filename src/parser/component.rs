@@ -1,5 +1,7 @@
 use crate::ast::{self, component::FunctionSignature};
-use crate::ast::{Component, ExternalType, FnType, FunctionId, GlobalId, Import, ImportId, NameId, TypeId};
+use crate::ast::{
+    Component, ExternalType, FnType, FunctionId, GlobalId, Import, ImportId, NameId, TypeId,
+};
 use crate::lexer::Token;
 use crate::parser::{
     expressions::parse_expression, statements::parse_block, types::parse_valtype, ParseInput,
@@ -8,7 +10,10 @@ use crate::parser::{
 
 use super::statements::parse_ident;
 
-pub fn parse_component(src: crate::Source, input: &mut ParseInput) -> Result<ast::Component, ParserError> {
+pub fn parse_component(
+    src: crate::Source,
+    input: &mut ParseInput,
+) -> Result<ast::Component, ParserError> {
     let mut component = ast::Component::new(src);
 
     while !input.done() {
@@ -26,7 +31,9 @@ pub fn parse_component(src: crate::Source, input: &mut ParseInput) -> Result<ast
             Token::Func => {
                 parse_func(input, &mut component, exported)?;
             }
-            _ => return Err(input.unexpected_token("Top level item (e.g. import, global, function"))
+            _ => {
+                return Err(input.unexpected_token("Top level item (e.g. import, global, function"))
+            }
         }
     }
 
@@ -113,14 +120,21 @@ fn parse_func_signature(
         let _ = input.next();
     }
 
-    input.assert_next(Token::RParen, "Function argument parenthesis must be closed")?;
+    input.assert_next(
+        Token::RParen,
+        "Function argument parenthesis must be closed",
+    )?;
 
     let return_type = match input.next_if(Token::Arrow) {
         Some(_) => Some(parse_valtype(input, comp)?),
         None => None,
     };
 
-    Ok(FunctionSignature { ident, arguments, return_type })
+    Ok(FunctionSignature {
+        ident,
+        arguments,
+        return_type,
+    })
 }
 
 fn parse_argument(
@@ -156,7 +170,10 @@ fn parse_fn_type(input: &mut ParseInput, comp: &mut Component) -> Result<FnType,
         let _ = input.next();
     }
 
-    input.assert_next(Token::RParen, "Function argument parenthesis must be closed")?;
+    input.assert_next(
+        Token::RParen,
+        "Function argument parenthesis must be closed",
+    )?;
 
     let return_type = match input.next_if(Token::Arrow) {
         Some(_) => Some(parse_valtype(input, comp)?),
@@ -172,8 +189,8 @@ fn parse_fn_type(input: &mut ParseInput, comp: &mut Component) -> Result<FnType,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use miette::Report;
     use crate::parser::make_input;
+    use miette::Report;
 
     #[test]
     fn test_increment() {
@@ -189,7 +206,7 @@ mod tests {
         match result {
             Ok(_) => {
                 // yay!
-            },
+            }
             Err(error) => panic!("{:?}", Report::new(error)),
         };
     }

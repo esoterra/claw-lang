@@ -24,7 +24,7 @@ impl ExpressionData {
     }
 
     pub fn get_span(&self, id: ExpressionId) -> Span {
-        self.expression_spans.get(&id).unwrap().clone()
+        *self.expression_spans.get(&id).unwrap()
     }
 
     pub fn expressions(&self) -> &PrimaryMap<ExpressionId, Expression> {
