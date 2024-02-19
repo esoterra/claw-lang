@@ -9,10 +9,14 @@ use enc::ModuleArg;
 use wasm_encoder as enc;
 use wasm_encoder::Instruction;
 
-const MODULE_IDX: u32 = 0;
+const MODULE_ALLOCATOR_IDX: u32 = 0;
+const MODULE_CODE_IDX: u32 = 1;
 
-const INLINE_EXPORT_INSTANCE_IDX: u32 = 0;
-const MODULE_INSTANCE_IDX: u32 = 1;
+const MODULE_INSTANCE_IMPORTS_IDX: u32 = 0;
+const MODULE_INSTANCE_ALLOCATOR_IDX: u32 = 1;
+const MODULE_INSTANCE_CODE_IDX: u32 = 2;
+
+const MODULE_FUNC_REALLOC: u32 = 0;
 
 #[derive(Default)]
 pub struct CodeGenerator {
@@ -60,6 +64,8 @@ impl CodeGenerator {
     pub fn generate(mut self, resolved_comp: &ResolvedComponent) -> Result<Vec<u8>, GenerationError> {
         self.encode_globals(resolved_comp);
 
+        self.encode_import_allocator();
+
         for (id, import) in resolved_comp.component.imports.iter() {
             self.encode_import(id, import, resolved_comp);
         }
@@ -71,13 +77,22 @@ impl CodeGenerator {
         Ok(self.emit_bytes())
     }
 
+    fn encode_import_allocator(&mut self) {
+        let mem_type = enc::MemoryType { minimum: 1, maximum: None, memory64: false, shared: false };
+        let mem_ty = enc::EntityType::Memory(mem_type);
+        self.module.imports.import("alloc", "memory", mem_ty);
+
+        self.module.types.function(vec![enc::ValType::I32; 4], vec![enc::ValType::I32; 1]);
+        let fn_type = enc::EntityType::Function(MODULE_FUNC_REALLOC);
+        self.module.imports.import("alloc", "realloc", fn_type);
+    }
+
     fn encode_import(
         &mut self,
         id: ImportId,
         import: &ast::Import,
         resolved_comp: &ResolvedComponent,
     ) {
-        let import_func_idx = id.index() as u32;
         let import_name = resolved_comp.component.get_name(import.ident);
 
         let comp = &resolved_comp.component;
@@ -85,21 +100,21 @@ impl CodeGenerator {
             ast::ExternalType::Function(fn_type) => {
                 // Encode Module Type and Import
                 self.encode_mod_import_type(fn_type, comp);
-                let module_ty = enc::EntityType::Function(import_func_idx);
+                let module_ty = enc::EntityType::Function(id.to_inner_core_idx());
                 self.module.imports.import("claw", import_name, module_ty);
 
                 // Encode Component Type and Import
                 self.encode_comp_import_type(fn_type, comp);
-                let component_ty = enc::ComponentTypeRef::Func(import_func_idx);
+                let component_ty = enc::ComponentTypeRef::Func(id.to_comp_idx());
                 self.component.imports.import(import_name, component_ty);
 
                 // Lower the Import
-                self.component.lower_funcs.lower(import_func_idx, []);
+                self.component.lower_funcs.lower(id.to_outer_core_idx(), []);
 
                 self.component.instantiate_args.push((
                     import_name.to_owned(),
                     enc::ExportKind::Func,
-                    import_func_idx,
+                    id.to_outer_core_idx(),
                 ));
             }
         }
@@ -107,7 +122,7 @@ impl CodeGenerator {
 
     fn encode_globals(&mut self, component: &ResolvedComponent) {
         let comp = &component.component;
-    
+
         for (id, global) in component.component.globals.iter() {
             let global_type = enc::GlobalType {
                 mutable: global.mutable,
@@ -133,53 +148,50 @@ impl CodeGenerator {
         &mut self,
         id: FunctionId,
         function: &ast::Function,
-        resolved_comp: &ResolvedComponent,
+        context: &ResolvedComponent,
     ) -> Result<(), GenerationError> {
-        let comp = &resolved_comp.component;
+        let comp = &context.component;
         // Encode module and component type sections
         self.encode_mod_func_type(&function.signature.fn_type, comp);
 
-        let func_idx = resolved_comp.component.imports.len() + id.index();
-        let func_idx = func_idx as u32;
-
         // Encode module function
-        self.module.funcs.function(func_idx);
+        self.module.funcs.function(id.with(context).to_inner_core_idx());
 
         // Encode module code
-        let resolver = resolved_comp.resolved_funcs.get(&id).unwrap();
-        let locals = encode_locals(resolver, resolved_comp);
+        let resolver = context.resolved_funcs.get(&id).unwrap();
+        let locals = encode_locals(resolver, context);
         let mut builder = enc::Function::new(locals);
 
         for statement in function.body.iter() {
-            encode_statement(&resolved_comp, *statement, id, &mut builder)?;
+            encode_statement(&context, *statement, id, &mut builder)?;
         }
         builder.instruction(&Instruction::End);
 
         self.module.code.function(&builder);
 
         if function.exported {
-            self.encode_func_export(func_idx, function, resolved_comp);
+            self.encode_func_export(id, function, context);
         }
         Ok(())
     }
 
     fn encode_func_export(
         &mut self,
-        func_idx: u32,
+        id: FunctionId,
         function: &ast::Function,
-        resolved_comp: &ResolvedComponent,
+        context: &ResolvedComponent,
     ) {
-        let comp = &resolved_comp.component;
+        let comp = &context.component;
         let ident = function.signature.ident;
-        let name = resolved_comp.component.get_name(ident);
+        let name = context.component.get_name(ident);
 
         // Export function from module
         self.module
             .exports
-            .export(name, enc::ExportKind::Func, func_idx);
+            .export(name, enc::ExportKind::Func, id.with(context).to_inner_core_idx());
         // Alias module instance export into component
         self.component.alias.alias(enc::Alias::CoreInstanceExport {
-            instance: MODULE_INSTANCE_IDX,
+            instance: MODULE_INSTANCE_CODE_IDX,
             kind: enc::ExportKind::Func,
             name,
         });
@@ -189,45 +201,62 @@ impl CodeGenerator {
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
         self.component
             .lift_funcs
-            .lift(func_idx, func_idx, NO_CANON_OPTS);
+            .lift(
+                id.with(context).to_outer_core_idx(),
+                id.with(context).to_outer_core_idx(),
+                NO_CANON_OPTS
+            );
         // Export component function
         self.component.exports.export(
             name,
             enc::ComponentExportKind::Func,
-            func_idx,
-            Some(enc::ComponentTypeRef::Func(func_idx)),
+            id.with(context).to_comp_idx(),
+            Some(enc::ComponentTypeRef::Func(id.with(context).to_comp_idx())),
         );
     }
 
     fn emit_bytes(self) -> Vec<u8> {
-        let mut module = enc::Module::new();
-        let mut component = enc::Component::new();
+        let mut code_module = enc::Module::new();
 
         // Combine module sections in order
-        module.section(&self.module.types);
-        module.section(&self.module.imports);
-        module.section(&self.module.funcs);
-        module.section(&self.module.globals);
-        module.section(&self.module.exports);
-        module.section(&self.module.code);
+        code_module.section(&self.module.types);
+        code_module.section(&self.module.imports);
+        code_module.section(&self.module.funcs);
+        code_module.section(&self.module.globals);
+        code_module.section(&self.module.exports);
+        code_module.section(&self.module.code);
 
-        // Build up component
-        // Embed module
-        component.section(&enc::ModuleSection(&module));
-        // Encode function types and definitions
+        let mut component = enc::Component::new();
+
+        // Component Types
         component.section(&self.component.types);
-        // Import component functions
+        // Component Imports
         component.section(&self.component.imports);
-        // Lower them to module level
+        // Lower Imported Functions
         component.section(&self.component.lower_funcs);
-        // Instantiate module
-        let mut comp_instantiate = enc::InstanceSection::new();
-        comp_instantiate.export_items(self.component.instantiate_args);
-        comp_instantiate.instantiate(
-            MODULE_IDX,
-            [("claw", ModuleArg::Instance(INLINE_EXPORT_INSTANCE_IDX))],
-        );
-        component.section(&comp_instantiate);
+
+        // Modules
+        component.section(&enc::RawSection {
+            id: enc::ComponentSectionId::CoreModule.into(),
+            data: gen_allocator().as_slice()
+        });
+        component.section(&enc::ModuleSection(&code_module));
+
+        // Module Instances
+        let mut module_instances = enc::InstanceSection::new();
+        // Imports Module Instance
+        module_instances.export_items(self.component.instantiate_args);
+        // Allocator Module Instance
+        let args: [(String, _); 0] = [];
+        module_instances.instantiate(MODULE_ALLOCATOR_IDX, args);
+        // Code Module Instance
+        let args = [
+            ("claw", ModuleArg::Instance(MODULE_INSTANCE_IMPORTS_IDX)),
+            ("alloc", ModuleArg::Instance(MODULE_INSTANCE_ALLOCATOR_IDX)),
+        ];
+        module_instances.instantiate(MODULE_CODE_IDX, args);
+        component.section(&module_instances);
+
         // Alias module exports
         component.section(&self.component.alias);
         // Lift component functions
@@ -289,6 +318,45 @@ impl CodeGenerator {
     }
 }
 
+impl ImportId {
+    fn to_inner_core_idx(&self) -> u32 {
+        let alloc_offset = 1 as u32;
+        let func_offset = self.index() as u32;
+        alloc_offset + func_offset
+    }
+
+    fn to_outer_core_idx(&self) -> u32 {
+        let func_offset = self.index() as u32;
+        func_offset
+    }
+
+    fn to_comp_idx(&self) -> u32 {
+        let func_offset = self.index() as u32;
+        func_offset
+    }
+}
+
+impl<'ctx> C<'ctx, FunctionId, ResolvedComponent> {
+    fn to_inner_core_idx(&self) -> u32 {
+        let alloc_offset = 1 as u32;
+        let import_offset = self.context.component.imports.len() as u32;
+        let func_offset = self.value.index() as u32;
+        alloc_offset + import_offset + func_offset
+    }
+
+    fn to_outer_core_idx(&self) -> u32 {
+        let import_offset = self.context.component.imports.len() as u32;
+        let func_offset = self.value.index() as u32;
+        import_offset + func_offset
+    }
+
+    fn to_comp_idx(&self) -> u32 {
+        let import_offset = self.context.component.imports.len() as u32;
+        let func_offset = self.value.index() as u32;
+        import_offset + func_offset
+    }
+}
+
 fn encode_locals(
     resolver: &FunctionResolver,
     resolved_comp: &ResolvedComponent,
@@ -342,8 +410,8 @@ fn encode_statement(
                 encode_expression(component, *arg, func, builder)?;
             }
             let index = match resolver.bindings.get(&call.ident).unwrap() {
-                ItemId::Import(import) => import.index(),
-                ItemId::Function(function) => function.index(),
+                ItemId::Import(import) => import.to_inner_core_idx(),
+                ItemId::Function(function) => function.with(component).to_inner_core_idx(),
                 _ => panic!(""),
             };
             builder.instruction(&Instruction::Call(index as u32));
@@ -651,8 +719,8 @@ impl EncodeExpression for ast::Call {
         }
         let resolver = component.resolved_funcs.get(&func).unwrap();
         let index = match resolver.bindings.get(&self.ident).unwrap() {
-            ItemId::Import(import) => import.index(),
-            ItemId::Function(function) => function.index(),
+            ItemId::Import(import) => import.to_inner_core_idx(),
+            ItemId::Function(function) => function.with(component).to_inner_core_idx(),
             _ => panic!(""),
         };
         builder.instruction(&Instruction::Call(index as u32));
@@ -788,4 +856,9 @@ impl EncodeExpression for ast::BinaryExpression {
         builder.instruction(&instruction);
         Ok(())
     }
+}
+
+pub fn gen_allocator() -> Vec<u8> {
+    let wat = include_str!("../allocator.wat");
+    wat::parse_str(wat).unwrap()
 }
