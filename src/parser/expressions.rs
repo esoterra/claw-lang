@@ -79,16 +79,14 @@ pub fn parse_ident_expr(
     input: &mut ParseInput,
     comp: &mut Component,
 ) -> Result<ExpressionId, ParserError> {
-    let checkpoint = input.checkpoint();
-    let next = input.next()?;
-    let span = next.span.clone();
-    match next.token.clone() {
+    match &input.peek()?.token {
         Token::Identifier(ident) => {
+            let ident = ident.clone();
+            let span = input.next().unwrap().span;
             let ident = comp.new_name(ident, span.clone());
             Ok(comp.expr_mut().alloc_ident(ident, span))
         }
         _ => {
-            input.restore(checkpoint);
             Err(input.unexpected_token("Expected identifier"))
         }
     }

@@ -21,13 +21,13 @@ pub fn parse_block(
 
 /// Parse an identifier
 pub fn parse_ident(input: &mut ParseInput, comp: &mut Component) -> Result<NameId, ParserError> {
-    let checkpoint = input.checkpoint();
-    let next = input.next()?;
-    let span = next.span.clone();
-    match next.token.clone() {
-        Token::Identifier(ident) => Ok(comp.new_name(ident, span)),
+    match &input.peek()?.token {
+        Token::Identifier(ident) => {
+            let ident = ident.clone();
+            let span = input.next().unwrap().span;
+            Ok(comp.new_name(ident, span))
+        }
         _ => {
-            input.restore(checkpoint);
             Err(input.unexpected_token("Expected identifier"))
         }
     }
