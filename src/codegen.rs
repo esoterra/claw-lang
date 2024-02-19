@@ -415,7 +415,7 @@ fn encode_statement(
                 ItemId::Function(function) => function.with(component).as_inner_core_idx(),
                 _ => panic!(""),
             };
-            builder.instruction(&Instruction::Call(index as u32));
+            builder.instruction(&Instruction::Call(index));
         }
         ast::Statement::If(ast::If { condition, block }) => {
             encode_expression(component, *condition, func, builder)?;
@@ -728,7 +728,7 @@ impl EncodeExpression for ast::Call {
             ItemId::Function(function) => function.with(component).as_inner_core_idx(),
             _ => panic!(""),
         };
-        builder.instruction(&Instruction::Call(index as u32));
+        builder.instruction(&Instruction::Call(index));
         Ok(())
     }
 }
