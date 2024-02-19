@@ -23,9 +23,10 @@ pub fn parse_component(src: crate::Source, input: &mut ParseInput) -> Result<ast
             Token::Let => {
                 parse_global(input, &mut component, exported)?;
             }
-            _ => {
+            Token::Func => {
                 parse_func(input, &mut component, exported)?;
             }
+            _ => return Err(input.unexpected_token("Top level item (e.g. import, global, function"))
         }
     }
 
@@ -96,13 +97,30 @@ fn parse_func_signature(
     input: &mut ParseInput,
     comp: &mut Component,
 ) -> Result<FunctionSignature, ParserError> {
+    input.assert_next(Token::Func, "Function signature")?;
     let ident = parse_ident(input, comp)?;
+    input.assert_next(Token::LParen, "Function arguments are parenthesized")?;
 
-    input.assert_next(Token::Colon, "Function signature colon")?;
+    let mut arguments = Vec::new();
+    while input.peek()?.token != Token::RParen {
+        let argument = parse_argument(input, comp)?;
+        arguments.push(argument);
 
-    let fn_type = parse_fn_type(input, comp)?;
+        if input.peek()?.token != Token::Comma {
+            break;
+        }
 
-    Ok(FunctionSignature { ident, fn_type })
+        let _ = input.next();
+    }
+
+    input.assert_next(Token::RParen, "Function argument parenthesis must be closed")?;
+
+    let return_type = match input.next_if(Token::Arrow) {
+        Some(_) => Some(parse_valtype(input, comp)?),
+        None => None,
+    };
+
+    Ok(FunctionSignature { ident, arguments, return_type })
 }
 
 fn parse_argument(
@@ -124,7 +142,7 @@ fn parse_external_type(
 
 fn parse_fn_type(input: &mut ParseInput, comp: &mut Component) -> Result<FnType, ParserError> {
     let _func_kwd = input.assert_next(Token::Func, "Function keyword")?;
-    let _lparen = input.assert_next(Token::LParen, "Start function arguments")?;
+    input.assert_next(Token::LParen, "Function arguments are parenthesized")?;
 
     let mut arguments = Vec::new();
     while input.peek()?.token != Token::RParen {
@@ -138,9 +156,12 @@ fn parse_fn_type(input: &mut ParseInput, comp: &mut Component) -> Result<FnType,
         let _ = input.next();
     }
 
-    let _rparen = input.assert_next(Token::RParen, "End function arguments")?;
-    input.assert_next(Token::Arrow, "Results arrow")?;
-    let return_type = parse_valtype(input, comp)?;
+    input.assert_next(Token::RParen, "Function argument parenthesis must be closed")?;
+
+    let return_type = match input.next_if(Token::Arrow) {
+        Some(_) => Some(parse_valtype(input, comp)?),
+        None => None,
+    };
 
     Ok(FnType {
         arguments,
@@ -159,7 +180,7 @@ mod tests {
         let source = "
         let mut counter: u32 = 0;
 
-        export increment: func() -> u32 {
+        export func increment() -> u32 {
             counter = counter + 1;
             return counter;
         }";
@@ -175,7 +196,7 @@ mod tests {
 
     #[test]
     fn test_basic_function() {
-        let source = "increment: func() -> u32 {}";
+        let source = "func increment() -> u32 { return 0; }";
         let (src, mut input) = make_input(source);
         let mut comp = Component::new(src.clone());
         let _func = parse_func(&mut input.clone(), &mut comp, false).unwrap();
@@ -184,7 +205,7 @@ mod tests {
 
     #[test]
     fn parse_function_signature() {
-        let source = "increment: func() -> u32";
+        let source = "func increment() -> u32";
         let (src, mut input) = make_input(source);
         let mut comp = Component::new(src);
         let _func_sig = parse_func_signature(&mut input, &mut comp).unwrap();

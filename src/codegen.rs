@@ -99,12 +99,12 @@ impl CodeGenerator {
         match &import.external_type {
             ast::ExternalType::Function(fn_type) => {
                 // Encode Module Type and Import
-                self.encode_mod_import_type(fn_type, comp);
+                self.encode_mod_func_type(fn_type, comp);
                 let module_ty = enc::EntityType::Function(id.to_inner_core_idx());
                 self.module.imports.import("claw", import_name, module_ty);
 
                 // Encode Component Type and Import
-                self.encode_comp_import_type(fn_type, comp);
+                self.encode_comp_func_type(fn_type, comp);
                 let component_ty = enc::ComponentTypeRef::Func(id.to_comp_idx());
                 self.component.imports.import(import_name, component_ty);
 
@@ -152,7 +152,7 @@ impl CodeGenerator {
     ) -> Result<(), GenerationError> {
         let comp = &context.component;
         // Encode module and component type sections
-        self.encode_mod_func_type(&function.signature.fn_type, comp);
+        self.encode_mod_func_type(&function.signature, comp);
 
         // Encode module function
         self.module.funcs.function(id.with(context).to_inner_core_idx());
@@ -196,7 +196,7 @@ impl CodeGenerator {
             name,
         });
         // Encode component func type
-        self.encode_comp_func_type(&function.signature.fn_type, comp);
+        self.encode_comp_func_type(&function.signature, comp);
         // Lift aliased function to component function
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
         self.component
@@ -267,54 +267,45 @@ impl CodeGenerator {
         component.finish()
     }
 
-    fn encode_mod_import_type(&mut self, fn_type: &ast::FnType, comp: &ast::Component) {
+    fn encode_mod_func_type(&mut self, fn_type: &dyn ast::FnTypeInfo, comp: &ast::Component) {
         let params = fn_type
-            .arguments
+            .get_args()
             .iter()
             .map(|(_name, valtype)| valtype.with(comp).to_valtype());
 
-        let result_type = fn_type.return_type.with(comp).to_valtype();
-        self.module.types.function(params, [result_type]);
+        match fn_type.get_return_type() {
+            Some(return_type) => {
+                let result_type = return_type.with(comp).to_valtype();
+                self.module.types.function(params, [result_type]);
+            },
+            None => {
+                self.module.types.function(params, []);
+            },
+        }
     }
 
-    fn encode_comp_import_type(&mut self, fn_type: &ast::FnType, comp: &ast::Component) {
-        let params = fn_type.arguments.iter().map(|(name, type_id)| {
+    fn encode_comp_func_type(&mut self, fn_type: &dyn ast::FnTypeInfo, comp: &ast::Component) {
+        let params = fn_type.get_args().iter().map(|(name, type_id)| {
             let name = comp.get_name(*name);
             let valtype = comp.get_type(*type_id);
             (name, valtype.with(comp).to_comp_valtype())
         });
-        let valtype = comp.get_type(fn_type.return_type);
-        let result_type = valtype.with(comp).to_comp_valtype();
-        self.component
+
+        let mut builder = self.component
             .types
-            .function()
-            .params(params)
-            .result(result_type);
-    }
+            .function();
+        builder.params(params);
 
-    fn encode_mod_func_type(&mut self, fn_type: &ast::FnType, comp: &ast::Component) {
-        let params = fn_type
-            .arguments
-            .iter()
-            .map(|(_name, type_id)| type_id.with(comp).to_valtype());
-
-        let result_type = fn_type.return_type.with(comp).to_valtype();
-        self.module.types.function(params, [result_type]);
-    }
-
-    fn encode_comp_func_type(&mut self, fn_type: &ast::FnType, comp: &ast::Component) {
-        let params = fn_type.arguments.iter().map(|(name, type_id)| {
-            let name = comp.get_name(*name);
-            let valtype = comp.get_type(*type_id);
-            (name, valtype.with(comp).to_comp_valtype())
-        });
-        let valtype = comp.get_type(fn_type.return_type);
-        let result_type = valtype.with(comp).to_comp_valtype();
-        self.component
-            .types
-            .function()
-            .params(params)
-            .result(result_type);
+        match fn_type.get_return_type() {
+            Some(return_type) => {
+                let valtype = comp.get_type(return_type);
+                let result_type = valtype.with(comp).to_comp_valtype();
+                builder.result(result_type);
+            },
+            None => {
+                builder.results([] as [(&str, enc::ComponentValType); 0]);
+            },
+        }
     }
 }
 
@@ -398,7 +389,7 @@ fn encode_statement(
                 }
                 ItemId::Local(local) => {
                     let func = component.component.functions.get(func).unwrap();
-                    let local_index = local.index() + func.signature.fn_type.arguments.len();
+                    let local_index = local.index() + func.signature.arguments.len();
                     let local_index = local_index as u32;
                     builder.instruction(&Instruction::LocalSet(local_index));
                 }
@@ -425,7 +416,9 @@ fn encode_statement(
             builder.instruction(&Instruction::End);
         }
         ast::Statement::Return(ast::Return { expression }) => {
-            encode_expression(component, *expression, func, builder)?;
+            if let Some(expression) = expression {
+                encode_expression(component, *expression, func, builder)?;
+            }
             builder.instruction(&Instruction::Return);
         }
     };
@@ -515,6 +508,7 @@ impl ast::Literal {
 impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
     fn to_valtype(&self) -> enc::ValType {
         match self.value {
+            ResolvedType::Unit => panic!("Not able to encode as valtype"),
             ResolvedType::Primitive(p) => p.to_valtype(),
             ResolvedType::ValType(type_id) => type_id.with(self.context).to_valtype(),
         }
@@ -522,6 +516,7 @@ impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
 
     fn to_comp_valtype(&self) -> enc::ComponentValType {
         match self.value {
+            ResolvedType::Unit => panic!("Not able to encode as valtype"),
             ResolvedType::Primitive(p) => p.to_comp_valtype(),
             ResolvedType::ValType(t) => t.with(self.context).to_comp_valtype(),
         }
@@ -670,7 +665,7 @@ impl EncodeExpression for ast::Identifier {
             }
             ItemId::Local(local) => {
                 let func = component.component.functions.get(func).unwrap();
-                let local_index = local.index() + func.signature.fn_type.arguments.len();
+                let local_index = local.index() + func.signature.arguments.len();
                 builder.instruction(&Instruction::LocalGet(local_index as u32));
             }
             ItemId::Function(_) => unimplemented!(),

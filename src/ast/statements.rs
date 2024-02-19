@@ -37,5 +37,5 @@ pub struct If {
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Return {
-    pub expression: ExpressionId,
+    pub expression: Option<ExpressionId>,
 }

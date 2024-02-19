@@ -1,25 +1,25 @@
-export min-u32: func(left: u32, right: u32) -> u32 {
+export func min-u32(left: u32, right: u32) -> u32 {
     if left < right {
         return left;
     }
     return right;
 }
 
-export max-u32: func(left: u32, right: u32) -> u32 {
+export func max-u32(left: u32, right: u32) -> u32 {
     if left > right {
         return left;
     }
     return right;
 }
 
-export min-u64: func(left: u64, right: u64) -> u64 {
+export func min-u64(left: u64, right: u64) -> u64 {
     if left < right {
         return left;
     }
     return right;
 }
 
-export max-u64: func(left: u64, right: u64) -> u64 {
+export func max-u64(left: u64, right: u64) -> u64 {
     if left > right {
         return left;
     }

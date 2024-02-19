@@ -247,9 +247,9 @@ impl FunctionResolver {
         let mut params = PrimaryMap::new();
         let mut mapping: StackMap<String, ItemId> = context.parent.mappings.clone().into();
 
-        let fn_type = &context.func.signature.fn_type;
+        let sig = &context.func.signature;
 
-        for (_i, (ident, valtype)) in fn_type.arguments.iter().enumerate() {
+        for (_i, (ident, valtype)) in sig.arguments.iter().enumerate() {
             let param = params.push(*valtype);
             let name = context.comp().get_name(*ident).to_owned();
             mapping.insert(name, ItemId::Param(param));
@@ -435,6 +435,7 @@ impl FunctionResolver {
 
 #[derive(Clone, Copy, Debug)]
 pub enum ResolvedType {
+    Unit,
     Primitive(ast::PrimitiveType),
     ValType(TypeId),
 }
@@ -442,6 +443,7 @@ pub enum ResolvedType {
 impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
     pub fn as_primitive(&self) -> Option<ast::PrimitiveType> {
         match self.value {
+            ResolvedType::Unit => None,
             ResolvedType::Primitive(s) => Some(*s),
             ResolvedType::ValType(v) => match self.context.get_type(*v) {
                 ast::ValType::Result { .. } => None,
@@ -453,6 +455,7 @@ impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
 
     pub fn type_eq(&self, other: &ResolvedType) -> bool {
         match (self.value, other) {
+            (ResolvedType::Unit, ResolvedType::Unit) => true,
             (ResolvedType::Primitive(left), ResolvedType::Primitive(right)) => left == right,
             (ResolvedType::ValType(left), ResolvedType::ValType(right)) => {
                 let l_valtype = self.context.get_type(*left);
@@ -596,12 +599,22 @@ impl ResolveStatement for ast::Return {
         resolver: &mut FunctionResolver,
         context: &FuncContext<'ctx>,
     ) -> Result<(), ResolverError> {
-        let rtype = ResolvedType::ValType(context.func.signature.fn_type.return_type);
-        resolver.set_expr_type(self.expression, rtype);
+        let return_type = context.func.signature.return_type;
+        match (return_type, self.expression) {
+            (Some(return_type), Some(expression)) => {
+                let rtype = ResolvedType::ValType(return_type);
+                resolver.set_expr_type(expression, rtype);
 
-        context
-            .get_expr(self.expression)
-            .setup_resolve(self.expression, resolver, context)?;
+                context
+                    .get_expr(expression)
+                    .setup_resolve(expression, resolver, context)?;
+            },
+            (Some(_), None) => panic!("Return statements must contain an expression when function has a return type"),
+            (None, Some(_)) => panic!("Return statements can't contain an expression when function has no return type"),
+            (None, None) => {
+                // No child expression or return type, so do nothing
+            },
+        }
 
         Ok(())
     }
@@ -755,7 +768,7 @@ impl ResolveExpression for ast::Identifier {
 impl ResolveExpression for ast::Literal {}
 
 impl<'ctx> C<'ctx, ItemId, ast::Component> {
-    fn get_fn_type(&self) -> Option<&ast::FnType> {
+    fn get_fn_type(&self) -> Option<&dyn ast::FnTypeInfo> {
         match self.value {
             ItemId::Import(import) => {
                 let import = &self.context.imports[*import];
@@ -765,7 +778,7 @@ impl<'ctx> C<'ctx, ItemId, ast::Component> {
             },
             ItemId::Function(function) => {
                 let function = &self.context.functions[*function];
-                Some(&function.signature.fn_type)
+                Some(&function.signature)
             },
             _ => None,
         }
@@ -916,12 +929,12 @@ impl ResolveExpression for ast::BinaryExpression {
 // Helpers
 
 fn setup_call<'ctx>(call: &ast::Call,
-    fn_type: &ast::FnType,
+    fn_type: &dyn ast::FnTypeInfo,
     resolver: &mut FunctionResolver,
     context: &FuncContext<'ctx>,
     expression: ExpressionId) -> Result<(), ResolverError>
 {
-    if call.args.len() != fn_type.arguments.len() {
+    if call.args.len() != fn_type.get_args().len() {
         let span = context.comp().name_span(call.ident);
         let ident = context.comp().get_name(call.ident).to_owned();
         return Err(ResolverError::CallArgumentsMismatch {
@@ -931,13 +944,13 @@ fn setup_call<'ctx>(call: &ast::Call,
         });
     }
 
-    for (arg_expr, (_, arg_type)) in call.args.iter().zip(fn_type.arguments.iter())
+    for (arg_expr, (_, arg_type)) in call.args.iter().zip(fn_type.get_args().iter())
     {
         let rtype = ResolvedType::ValType(*arg_type);
         resolver.set_expr_type(*arg_expr, rtype);
     }
 
-    let rtype = ResolvedType::ValType(fn_type.return_type);
+    let rtype = ResolvedType::ValType(fn_type.get_return_type().unwrap());
     resolver.set_expr_type(expression, rtype);
 
     Ok(())

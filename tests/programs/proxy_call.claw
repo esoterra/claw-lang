@@ -1,5 +1,5 @@
 import imported: func(a: u32) -> u32;
 
-export exported: func(a: u32) -> u32 {
+export func exported(a: u32) -> u32 {
     return imported(a);
 }
