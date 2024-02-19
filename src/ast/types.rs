@@ -76,5 +76,15 @@ pub enum TypeDefinition {
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FnType {
     pub arguments: Vec<(NameId, TypeId)>,
-    pub return_type: TypeId,
+    pub return_type: Option<TypeId>,
+}
+
+impl super::FnTypeInfo for FnType {
+    fn get_args(&self) -> &[(NameId, TypeId)] {
+        self.arguments.as_slice()
+    }
+
+    fn get_return_type(&self) -> Option<TypeId> {
+        self.return_type
+    }
 }

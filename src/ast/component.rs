@@ -155,7 +155,23 @@ pub struct Function {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct FunctionSignature {
     pub ident: NameId,
-    pub fn_type: FnType,
+    pub arguments: Vec<(NameId, TypeId)>,
+    pub return_type: Option<TypeId>,
+}
+
+pub trait FnTypeInfo {
+    fn get_args(&self) -> &[(NameId, TypeId)];
+    fn get_return_type(&self) -> Option<TypeId>;
+}
+
+impl FnTypeInfo for FunctionSignature {
+    fn get_args(&self) -> &[(NameId, TypeId)] {
+        self.arguments.as_slice()
+    }
+
+    fn get_return_type(&self) -> Option<TypeId> {
+        self.return_type
+    }
 }
 
 ///

@@ -1,11 +1,11 @@
 let mut val: s32 = 0;
 
-export set: func(v: s32) -> s32 {
+export func set(v: s32) -> s32 {
     let old = val;
     val = v;
     return old;
 }
 
-export get-inverse: func() -> s32 {
+export func get-inverse() -> s32 {
     return -val;
 }

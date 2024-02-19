@@ -68,8 +68,15 @@ fn parse_let(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId
 
 fn parse_return(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {
     let start_span = input.assert_next(Token::Return, "Return keyword 'return'")?;
-    let expression = parse_expression(input, comp)?;
-    let end_span = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
+
+    let (expression, end_span) = match input.next_if(Token::Semicolon) {
+        Some(end_span) => (None, end_span),
+        None => {
+            let expression = parse_expression(input, comp)?;
+            let end_span = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
+            (Some(expression), end_span)
+        }
+    };
 
     let statement = ast::Return { expression };
     let span = merge(&start_span, &end_span);

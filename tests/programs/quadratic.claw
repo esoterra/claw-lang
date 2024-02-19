@@ -1,19 +1,19 @@
-export quad-f32: func(a: f32, b: f32, c: f32, x: f32) -> f32 {
+export func quad-f32(a: f32, b: f32, c: f32, x: f32) -> f32 {
     return a * x * x + b * x + c;
 }
 
-export quad-f32-let: func(a: f32, b: f32, c: f32, x: f32) -> f32 {
+export func quad-f32-let(a: f32, b: f32, c: f32, x: f32) -> f32 {
     let a-term = a * x * x;
     let b-term = b * x;
     let c-term = c;
     return a-term + b-term + c-term;
 }
 
-export quad-f64: func(a: f64, b: f64, c: f64, x: f64) -> f64 {
+export func quad-f64(a: f64, b: f64, c: f64, x: f64) -> f64 {
     return a * x * x + b * x + c;
 }
 
-export quad-f64-let: func(a: f64, b: f64, c: f64, x: f64) -> f64 {
+export func quad-f64-let(a: f64, b: f64, c: f64, x: f64) -> f64 {
     let a-term = a * x * x;
     let b-term = b * x;
     let c-term = c;

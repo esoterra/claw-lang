@@ -1,4 +1,4 @@
-export factorial: func(n: u64) -> u64 {
+export func factorial(n: u64) -> u64 {
     if n == 0 {
         return 1;
     }
