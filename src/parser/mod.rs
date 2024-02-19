@@ -50,11 +50,6 @@ pub struct ParseInput {
     index: usize,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub struct Checkpoint {
-    index: usize,
-}
-
 impl ParseInput {
     pub fn new(src: crate::Source, tokens: Vec<TokenData>) -> Self {
         ParseInput {
@@ -79,14 +74,6 @@ impl ParseInput {
             description: description.to_string(),
             token: data.token.clone(),
         }
-    }
-
-    pub fn checkpoint(&self) -> Checkpoint {
-        Checkpoint { index: self.index }
-    }
-
-    pub fn restore(&mut self, checkpoint: Checkpoint) {
-        self.index = checkpoint.index
     }
 
     pub fn get_source(&self) -> crate::Source {
