@@ -1,5 +1,7 @@
 use crate::{
-    ast::{self, ExpressionId, FunctionId, ImportId, StatementId, TypeId}, context::{WithContext, C}, resolver::{FunctionResolver, ItemId, ResolvedComponent, ResolvedType, ResolverError}
+    ast::{self, ExpressionId, FunctionId, ImportId, StatementId, TypeId},
+    context::{WithContext, C},
+    resolver::{FunctionResolver, ItemId, ResolvedComponent, ResolvedType, ResolverError},
 };
 use miette::Diagnostic;
 use thiserror::Error;
@@ -28,7 +30,7 @@ pub struct CodeGenerator {
 pub enum GenerationError {
     #[error(transparent)]
     #[diagnostic(transparent)]
-    Resolver(#[from] ResolverError)
+    Resolver(#[from] ResolverError),
 }
 
 /// Module Index Spaces
@@ -61,7 +63,10 @@ pub struct ComponentBuilder {
 }
 
 impl CodeGenerator {
-    pub fn generate(mut self, resolved_comp: &ResolvedComponent) -> Result<Vec<u8>, GenerationError> {
+    pub fn generate(
+        mut self,
+        resolved_comp: &ResolvedComponent,
+    ) -> Result<Vec<u8>, GenerationError> {
         self.encode_globals(resolved_comp);
 
         self.encode_import_allocator();
@@ -78,11 +83,18 @@ impl CodeGenerator {
     }
 
     fn encode_import_allocator(&mut self) {
-        let mem_type = enc::MemoryType { minimum: 1, maximum: None, memory64: false, shared: false };
+        let mem_type = enc::MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+        };
         let mem_ty = enc::EntityType::Memory(mem_type);
         self.module.imports.import("alloc", "memory", mem_ty);
 
-        self.module.types.function(vec![enc::ValType::I32; 4], vec![enc::ValType::I32; 1]);
+        self.module
+            .types
+            .function(vec![enc::ValType::I32; 4], vec![enc::ValType::I32; 1]);
         let fn_type = enc::EntityType::Function(MODULE_FUNC_REALLOC);
         self.module.imports.import("alloc", "realloc", fn_type);
     }
@@ -155,7 +167,9 @@ impl CodeGenerator {
         self.encode_mod_func_type(&function.signature, comp);
 
         // Encode module function
-        self.module.funcs.function(id.with(context).to_inner_core_idx());
+        self.module
+            .funcs
+            .function(id.with(context).to_inner_core_idx());
 
         // Encode module code
         let resolver = context.resolved_funcs.get(&id).unwrap();
@@ -186,9 +200,11 @@ impl CodeGenerator {
         let name = context.component.get_name(ident);
 
         // Export function from module
-        self.module
-            .exports
-            .export(name, enc::ExportKind::Func, id.with(context).to_inner_core_idx());
+        self.module.exports.export(
+            name,
+            enc::ExportKind::Func,
+            id.with(context).to_inner_core_idx(),
+        );
         // Alias module instance export into component
         self.component.alias.alias(enc::Alias::CoreInstanceExport {
             instance: MODULE_INSTANCE_CODE_IDX,
@@ -199,13 +215,11 @@ impl CodeGenerator {
         self.encode_comp_func_type(&function.signature, comp);
         // Lift aliased function to component function
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
-        self.component
-            .lift_funcs
-            .lift(
-                id.with(context).to_outer_core_idx(),
-                id.with(context).to_outer_core_idx(),
-                NO_CANON_OPTS
-            );
+        self.component.lift_funcs.lift(
+            id.with(context).to_outer_core_idx(),
+            id.with(context).to_outer_core_idx(),
+            NO_CANON_OPTS,
+        );
         // Export component function
         self.component.exports.export(
             name,
@@ -238,7 +252,7 @@ impl CodeGenerator {
         // Modules
         component.section(&enc::RawSection {
             id: enc::ComponentSectionId::CoreModule.into(),
-            data: gen_allocator().as_slice()
+            data: gen_allocator().as_slice(),
         });
         component.section(&enc::ModuleSection(&code_module));
 
@@ -277,10 +291,10 @@ impl CodeGenerator {
             Some(return_type) => {
                 let result_type = return_type.with(comp).to_valtype();
                 self.module.types.function(params, [result_type]);
-            },
+            }
             None => {
                 self.module.types.function(params, []);
-            },
+            }
         }
     }
 
@@ -291,9 +305,7 @@ impl CodeGenerator {
             (name, valtype.with(comp).to_comp_valtype())
         });
 
-        let mut builder = self.component
-            .types
-            .function();
+        let mut builder = self.component.types.function();
         builder.params(params);
 
         match fn_type.get_return_type() {
@@ -301,10 +313,10 @@ impl CodeGenerator {
                 let valtype = comp.get_type(return_type);
                 let result_type = valtype.with(comp).to_comp_valtype();
                 builder.result(result_type);
-            },
+            }
             None => {
                 builder.results([] as [(&str, enc::ComponentValType); 0]);
-            },
+            }
         }
     }
 }
@@ -738,7 +750,6 @@ impl EncodeExpression for ast::UnaryExpression {
     }
 }
 
-
 impl EncodeExpression for ast::BinaryExpression {
     fn encode(
         &self,
@@ -801,7 +812,10 @@ impl EncodeExpression for ast::BinaryExpression {
             (ast::BinaryOp::LessThan, enc::ValType::I64, U) => enc::Instruction::I64LtU,
             (ast::BinaryOp::LessThan, enc::ValType::F32, _) => enc::Instruction::F32Lt,
             (ast::BinaryOp::LessThan, enc::ValType::F64, _) => enc::Instruction::F64Lt,
-            (ast::BinaryOp::LessThan, valtype, s) => panic!("Failed to encode '<' for type {:?} and signedness {:?}", valtype, s),
+            (ast::BinaryOp::LessThan, valtype, s) => panic!(
+                "Failed to encode '<' for type {:?} and signedness {:?}",
+                valtype, s
+            ),
             // Less than equal
             (ast::BinaryOp::LessThanEqual, enc::ValType::I32, S) => enc::Instruction::I32LeS,
             (ast::BinaryOp::LessThanEqual, enc::ValType::I32, U) => enc::Instruction::I32LeU,
@@ -846,7 +860,10 @@ impl EncodeExpression for ast::BinaryExpression {
             (ast::BinaryOp::LogicalAnd, enc::ValType::I32, _) => enc::Instruction::I32And,
             (ast::BinaryOp::LogicalOr, enc::ValType::I32, _) => enc::Instruction::I32Or,
             // Fallback
-            (operator, valtype, _) => panic!("Cannot apply binary operator {:?} to type {:?}", operator, valtype)
+            (operator, valtype, _) => panic!(
+                "Cannot apply binary operator {:?} to type {:?}",
+                operator, valtype
+            ),
         };
         builder.instruction(&instruction);
         Ok(())

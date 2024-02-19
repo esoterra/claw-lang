@@ -29,7 +29,7 @@ impl Runtime {
             Ok(wasm) => wasm,
             Err(error) => {
                 panic!("{:?}", Report::new(error))
-            },
+            }
         };
 
         println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());

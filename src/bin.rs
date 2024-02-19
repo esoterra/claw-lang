@@ -69,7 +69,7 @@ impl Compile {
             Err(error) => {
                 println!("{:?}", Report::new(error));
                 return None;
-            },
+            }
         };
 
         match fs::write(&self.output, wasm) {

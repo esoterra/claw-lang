@@ -1,7 +1,7 @@
 use crate::{
-    ast::{
-        self, ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, StatementId, TypeId
-    }, context::{WithContext, C}, stack_map::StackMap
+    ast::{self, ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, StatementId, TypeId},
+    context::{WithContext, C},
+    stack_map::StackMap,
 };
 use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 use std::collections::{HashMap, VecDeque};
@@ -256,7 +256,11 @@ impl FunctionResolver {
         Ok(())
     }
 
-    fn name_error<T>(&self, ident: NameId, context: &ComponentContext<'_>) -> Result<T, ResolverError> {
+    fn name_error<T>(
+        &self,
+        ident: NameId,
+        context: &ComponentContext<'_>,
+    ) -> Result<T, ResolverError> {
         let span = context.component.name_span(ident);
         let ident = context.component.get_name(ident).to_owned();
         Err(ResolverError::NameError {
@@ -413,14 +417,21 @@ impl FunctionResolver {
         Ok(())
     }
 
-    pub fn get_resolved_type(&self, expression: ExpressionId, context: &ast::Component) -> Result<ResolvedType, ResolverError> {
+    pub fn get_resolved_type(
+        &self,
+        expression: ExpressionId,
+        context: &ast::Component,
+    ) -> Result<ResolvedType, ResolverError> {
         let rtype = self.expression_types.get(&expression);
         match rtype {
             Some(rtype) => Ok(*rtype),
             None => {
                 let span = context.expr().get_span(expression);
-                Err(ResolverError::Base { src: context.src.clone(), span })
-            },
+                Err(ResolverError::Base {
+                    src: context.src.clone(),
+                    span,
+                })
+            }
         }
     }
 }
@@ -522,7 +533,10 @@ impl ResolveStatement for ast::Let {
         let item = ItemId::Local(local);
         resolver.define_name(context, self.ident, item)?;
 
-        context.component.expr().get_exp(self.expression)
+        context
+            .component
+            .expr()
+            .get_exp(self.expression)
             .setup_resolve(self.expression, resolver, context)
     }
 }
@@ -534,8 +548,10 @@ impl ResolveStatement for ast::Assign {
         context: &ComponentContext<'ctx>,
     ) -> Result<(), ResolverError> {
         resolver.use_name(context, self.ident)?;
-        context.component
-            .expr().get_exp(self.expression)
+        context
+            .component
+            .expr()
+            .get_exp(self.expression)
             .setup_resolve(self.expression, resolver, context)
     }
 }
@@ -548,8 +564,10 @@ impl ResolveStatement for ast::Call {
     ) -> Result<(), ResolverError> {
         resolver.use_name(context, self.ident)?;
         for arg in self.args.iter() {
-            context.component
-                .expr().get_exp(*arg)
+            context
+                .component
+                .expr()
+                .get_exp(*arg)
                 .setup_resolve(*arg, resolver, context)?;
         }
         Ok(())
@@ -567,14 +585,18 @@ impl ResolveStatement for ast::If {
         resolver.set_expr_type(self.condition, RESOLVED_BOOL);
 
         // Resolve condition in current context
-        context.component
-            .expr().get_exp(self.condition)
+        context
+            .component
+            .expr()
+            .get_exp(self.condition)
             .setup_resolve(self.condition, resolver, context)?;
         // Take a checkpoint at the state of the mappings before this block
         let checkpoint = resolver.mapping.checkpoint();
         // Resolve all of the inner statements
         for statement in self.block.iter() {
-            context.component.get_statement(*statement)
+            context
+                .component
+                .get_statement(*statement)
                 .setup_resolve(resolver, context)?;
         }
         // Restore the state of the mappings from before the block
@@ -595,15 +617,21 @@ impl ResolveStatement for ast::Return {
                 let rtype = ResolvedType::ValType(return_type);
                 resolver.set_expr_type(expression, rtype);
 
-                context.component
-                    .expr().get_exp(expression)
+                context
+                    .component
+                    .expr()
+                    .get_exp(expression)
                     .setup_resolve(expression, resolver, context)?;
-            },
-            (Some(_), None) => panic!("Return statements must contain an expression when function has a return type"),
-            (None, Some(_)) => panic!("Return statements can't contain an expression when function has no return type"),
+            }
+            (Some(_), None) => panic!(
+                "Return statements must contain an expression when function has a return type"
+            ),
+            (None, Some(_)) => panic!(
+                "Return statements can't contain an expression when function has no return type"
+            ),
             (None, None) => {
                 // No child expression or return type, so do nothing
-            },
+            }
         }
 
         Ok(())
@@ -639,8 +667,10 @@ trait ResolveExpression {
         context: &ComponentContext<'ctx>,
     ) -> Result<(), ResolverError> {
         // Resolve the child
-        context.component
-            .expr().get_exp(child)
+        context
+            .component
+            .expr()
+            .get_exp(child)
             .setup_resolve(child, resolver, context)?;
 
         // Update the parent mapping
@@ -728,11 +758,11 @@ impl ResolveExpression for ast::Identifier {
             ItemId::Global(global) => {
                 let global = context.component.globals.get(global).unwrap();
                 resolver.set_expr_type(expression, ResolvedType::ValType(global.type_id));
-            },
+            }
             ItemId::Param(param) => {
                 let param_type = *resolver.params.get(param).unwrap();
                 resolver.set_expr_type(expression, ResolvedType::ValType(param_type));
-            },
+            }
             ItemId::Local(local) => resolver.use_local(local, expression),
             _ => {}
         }
@@ -765,11 +795,11 @@ impl<'ctx> C<'ctx, ItemId, ast::Component> {
                 match &import.external_type {
                     ast::ExternalType::Function(fn_type) => Some(fn_type),
                 }
-            },
+            }
             ItemId::Function(function) => {
                 let function = &self.context.functions[*function];
                 Some(&function.signature)
-            },
+            }
             _ => None,
         }
     }
@@ -902,10 +932,10 @@ impl ResolveExpression for ast::BinaryExpression {
             }
             (Some(left), None) => {
                 resolver.set_expr_type(self.right, left);
-            },
+            }
             (None, Some(right)) => {
                 resolver.set_expr_type(self.left, right);
-            },
+            }
             (None, None) => {
                 // Neither types known... how did we get here?
                 unreachable!("If a child has been resolved, at least one child shouldn't be None")
@@ -918,12 +948,13 @@ impl ResolveExpression for ast::BinaryExpression {
 
 // Helpers
 
-fn setup_call<'ctx>(call: &ast::Call,
+fn setup_call<'ctx>(
+    call: &ast::Call,
     fn_type: &dyn ast::FnTypeInfo,
     resolver: &mut FunctionResolver,
     context: &ComponentContext<'ctx>,
-    expression: ExpressionId) -> Result<(), ResolverError>
-{
+    expression: ExpressionId,
+) -> Result<(), ResolverError> {
     if call.args.len() != fn_type.get_args().len() {
         let span = context.component.name_span(call.ident);
         let ident = context.component.get_name(call.ident).to_owned();
@@ -934,8 +965,7 @@ fn setup_call<'ctx>(call: &ast::Call,
         });
     }
 
-    for (arg_expr, (_, arg_type)) in call.args.iter().zip(fn_type.get_args().iter())
-    {
+    for (arg_expr, (_, arg_type)) in call.args.iter().zip(fn_type.get_args().iter()) {
         let rtype = ResolvedType::ValType(*arg_type);
         resolver.set_expr_type(*arg_expr, rtype);
     }

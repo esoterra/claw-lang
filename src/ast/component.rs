@@ -7,7 +7,8 @@ use crate::ast::expressions::ExpressionData;
 use crate::Source;
 
 use super::{
-    expressions::ExpressionId, statements::StatementId, types::FnType, NameId, Span, TypeId, ValType
+    expressions::ExpressionId, statements::StatementId, types::FnType, NameId, Span, TypeId,
+    ValType,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
