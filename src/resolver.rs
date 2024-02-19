@@ -1,5 +1,5 @@
 use crate::{
-    ast::{self, ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, StatementId, TypeId},
+    ast::{self, ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, TypeId},
     context::{WithContext, C},
     stack_map::StackMap,
 };
@@ -153,7 +153,7 @@ pub fn resolve(
 
     let mut resolved_funcs: HashMap<FunctionId, FunctionResolver> = HashMap::new();
 
-    for (id, function) in component.functions.iter() {
+    for (id, _function) in component.functions.iter() {
         let mut resolver = FunctionResolver::new(&context, id);
         resolver.resolve(&context)?;
         resolved_funcs.insert(id, resolver);
