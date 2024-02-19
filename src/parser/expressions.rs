@@ -1,4 +1,4 @@
-use crate::ast::Component;
+use crate::ast::{Component, UnaryOp};
 use crate::ast::{self, expressions::ExpressionId, merge, expressions::BinaryOp};
 use crate::lexer::Token;
 use crate::parser::{ParseInput, ParserError};
@@ -19,22 +19,32 @@ fn pratt_parse(
     comp: &mut Component,
     min_bp: u8,
 ) -> Result<ExpressionId, ParserError> {
-    let mut lhs = parse_leaf(input, comp)?;
-    loop {
-        let checkpoint = input.checkpoint();
-        if let Some(bin_op) = try_parse_bin_op(input) {
-            let (l_bp, r_bp) = infix_binding_power(bin_op);
-
-            if l_bp < min_bp {
-                input.restore(checkpoint);
-                break;
-            }
-
+    let mut lhs = match peek_unary_op(input) {
+        Some(op) => {
+            let ((), r_bp) = prefix_binding_power(op);
+            let start_span = input.next().unwrap().span.clone();
             let rhs = pratt_parse(input, comp, r_bp)?;
-            lhs = comp.expr_mut().alloc_bin_op(bin_op, lhs, rhs);
-        } else {
+            let end_span = comp.expr().get_span(rhs);
+            let span = merge(&start_span, &end_span);
+            comp.expr_mut().alloc_unary_op(op, rhs, span)
+        },
+        None => parse_leaf(input, comp)?,
+    };
+
+    loop {
+        let bin_op = match peek_bin_op(input) {
+            Some(op) => op,
+            None => break,
+        };
+
+        let (l_bp, r_bp) = infix_binding_power(bin_op);
+        if l_bp < min_bp {
             break;
         }
+
+        let _ = input.next(); // Consumes peeked operator
+        let rhs = pratt_parse(input, comp, r_bp)?;
+        lhs = comp.expr_mut().alloc_bin_op(bin_op, lhs, rhs);
     }
     Ok(lhs)
 }
@@ -119,7 +129,22 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
     Ok(comp.expr_mut().alloc_call(ident, args, span))
 }
 
-fn try_parse_bin_op(input: &mut ParseInput) -> Option<BinaryOp> {
+fn peek_unary_op(input: &mut ParseInput) -> Option<UnaryOp> {
+    let next = input.peek().ok()?;
+    let op = match &next.token {
+        Token::Sub => UnaryOp::Negate,
+        _ => return None,
+    };
+    Some(op)
+}
+
+fn prefix_binding_power(op: UnaryOp) -> ((), u8) {
+    match op {
+        UnaryOp::Negate => ((), 200)
+    }
+}
+
+fn peek_bin_op(input: &mut ParseInput) -> Option<BinaryOp> {
     let next = input.peek().ok()?;
     let op = match &next.token {
         Token::LogicalOr => BinaryOp::LogicalOr,
@@ -152,7 +177,6 @@ fn try_parse_bin_op(input: &mut ParseInput) -> Option<BinaryOp> {
 
         _ => return None,
     };
-    let _ = input.next();
     Some(op)
 }
 
@@ -184,6 +208,8 @@ fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
 
 #[cfg(test)]
 mod tests {
+    use miette::Report;
+
     use super::*;
     use crate::parser::{make_input, make_span};
 
@@ -311,8 +337,11 @@ mod tests {
         let cases = [(input0, comp0, expected0), (input1, comp1, expected1)];
 
         for (mut input, mut comp, expected) in cases {
-            let result = parse_expression(&mut input, &mut comp).unwrap();
-            assert!(result.context_eq(&expected, &comp));
+            let result = parse_expression(&mut input, &mut comp);
+            match result {
+                Ok(result) => assert!(result.context_eq(&expected, &comp)),
+                Err(error) => panic!("{:?}", Report::new(error)),
+            };
         }
     }
 
@@ -339,8 +368,11 @@ mod tests {
         let cases = [(input0, comp0, expected0), (input1, comp1, expected1)];
 
         for (mut input, mut comp, expected) in cases {
-            let result = parse_expression(&mut input, &mut comp).unwrap();
-            assert!(result.context_eq(&expected, &comp));
+            let result = parse_expression(&mut input, &mut comp);
+            match result {
+                Ok(result) => assert!(result.context_eq(&expected, &comp)),
+                Err(error) => panic!("{:?}", Report::new(error)),
+            };
         }
     }
 }

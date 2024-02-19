@@ -664,12 +664,14 @@ impl EncodeExpression for ast::UnaryExpression {
     fn encode(
         &self,
         component: &ResolvedComponent,
-        expression: ExpressionId,
+        _expression: ExpressionId,
         func: FunctionId,
         builder: &mut enc::Function,
     ) -> Result<(), GenerationError> {
-        _ = (component, expression, func, builder);
-        todo!()
+        builder.instruction(&enc::Instruction::I32Const(0));
+        encode_expression(component, self.inner, func, builder)?;
+        builder.instruction(&enc::Instruction::I32Sub);
+        Ok(())
     }
 }
 

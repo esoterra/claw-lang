@@ -52,7 +52,7 @@ impl ExpressionData {
 
     pub fn alloc_unary_op(&mut self, op: UnaryOp, inner: ExpressionId, span: Span) -> ExpressionId {
         let expr = match op {
-            UnaryOp::Invert => Expression::Unary(UnaryExpression { op, inner }),
+            UnaryOp::Negate => Expression::Unary(UnaryExpression { op, inner }),
         };
         self.alloc(expr, span)
     }
@@ -172,7 +172,7 @@ impl ContextEq<super::Component> for Call {
 
 #[derive(Debug, PartialEq, Clone, Copy)]
 pub enum UnaryOp {
-    Invert,
+    Negate,
 }
 
 #[derive(Debug, PartialEq, Clone)]
