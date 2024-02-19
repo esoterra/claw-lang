@@ -151,6 +151,7 @@ fn parse_fn_type(input: &mut ParseInput, comp: &mut Component) -> Result<FnType,
 #[cfg(test)]
 mod tests {
     use super::*;
+    use miette::Report;
     use crate::parser::make_input;
 
     #[test]
@@ -163,7 +164,13 @@ mod tests {
             return counter;
         }";
         let (src, mut input) = make_input(source);
-        let _component = parse_component(src, &mut input).unwrap();
+        let result = parse_component(src, &mut input);
+        match result {
+            Ok(_) => {
+                // yay!
+            },
+            Err(error) => panic!("{:?}", Report::new(error)),
+        };
     }
 
     #[test]
