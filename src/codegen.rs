@@ -99,12 +99,12 @@ impl CodeGenerator {
         match &import.external_type {
             ast::ExternalType::Function(fn_type) => {
                 // Encode Module Type and Import
-                self.encode_mod_import_type(fn_type, comp);
+                self.encode_mod_func_type(fn_type, comp);
                 let module_ty = enc::EntityType::Function(id.to_inner_core_idx());
                 self.module.imports.import("claw", import_name, module_ty);
 
                 // Encode Component Type and Import
-                self.encode_comp_import_type(fn_type, comp);
+                self.encode_comp_func_type(fn_type, comp);
                 let component_ty = enc::ComponentTypeRef::Func(id.to_comp_idx());
                 self.component.imports.import(import_name, component_ty);
 
@@ -265,47 +265,6 @@ impl CodeGenerator {
         component.section(&self.component.exports);
 
         component.finish()
-    }
-
-    fn encode_mod_import_type(&mut self, fn_type: &dyn ast::FnTypeInfo, comp: &ast::Component) {
-        let params = fn_type
-            .get_args()
-            .iter()
-            .map(|(_name, valtype)| valtype.with(comp).to_valtype());
-
-        match fn_type.get_return_type() {
-            Some(return_type) => {
-                let result_type = return_type.with(comp).to_valtype();
-                self.module.types.function(params, [result_type]);
-            },
-            None => {
-                self.module.types.function(params, []);
-            },
-        }
-    }
-
-    fn encode_comp_import_type(&mut self, fn_type: &dyn ast::FnTypeInfo, comp: &ast::Component) {
-        let params = fn_type.get_args().iter().map(|(name, type_id)| {
-            let name = comp.get_name(*name);
-            let valtype = comp.get_type(*type_id);
-            (name, valtype.with(comp).to_comp_valtype())
-        });
-
-        let mut builder = self.component
-            .types
-            .function();
-        builder.params(params);
-
-        match fn_type.get_return_type() {
-            Some(return_type) => {
-                let valtype = comp.get_type(return_type);
-                let result_type = valtype.with(comp).to_comp_valtype();
-                builder.result(result_type);
-            },
-            None => {
-                builder.results([] as [(&str, enc::ComponentValType); 0]);
-            },
-        }
     }
 
     fn encode_mod_func_type(&mut self, fn_type: &dyn ast::FnTypeInfo, comp: &ast::Component) {
