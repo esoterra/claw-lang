@@ -896,19 +896,16 @@ impl ResolveExpression for ast::BinaryExpression {
         match (left, right) {
             (Some(_left), Some(_right)) => {
                 // Both types known, do nothing
-                println!("AAAA");
             }
             (Some(left), None) => {
-                println!("BBBB");
                 resolver.set_expr_type(self.right, left);
             },
             (None, Some(right)) => {
-                println!("CCCC");
                 resolver.set_expr_type(self.left, right);
             },
             (None, None) => {
                 // Neither types known... how did we get here?
-                unreachable!("DDDD: If a child has been resolved, at least one child shouldn't be None")
+                unreachable!("If a child has been resolved, at least one child shouldn't be None")
             }
         }
 

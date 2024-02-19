@@ -23,6 +23,7 @@ miette = { version = "7.1.0", features = ["fancy"] }
 logos = "0.13.0"
 wasm-encoder = "0.38"
 cranelift-entity = "0.104.0"
+wat = "1.200.0"
 
 [dev-dependencies]
 pretty_assertions = "1.1.0"
