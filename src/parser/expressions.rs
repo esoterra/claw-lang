@@ -1,4 +1,4 @@
-use crate::ast::Component;
+use crate::ast::{Component, UnaryOp};
 use crate::ast::{self, expressions::ExpressionId, merge, expressions::BinaryOp};
 use crate::lexer::Token;
 use crate::parser::{ParseInput, ParserError};
@@ -19,7 +19,18 @@ fn pratt_parse(
     comp: &mut Component,
     min_bp: u8,
 ) -> Result<ExpressionId, ParserError> {
-    let mut lhs = parse_leaf(input, comp)?;
+    let mut lhs = match peek_unary_op(input) {
+        Some(op) => {
+            let ((), r_bp) = prefix_binding_power(op);
+            let start_span = input.next().unwrap().span.clone();
+            let rhs = pratt_parse(input, comp, r_bp)?;
+            let end_span = comp.expr().get_span(rhs);
+            let span = merge(&start_span, &end_span);
+            comp.expr_mut().alloc_unary_op(op, rhs, span)
+        },
+        None => parse_leaf(input, comp)?,
+    };
+
     loop {
         let bin_op = match peek_bin_op(input) {
             Some(op) => op,
@@ -116,6 +127,21 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
     let span = merge(&lparen, &rparen);
 
     Ok(comp.expr_mut().alloc_call(ident, args, span))
+}
+
+fn peek_unary_op(input: &mut ParseInput) -> Option<UnaryOp> {
+    let next = input.peek().ok()?;
+    let op = match &next.token {
+        Token::Sub => UnaryOp::Negate,
+        _ => return None,
+    };
+    Some(op)
+}
+
+fn prefix_binding_power(op: UnaryOp) -> ((), u8) {
+    match op {
+        UnaryOp::Negate => ((), 200)
+    }
 }
 
 fn peek_bin_op(input: &mut ParseInput) -> Option<BinaryOp> {

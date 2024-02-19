@@ -806,12 +806,12 @@ impl ResolveExpression for ast::UnaryExpression {
     fn on_resolved<'ctx>(
         &self,
         rtype: ResolvedType,
-        expression: ExpressionId,
+        _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &FuncContext<'ctx>,
+        _context: &FuncContext<'ctx>,
     ) -> Result<(), ResolverError> {
-        _ = (rtype, expression, resolver, context);
-        todo!()
+        resolver.set_expr_type(self.inner, rtype);
+        Ok(())
     }
 
     fn on_child_resolved<'ctx>(
@@ -819,10 +819,10 @@ impl ResolveExpression for ast::UnaryExpression {
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &FuncContext<'ctx>,
+        _context: &FuncContext<'ctx>,
     ) -> Result<(), ResolverError> {
-        _ = (rtype, expression, resolver, context);
-        todo!()
+        resolver.set_expr_type(expression, rtype);
+        Ok(())
     }
 }
 
