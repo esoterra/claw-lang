@@ -24,15 +24,12 @@ pub struct ModuleBuilder {
 #[derive(Clone, Copy, Debug)]
 pub struct ModuleTypeIndex(u32);
 
-
 #[derive(Clone, Copy, Debug)]
 pub struct ModuleFunctionIndex(u32);
-
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
 pub struct ModuleMemoryIndex(u32);
-
 
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug)]
