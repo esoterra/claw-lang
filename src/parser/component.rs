@@ -182,8 +182,8 @@ fn parse_fn_type(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::diagnostic::UnwrapPretty;
     use crate::parser::make_input;
-    use miette::Report;
 
     #[test]
     fn test_increment() {
@@ -195,13 +195,7 @@ mod tests {
             return counter;
         }";
         let (src, mut input) = make_input(source);
-        let result = parse_component(src, &mut input);
-        match result {
-            Ok(_) => {
-                // yay!
-            }
-            Err(error) => panic!("{:?}", Report::new(error)),
-        };
+        parse_component(src, &mut input).unwrap_pretty();
     }
 
     #[test]
@@ -209,8 +203,8 @@ mod tests {
         let source = "func empty() {}";
         let (src, mut input) = make_input(source);
         let mut comp = ast::Component::new(src.clone());
-        let _func = parse_func(&mut input.clone(), &mut comp, false).unwrap();
-        let _component = parse_component(src, &mut input).unwrap();
+        parse_func(&mut input.clone(), &mut comp, false).unwrap_pretty();
+        parse_component(src, &mut input).unwrap_pretty();
     }
 
     #[test]
@@ -218,8 +212,8 @@ mod tests {
         let source = "func increment() -> u32 { return 0; }";
         let (src, mut input) = make_input(source);
         let mut comp = ast::Component::new(src.clone());
-        let _func = parse_func(&mut input.clone(), &mut comp, false).unwrap();
-        let _component = parse_component(src, &mut input).unwrap();
+        parse_func(&mut input.clone(), &mut comp, false).unwrap_pretty();
+        parse_component(src, &mut input).unwrap_pretty();
     }
 
     #[test]
@@ -227,6 +221,6 @@ mod tests {
         let source = "let mut counter: u32 = 0;";
         let (src, mut input) = make_input(source);
         let mut comp = ast::Component::new(src);
-        let _global = parse_global(&mut input, &mut comp, false).unwrap();
+        parse_global(&mut input, &mut comp, false).unwrap_pretty();
     }
 }

@@ -9,6 +9,9 @@ use std::collections::{HashMap, VecDeque};
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
 
+#[cfg(test)]
+use miette::Report;
+
 #[derive(Debug)]
 struct ComponentContext<'ctx> {
     src: crate::Source,
@@ -86,6 +89,7 @@ pub enum ResolverError {
     NotYetSupported(String),
 }
 
+#[cfg(test)]
 #[derive(Error, Debug, Diagnostic)]
 pub enum Notification {
     #[error("Skipping already resolved expression")]
@@ -350,26 +354,16 @@ impl FunctionResolver {
                                 type_b: next_type,
                             });
                         } else {
-                            {
-                                use miette::Report;
-                                let src = context.component.src.clone();
-                                let span = context.component.expr().get_span(expression);
-                                let notification = Notification::ExpressionSkipped { src, span };
-                                println!("{:?}", Report::new(notification));
-                            }
+                            #[cfg(test)]
+                            self.notify_skipped_expression(expression, context);
                             continue;
                         }
                     } else {
                         self.expression_types.insert(expression, next_type);
                     }
 
-                    {
-                        use miette::Report;
-                        let src = context.component.src.clone();
-                        let span = context.component.expr().get_span(expression);
-                        let notification = Notification::ExpressionResolved { src, span };
-                        println!("{:?}", Report::new(notification));
-                    }
+                    #[cfg(test)]
+                    self.notify_resolved_expression(expression, context);
 
                     let expression_val = context.component.expr().get_exp(expression);
                     expression_val.on_resolved(next_type, expression, self, context)?;
@@ -378,13 +372,8 @@ impl FunctionResolver {
                         let parent = context.component.expr().get_exp(*parent_id);
                         parent.on_child_resolved(next_type, *parent_id, self, context)?;
                     } else {
-                        {
-                            use miette::Report;
-                            let src = context.component.src.clone();
-                            let span = context.component.expr().get_span(expression);
-                            let notification = Notification::ExpressionOrphan { src, span };
-                            println!("{:?}", Report::new(notification));
-                        }
+                        #[cfg(test)]
+                        self.notify_ophaned_expression(expression, context);
                     }
                 }
                 ResolverItem::Local(local) => {
@@ -392,26 +381,16 @@ impl FunctionResolver {
                         if !next_type.with(context.component).type_eq(existing_type) {
                             panic!("Local type error!!!");
                         } else {
-                            {
-                                use miette::Report;
-                                let src = context.component.src.clone();
-                                let span = *self.local_spans.get(&local).unwrap();
-                                let notification = Notification::LocalSkipped { src, span };
-                                println!("{:?}", Report::new(notification));
-                            }
+                            #[cfg(test)]
+                            self.notify_skipped_local(local, context);
                             continue;
                         }
                     } else {
                         self.local_types.insert(local, next_type);
                     }
 
-                    {
-                        use miette::Report;
-                        let src = context.component.src.clone();
-                        let span = *self.local_spans.get(&local).unwrap();
-                        let notification = Notification::LocalResolved { src, span };
-                        println!("{:?}", Report::new(notification));
-                    }
+                    #[cfg(test)]
+                    self.notify_resolved_local(local, context);
 
                     if self.local_uses.contains_key(&local) {
                         let uses_len = {
@@ -431,6 +410,46 @@ impl FunctionResolver {
         }
 
         Ok(())
+    }
+
+    #[cfg(test)]
+    fn notify_skipped_expression(&self, expression: ExpressionId, context: &ComponentContext) {
+        let src = context.component.src.clone();
+        let span = context.component.expr().get_span(expression);
+        let notification = Notification::ExpressionSkipped { src, span };
+        println!("{:?}", Report::new(notification));
+    }
+
+    #[cfg(test)]
+    fn notify_resolved_expression(&self, expression: ExpressionId, context: &ComponentContext) {
+        let src = context.component.src.clone();
+        let span = context.component.expr().get_span(expression);
+        let notification = Notification::ExpressionResolved { src, span };
+        println!("{:?}", Report::new(notification));
+    }
+
+    #[cfg(test)]
+    fn notify_ophaned_expression(&self, expression: ExpressionId, context: &ComponentContext) {
+        let src = context.component.src.clone();
+        let span = context.component.expr().get_span(expression);
+        let notification = Notification::ExpressionOrphan { src, span };
+        println!("{:?}", Report::new(notification));
+    }
+
+    #[cfg(test)]
+    fn notify_skipped_local(&self, local: LocalId, context: &ComponentContext) {
+        let src = context.component.src.clone();
+        let span = *self.local_spans.get(&local).unwrap();
+        let notification = Notification::LocalSkipped { src, span };
+        println!("{:?}", Report::new(notification));
+    }
+
+    #[cfg(test)]
+    fn notify_resolved_local(&self, local: LocalId, context: &ComponentContext) {
+        let src = context.component.src.clone();
+        let span = *self.local_spans.get(&local).unwrap();
+        let notification = Notification::LocalResolved { src, span };
+        println!("{:?}", Report::new(notification));
     }
 
     pub fn get_resolved_local_type(
