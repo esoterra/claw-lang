@@ -3,13 +3,8 @@ use wasm_encoder as enc;
 #[derive(Default)]
 pub struct ModuleBuilder {
     types: enc::TypeSection,
-
-    // The module function index and  for an import is that imports index
     imports: enc::ImportSection,
-    // The module function index for a function is that functions index
-    // plus the number of total imports
     funcs: enc::FunctionSection,
-
     globals: enc::GlobalSection,
     exports: enc::ExportSection,
 
