@@ -23,11 +23,11 @@ pub enum ParserError {
         #[label("Unable to parse this code")]
         span: SourceSpan,
     },
-    #[error("Unexpected token {token:?} with description '{description}'")]
+    #[error("{description}")]
     UnexpectedToken {
         #[source_code]
         src: crate::Source,
-        #[label("Here")]
+        #[label("Found {token:?}")]
         span: SourceSpan,
         description: String,
         token: Token,

@@ -52,6 +52,18 @@ impl Runtime {
 }
 
 #[test]
+fn test_arithmetic() {
+    bindgen!("arithmetic" in "tests/programs");
+
+    let mut runtime = Runtime::new("arithmetic");
+
+    let (arithmetic, _) =
+        Arithmetic::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+
+    assert!(arithmetic.call_test_u8_masking(&mut runtime.store).unwrap());
+}
+
+#[test]
 fn test_counter() {
     bindgen!("counter" in "tests/programs");
 

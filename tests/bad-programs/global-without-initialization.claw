@@ -1,0 +1,5 @@
+let a: u32;
+
+func foo() -> u32 {
+    return a;
+}

@@ -38,6 +38,17 @@ pub enum PrimitiveType {
     Bool,
 }
 
+impl PrimitiveType {
+    pub fn core_type_mask(&self) -> Option<i32> {
+        use PrimitiveType as P;
+        match self {
+            P::U8 | P::S8 => Some(0xFF),
+            P::U16 | P::S16 => Some(0xFFFF),
+            _ => None,
+        }
+    }
+}
+
 impl ValType {
     pub fn eq(&self, other: &Self, comp: &Component) -> bool {
         match (self, other) {

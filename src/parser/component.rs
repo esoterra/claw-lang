@@ -1,7 +1,4 @@
-use crate::ast::{self, component::FunctionSignature};
-use crate::ast::{
-    Component, ExternalType, FnType, FunctionId, GlobalId, Import, ImportId, NameId, TypeId,
-};
+use crate::ast::{self, FunctionId, GlobalId, Import, ImportId, NameId, TypeId};
 use crate::lexer::Token;
 use crate::parser::{
     expressions::parse_expression, statements::parse_block, types::parse_valtype, ParseInput,
@@ -40,7 +37,10 @@ pub fn parse_component(
     Ok(component)
 }
 
-fn parse_import(input: &mut ParseInput, comp: &mut Component) -> Result<ImportId, ParserError> {
+fn parse_import(
+    input: &mut ParseInput,
+    comp: &mut ast::Component,
+) -> Result<ImportId, ParserError> {
     input.assert_next(Token::Import, "Import")?;
     let ident = parse_ident(input, comp)?;
     input.assert_next(Token::Colon, "Colon")?;
@@ -57,20 +57,27 @@ fn parse_import(input: &mut ParseInput, comp: &mut Component) -> Result<ImportId
 
 fn parse_global(
     input: &mut ParseInput,
-    comp: &mut Component,
+    comp: &mut ast::Component,
     exported: bool,
 ) -> Result<GlobalId, ParserError> {
-    input.assert_next(Token::Let, "Let")?;
-    let mutable = input.next_if(Token::Mut).is_some();
+    let err_no_let = "Global variable definitions must start with 'let'";
+    input.assert_next(Token::Let, err_no_let)?;
 
+    let mutable = input.next_if(Token::Mut).is_some();
     let ident = parse_ident(input, comp)?;
 
-    input.assert_next(Token::Colon, "Colon: ':'")?;
+    let err_no_colon = "Global variables must have explicit types annotated starting with ':'";
+    input.assert_next(Token::Colon, err_no_colon)?;
+
     let type_id = parse_valtype(input, comp)?;
 
-    input.assert_next(Token::Assign, "Assign '='")?;
+    let err_no_assign = "Global variables must be initialized starting with '='";
+    input.assert_next(Token::Assign, err_no_assign)?;
+
     let init_value = parse_expression(input, comp)?;
-    input.assert_next(Token::Semicolon, "Semicolon ';'")?;
+
+    let err_no_semicolon = "Global variable definitions must end with ';'";
+    input.assert_next(Token::Semicolon, err_no_semicolon)?;
 
     let global = ast::Global {
         exported,
@@ -85,27 +92,30 @@ fn parse_global(
 
 fn parse_func(
     input: &mut ParseInput,
-    comp: &mut Component,
+    comp: &mut ast::Component,
     exported: bool,
 ) -> Result<FunctionId, ParserError> {
-    let signature = parse_func_signature(input, comp)?;
+    input.assert_next(Token::Func, "Function signature")?;
+    let ident = parse_ident(input, comp)?;
+    let arguments = parse_args(input, comp)?;
+    let return_type = parse_return_type(input, comp)?;
     let (body, _) = parse_block(input, comp)?;
 
     let function = ast::Function {
         exported,
-        signature,
+        ident,
+        arguments,
+        return_type,
         body,
     };
 
     Ok(comp.functions.push(function))
 }
 
-fn parse_func_signature(
+fn parse_args(
     input: &mut ParseInput,
-    comp: &mut Component,
-) -> Result<FunctionSignature, ParserError> {
-    input.assert_next(Token::Func, "Function signature")?;
-    let ident = parse_ident(input, comp)?;
+    comp: &mut ast::Component,
+) -> Result<Vec<(NameId, TypeId)>, ParserError> {
     input.assert_next(Token::LParen, "Function arguments are parenthesized")?;
 
     let mut arguments = Vec::new();
@@ -119,27 +129,17 @@ fn parse_func_signature(
 
         let _ = input.next();
     }
-
     input.assert_next(
         Token::RParen,
         "Function argument parenthesis must be closed",
     )?;
 
-    let return_type = match input.next_if(Token::Arrow) {
-        Some(_) => Some(parse_valtype(input, comp)?),
-        None => None,
-    };
-
-    Ok(FunctionSignature {
-        ident,
-        arguments,
-        return_type,
-    })
+    Ok(arguments)
 }
 
 fn parse_argument(
     input: &mut ParseInput,
-    comp: &mut Component,
+    comp: &mut ast::Component,
 ) -> Result<(NameId, TypeId), ParserError> {
     let ident = parse_ident(input, comp)?;
     input.assert_next(Token::Colon, "Colon ':'")?;
@@ -147,40 +147,33 @@ fn parse_argument(
     Ok((ident, type_id))
 }
 
-fn parse_external_type(
+fn parse_return_type(
     input: &mut ParseInput,
-    comp: &mut Component,
-) -> Result<ExternalType, ParserError> {
-    Ok(ExternalType::Function(parse_fn_type(input, comp)?))
-}
-
-fn parse_fn_type(input: &mut ParseInput, comp: &mut Component) -> Result<FnType, ParserError> {
-    let _func_kwd = input.assert_next(Token::Func, "Function keyword")?;
-    input.assert_next(Token::LParen, "Function arguments are parenthesized")?;
-
-    let mut arguments = Vec::new();
-    while input.peek()?.token != Token::RParen {
-        let argument = parse_argument(input, comp)?;
-        arguments.push(argument);
-
-        if input.peek()?.token != Token::Comma {
-            break;
-        }
-
-        let _ = input.next();
-    }
-
-    input.assert_next(
-        Token::RParen,
-        "Function argument parenthesis must be closed",
-    )?;
-
+    comp: &mut ast::Component,
+) -> Result<Option<TypeId>, ParserError> {
     let return_type = match input.next_if(Token::Arrow) {
         Some(_) => Some(parse_valtype(input, comp)?),
         None => None,
     };
+    Ok(return_type)
+}
 
-    Ok(FnType {
+fn parse_external_type(
+    input: &mut ParseInput,
+    comp: &mut ast::Component,
+) -> Result<ast::ExternalType, ParserError> {
+    Ok(ast::ExternalType::Function(parse_fn_type(input, comp)?))
+}
+
+fn parse_fn_type(
+    input: &mut ParseInput,
+    comp: &mut ast::Component,
+) -> Result<ast::FnType, ParserError> {
+    input.assert_next(Token::Func, "Function keyword")?;
+    let arguments = parse_args(input, comp)?;
+    let return_type = parse_return_type(input, comp)?;
+
+    Ok(ast::FnType {
         arguments,
         return_type,
     })
@@ -212,27 +205,28 @@ mod tests {
     }
 
     #[test]
-    fn test_basic_function() {
-        let source = "func increment() -> u32 { return 0; }";
+    fn test_empty_function() {
+        let source = "func empty() {}";
         let (src, mut input) = make_input(source);
-        let mut comp = Component::new(src.clone());
+        let mut comp = ast::Component::new(src.clone());
         let _func = parse_func(&mut input.clone(), &mut comp, false).unwrap();
         let _component = parse_component(src, &mut input).unwrap();
     }
 
     #[test]
-    fn parse_function_signature() {
-        let source = "func increment() -> u32";
+    fn test_basic_function() {
+        let source = "func increment() -> u32 { return 0; }";
         let (src, mut input) = make_input(source);
-        let mut comp = Component::new(src);
-        let _func_sig = parse_func_signature(&mut input, &mut comp).unwrap();
+        let mut comp = ast::Component::new(src.clone());
+        let _func = parse_func(&mut input.clone(), &mut comp, false).unwrap();
+        let _component = parse_component(src, &mut input).unwrap();
     }
 
     #[test]
     fn test_parse_global() {
         let source = "let mut counter: u32 = 0;";
         let (src, mut input) = make_input(source);
-        let mut comp = Component::new(src);
+        let mut comp = ast::Component::new(src);
         let _global = parse_global(&mut input, &mut comp, false).unwrap();
     }
 }
