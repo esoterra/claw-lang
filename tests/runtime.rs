@@ -1,8 +1,8 @@
+use claw::diagnostic::UnwrapPretty;
 use claw::{codegen, compile};
 
 use std::fs;
 
-use miette::Report;
 use wasmtime::component::{bindgen, Component, Linker};
 use wasmtime::{Config, Engine, Store};
 
@@ -25,12 +25,7 @@ impl Runtime {
         };
 
         let generator = codegen::CodeGenerator::default();
-        let component_bytes = match generator.generate(&output) {
-            Ok(wasm) => wasm,
-            Err(error) => {
-                panic!("{:?}", Report::new(error))
-            }
-        };
+        let component_bytes = generator.generate(&output).unwrap_pretty();
 
         println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());
 

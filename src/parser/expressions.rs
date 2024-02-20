@@ -107,10 +107,11 @@ fn parse_literal(
 
 fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
     let ident = parse_ident(input, comp)?;
-    let lparen = input.assert_next(Token::LParen, "Function arguments")?;
+    let start_span = comp.name_span(ident);
+    input.assert_next(Token::LParen, "Function arguments")?;
 
     let mut args = Vec::new();
-    let rparen = loop {
+    let end_span = loop {
         args.push(parse_expression(input, comp)?);
 
         let token = input.next()?;
@@ -121,7 +122,7 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
         }
     };
 
-    let span = merge(&lparen, &rparen);
+    let span = merge(&start_span, &end_span);
 
     Ok(comp.expr_mut().alloc_call(ident, args, span))
 }
@@ -205,9 +206,8 @@ fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
 
 #[cfg(test)]
 mod tests {
-    use miette::Report;
-
     use super::*;
+    use crate::diagnostic::UnwrapPretty;
     use crate::parser::{make_input, make_span};
 
     use crate::ast::expressions::{ContextEq, Literal};
@@ -336,11 +336,8 @@ mod tests {
         let cases = [(input0, comp0, expected0), (input1, comp1, expected1)];
 
         for (mut input, mut comp, expected) in cases {
-            let result = parse_expression(&mut input, &mut comp);
-            match result {
-                Ok(result) => assert!(result.context_eq(&expected, &comp)),
-                Err(error) => panic!("{:?}", Report::new(error)),
-            };
+            let expression = parse_expression(&mut input, &mut comp).unwrap_pretty();
+            assert!(expression.context_eq(&expected, &comp));
         }
     }
 
@@ -367,11 +364,8 @@ mod tests {
         let cases = [(input0, comp0, expected0), (input1, comp1, expected1)];
 
         for (mut input, mut comp, expected) in cases {
-            let result = parse_expression(&mut input, &mut comp);
-            match result {
-                Ok(result) => assert!(result.context_eq(&expected, &comp)),
-                Err(error) => panic!("{:?}", Report::new(error)),
-            };
+            let expression = parse_expression(&mut input, &mut comp).unwrap_pretty();
+            assert!(expression.context_eq(&expected, &comp));
         }
     }
 }
