@@ -149,15 +149,10 @@ pub enum ExternalType {
 #[derive(Debug)]
 pub struct Function {
     pub exported: bool,
-    pub signature: FunctionSignature,
-    pub body: Vec<StatementId>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct FunctionSignature {
     pub ident: NameId,
     pub arguments: Vec<(NameId, TypeId)>,
     pub return_type: Option<TypeId>,
+    pub body: Vec<StatementId>,
 }
 
 pub trait FnTypeInfo {
@@ -165,7 +160,7 @@ pub trait FnTypeInfo {
     fn get_return_type(&self) -> Option<TypeId>;
 }
 
-impl FnTypeInfo for FunctionSignature {
+impl FnTypeInfo for Function {
     fn get_args(&self) -> &[(NameId, TypeId)] {
         self.arguments.as_slice()
     }

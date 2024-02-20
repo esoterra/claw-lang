@@ -98,10 +98,8 @@ fn parse_literal(
     let span = next.span;
     let literal = match &next.token {
         Token::StringLiteral(_value) => return Err(input.unsupported_error("StringLiteral")),
-        Token::DecIntLiteral(value) => ast::Literal::Integer(*value),
-        Token::DecFloatLiteral(value) => ast::Literal::Float(*value),
-        Token::BinLiteral(value) => ast::Literal::Integer(*value),
-        Token::HexLiteral(value) => ast::Literal::Integer(*value),
+        Token::IntLiteral(value) => ast::Literal::Integer(*value),
+        Token::FloatLiteral(value) => ast::Literal::Float(*value),
         _ => return Err(input.unexpected_token("Parse Literal")),
     };
     Ok(comp.expr_mut().alloc_literal(literal, span))
@@ -215,12 +213,23 @@ mod tests {
     use crate::ast::expressions::{ContextEq, Literal};
 
     #[test]
-    fn parsing_supports_dec_integer() {
+    fn parsing_supports_integers() {
         let cases = [
+            // Decimal
             ("0", 0, make_span(0, 1)),
             ("1", 1, make_span(0, 1)),
             ("32", 32, make_span(0, 2)),
             ("129", 129, make_span(0, 3)),
+            // Binary
+            ("0b0", 0, make_span(0, 3)),
+            ("0b1", 1, make_span(0, 3)),
+            ("0b100000", 32, make_span(0, 8)),
+            ("0b10000001", 129, make_span(0, 10)),
+            // Hexadecimal
+            ("0x0", 0, make_span(0, 3)),
+            ("0x1", 1, make_span(0, 3)),
+            ("0x20", 32, make_span(0, 4)),
+            ("0x81", 129, make_span(0, 4)),
         ];
         for (source, value, span) in cases {
             let (src, mut input) = make_input(source);

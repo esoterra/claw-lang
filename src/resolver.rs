@@ -140,7 +140,7 @@ pub fn resolve(
         mappings.insert(name.to_owned(), ItemId::Global(id));
     }
     for (id, function) in component.functions.iter() {
-        let name = component.get_name(function.signature.ident);
+        let name = component.get_name(function.ident);
         mappings.insert(name.to_owned(), ItemId::Function(id));
     }
 
@@ -230,9 +230,9 @@ impl FunctionResolver {
         let mut params = PrimaryMap::new();
         let mut mapping: StackMap<String, ItemId> = context.mappings.clone().into();
 
-        let sig = &context.func(id).signature;
+        let func = context.func(id);
 
-        for (ident, valtype) in sig.arguments.iter() {
+        for (ident, valtype) in func.arguments.iter() {
             let param = params.push(*valtype);
             let name = context.component.get_name(*ident).to_owned();
             mapping.insert(name, ItemId::Param(param));
@@ -433,6 +433,24 @@ impl FunctionResolver {
         Ok(())
     }
 
+    pub fn get_resolved_local_type(
+        &self,
+        local: LocalId,
+        context: &ast::Component,
+    ) -> Result<ResolvedType, ResolverError> {
+        let rtype = self.local_types.get(&local);
+        match rtype {
+            Some(rtype) => Ok(*rtype),
+            None => {
+                let span = self.local_spans.get(&local).unwrap().to_owned();
+                Err(ResolverError::Base {
+                    src: context.src.clone(),
+                    span,
+                })
+            }
+        }
+    }
+
     pub fn get_resolved_type(
         &self,
         expression: ExpressionId,
@@ -490,6 +508,14 @@ impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
                 let l_valtype = self.context.get_type(*left);
                 let r_valtype = self.context.get_type(*right);
                 l_valtype.eq(r_valtype, self.context)
+            }
+            (ResolvedType::Primitive(p), ResolvedType::ValType(v))
+            | (ResolvedType::ValType(v), ResolvedType::Primitive(p)) => {
+                let valtype = self.context.get_type(*v);
+                match valtype {
+                    ast::ValType::Primitive(p2) => p == p2,
+                    _ => false,
+                }
             }
             _ => false,
         }
@@ -563,7 +589,15 @@ impl ResolveStatement for ast::Let {
             .component
             .expr()
             .get_exp(self.expression)
-            .setup_resolve(self.expression, resolver, context)
+            .setup_resolve(self.expression, resolver, context)?;
+
+        resolver.use_local(local, self.expression);
+
+        if let Some(annotation) = self.annotation {
+            resolver.set_local_type(local, ResolvedType::ValType(annotation))
+        }
+
+        Ok(())
     }
 }
 
@@ -637,7 +671,7 @@ impl ResolveStatement for ast::Return {
         resolver: &mut FunctionResolver,
         context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        let return_type = context.func(resolver.id).signature.return_type;
+        let return_type = context.func(resolver.id).return_type;
         match (return_type, self.expression) {
             (Some(return_type), Some(expression)) => {
                 let rtype = ResolvedType::ValType(return_type);
@@ -824,7 +858,7 @@ impl<'ctx> C<'ctx, ItemId, ast::Component> {
             }
             ItemId::Function(function) => {
                 let function = &self.context.functions[*function];
-                Some(&function.signature)
+                Some(function)
             }
             _ => None,
         }

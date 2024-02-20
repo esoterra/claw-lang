@@ -84,7 +84,8 @@ fn parse_return(input: &mut ParseInput, comp: &mut Component) -> Result<Statemen
 fn parse_assign(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {
     let ident = parse_ident(input, comp)?;
     let start_span = comp.name_span(ident);
-    input.assert_next(Token::Assign, "Assign '='")?;
+    let err_no_assign = "Expected '=' when parsing assignment statement";
+    input.assert_next(Token::Assign, err_no_assign)?;
     let expression = parse_expression(input, comp)?;
     let end_span = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 

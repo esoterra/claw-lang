@@ -164,7 +164,7 @@ impl CodeGenerator {
     ) -> Result<(), GenerationError> {
         let comp = &context.component;
         // Encode module and component type sections
-        self.encode_mod_func_type(&function.signature, comp);
+        self.encode_mod_func_type(function, comp);
 
         // Encode module function
         self.module
@@ -173,7 +173,7 @@ impl CodeGenerator {
 
         // Encode module code
         let resolver = context.resolved_funcs.get(&id).unwrap();
-        let locals = encode_locals(resolver, context);
+        let locals = encode_locals(resolver, context)?;
         let mut builder = enc::Function::new(locals);
 
         for statement in function.body.iter() {
@@ -196,7 +196,7 @@ impl CodeGenerator {
         context: &ResolvedComponent,
     ) {
         let comp = &context.component;
-        let ident = function.signature.ident;
+        let ident = function.ident;
         let name = context.component.get_name(ident);
 
         // Export function from module
@@ -212,7 +212,7 @@ impl CodeGenerator {
             name,
         });
         // Encode component func type
-        self.encode_comp_func_type(&function.signature, comp);
+        self.encode_comp_func_type(function, comp);
         // Lift aliased function to component function
         const NO_CANON_OPTS: [enc::CanonicalOption; 0] = [];
         self.component.lift_funcs.lift(
@@ -361,15 +361,13 @@ impl<'ctx> C<'ctx, FunctionId, ResolvedComponent> {
 fn encode_locals(
     resolver: &FunctionResolver,
     resolved_comp: &ResolvedComponent,
-) -> Vec<(u32, enc::ValType)> {
-    resolver
-        .locals
-        .iter()
-        .map(|(id, _local)| {
-            let rtype = *resolver.local_types.get(&id).unwrap();
-            (1, rtype.with(&resolved_comp.component).as_valtype())
-        })
-        .collect()
+) -> Result<Vec<(u32, enc::ValType)>, GenerationError> {
+    let mut locals = Vec::with_capacity(resolver.locals.len());
+    for (id, _local) in resolver.locals.iter() {
+        let rtype = resolver.get_resolved_local_type(id, &resolved_comp.component)?;
+        locals.push((1, rtype.with(&resolved_comp.component).as_valtype()));
+    }
+    Ok(locals)
 }
 
 fn encode_statement(
@@ -399,7 +397,7 @@ fn encode_statement(
                 }
                 ItemId::Local(local) => {
                     let func = component.component.functions.get(func).unwrap();
-                    let local_index = local.index() + func.signature.arguments.len();
+                    let local_index = local.index() + func.arguments.len();
                     let local_index = local_index as u32;
                     builder.instruction(&Instruction::LocalSet(local_index));
                 }
@@ -675,7 +673,7 @@ impl EncodeExpression for ast::Identifier {
             }
             ItemId::Local(local) => {
                 let func = component.component.functions.get(func).unwrap();
-                let local_index = local.index() + func.signature.arguments.len();
+                let local_index = local.index() + func.arguments.len();
                 builder.instruction(&Instruction::LocalGet(local_index as u32));
             }
             ItemId::Function(_) => unimplemented!(),
@@ -810,10 +808,6 @@ impl EncodeExpression for ast::BinaryExpression {
             (ast::BinaryOp::LessThan, enc::ValType::I64, U) => enc::Instruction::I64LtU,
             (ast::BinaryOp::LessThan, enc::ValType::F32, _) => enc::Instruction::F32Lt,
             (ast::BinaryOp::LessThan, enc::ValType::F64, _) => enc::Instruction::F64Lt,
-            (ast::BinaryOp::LessThan, valtype, s) => panic!(
-                "Failed to encode '<' for type {:?} and signedness {:?}",
-                valtype, s
-            ),
             // Less than equal
             (ast::BinaryOp::LessThanEqual, enc::ValType::I32, S) => enc::Instruction::I32LeS,
             (ast::BinaryOp::LessThanEqual, enc::ValType::I32, U) => enc::Instruction::I32LeU,
@@ -864,6 +858,12 @@ impl EncodeExpression for ast::BinaryExpression {
             ),
         };
         builder.instruction(&instruction);
+
+        if let Some(mask) = p.core_type_mask() {
+            builder.instruction(&enc::Instruction::I32Const(mask));
+            builder.instruction(&enc::Instruction::I32And);
+        }
+
         Ok(())
     }
 }

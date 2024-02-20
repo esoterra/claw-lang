@@ -1,5 +1,9 @@
 package claw:samples;
 
+world arithmetic {
+    export test-u8-masking: func() -> bool;
+}
+
 world compare {
     export min-u32: func(left: u32, right: u32) -> u32;
     export max-u32: func(left: u32, right: u32) -> u32;

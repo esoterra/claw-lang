@@ -10,12 +10,12 @@ pub struct TokenData {
 }
 
 #[derive(Error, Debug, Diagnostic)]
-#[error("The input did not match a token rule")]
+#[error("Unable to tokenize input")]
 #[diagnostic()]
 pub struct LexerError {
     #[source_code]
     src: crate::Source,
-    #[label("This text was not recognized")]
+    #[label("Here")]
     span: SourceSpan,
 }
 
@@ -45,8 +45,6 @@ pub fn tokenize(src: crate::Source, contents: &str) -> Result<Vec<TokenData>, Le
 #[logos(subpattern word = r"[a-z][a-z0-9]*|[A-Z][A-Z0-9]*")]
 #[logos(subpattern id = r"%?(?&word)(-(?&word))*")]
 pub enum Token {
-    Error,
-
     /// Double-quoted string literal
     #[token("\"", parse_string_literal)]
     #[token("r", parse_raw_string_literal)]
@@ -54,19 +52,13 @@ pub enum Token {
 
     /// A Decimal number literal
     #[regex(r"[0-9][_0-9]*", |lex| parse_decint_literal(lex.slice()))]
-    DecIntLiteral(u64),
+    #[regex(r"0b[01][_01]*", |lex| parse_bin_literal(lex.slice()))]
+    #[regex(r"0x[0-9a-fA-F][_0-9a-fA-F]*", |lex| parse_hex_literal(lex.slice()))]
+    IntLiteral(u64),
 
     /// A Decimal floating point literal
     #[regex(r"[0-9][_0-9]*\.[0-9][_0-9]*", |lex| parse_decfloat_literal(lex.slice()))]
-    DecFloatLiteral(f64),
-
-    /// A Binary number literal
-    #[regex(r"0b[01][_01]*", |lex| parse_bin_literal(lex.slice()))]
-    BinLiteral(u64),
-
-    /// A Hexadecimal number literal
-    #[regex(r"0x[0-9a-fA-F][_0-9a-fA-F]*", |lex| parse_hex_literal(lex.slice()))]
-    HexLiteral(u64),
+    FloatLiteral(f64),
 
     /// An Identifier
     #[regex(r"(?&id)", |lex| lex.slice().to_string())]
@@ -156,14 +148,6 @@ pub enum Token {
     /// The Signed 32-bit Integer Type Keyword
     #[token("s64")]
     S64,
-
-    /// The 32-bit Integer Type Keyword
-    #[token("i32")]
-    I32,
-
-    /// The 64-bit Integer Type Keyword
-    #[token("i64")]
-    I64,
 
     /// The 32-bit Floating-point Type Keyword
     #[token("f32")]
@@ -361,6 +345,87 @@ pub enum Token {
     // Not Equals Operator "!="
     #[token("!=")]
     NEQ,
+}
+
+impl std::fmt::Display for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Token::StringLiteral(s) => write!(f, "\"{}\"", s),
+            Token::IntLiteral(i) => write!(f, "{}", i),
+            Token::FloatLiteral(float) => write!(f, "{:?}", float),
+            Token::Identifier(ident) => write!(f, "{}", ident),
+            Token::Export => write!(f, "export"),
+            Token::Import => write!(f, "import"),
+            Token::From => write!(f, "from"),
+            Token::Func => write!(f, "func"),
+            Token::If => write!(f, "if"),
+            Token::For => write!(f, "for"),
+            Token::In => write!(f, "in"),
+            Token::Loop => write!(f, "loop"),
+            Token::Break => write!(f, "break"),
+            Token::Continue => write!(f, "continue"),
+            Token::Return => write!(f, "return"),
+            Token::Result => write!(f, "result"),
+            Token::String => write!(f, "string"),
+            Token::U8 => write!(f, "u8"),
+            Token::U16 => write!(f, "u16"),
+            Token::U32 => write!(f, "u32"),
+            Token::U64 => write!(f, "u64"),
+            Token::S8 => write!(f, "S8"),
+            Token::S16 => write!(f, "S16"),
+            Token::S32 => write!(f, "S32"),
+            Token::S64 => write!(f, "s64"),
+            Token::F32 => write!(f, "f32"),
+            Token::F64 => write!(f, "f64"),
+            Token::As => write!(f, "as"),
+            Token::At => write!(f, "at"),
+            Token::Let => write!(f, "let"),
+            Token::Mut => write!(f, "mut"),
+            Token::Bool => write!(f, "bool"),
+            Token::True => write!(f, "true"),
+            Token::False => write!(f, "false"),
+            Token::LParen => write!(f, "("),
+            Token::RParen => write!(f, ")"),
+            Token::LBrace => write!(f, "{{"),
+            Token::RBrace => write!(f, "}}"),
+            Token::LBracket => write!(f, "["),
+            Token::RBracket => write!(f, "]"),
+            Token::Comma => write!(f, ","),
+            Token::Dot => write!(f, "."),
+            Token::Range => write!(f, ".."),
+            Token::Colon => write!(f, ":"),
+            Token::Semicolon => write!(f, ";"),
+            Token::Assign => write!(f, "="),
+            Token::Arrow => write!(f, "->"),
+            Token::Add => write!(f, "+"),
+            Token::Sub => write!(f, "-"),
+            Token::Mult => write!(f, "*"),
+            Token::Div => write!(f, "/"),
+            Token::Mod => write!(f, "%"),
+            Token::Invert => write!(f, "!"),
+            Token::LogicalAnd => write!(f, "and"),
+            Token::LogicalOr => write!(f, "or"),
+            Token::BitOr => write!(f, "|"),
+            Token::BitAnd => write!(f, "&"),
+            Token::BitXor => write!(f, "^"),
+            Token::BitShiftL => write!(f, "<<"),
+            Token::BitShiftR => write!(f, ">>"),
+            Token::ArithShiftR => write!(f, ">>>"),
+            Token::BitOrAssign => write!(f, "|="),
+            Token::BitAndAssign => write!(f, "&="),
+            Token::BitXorAssign => write!(f, "^="),
+            Token::AddAssign => write!(f, "+="),
+            Token::SubAssign => write!(f, "-="),
+            Token::StarAssign => write!(f, "*="),
+            Token::DivAssign => write!(f, "/="),
+            Token::LT => write!(f, "<"),
+            Token::LTE => write!(f, "<="),
+            Token::GT => write!(f, ">"),
+            Token::GTE => write!(f, ">="),
+            Token::EQ => write!(f, "=="),
+            Token::NEQ => write!(f, "!="),
+        }
+    }
 }
 
 /// Parses a string according to the JSON string format in ECMA-404.
