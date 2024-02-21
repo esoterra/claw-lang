@@ -1,3 +1,5 @@
+#![allow(clippy::single_match)]
+
 mod component_builder;
 mod expression;
 mod module_builder;

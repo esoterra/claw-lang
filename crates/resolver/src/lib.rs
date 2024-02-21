@@ -1,3 +1,5 @@
+#![allow(clippy::single_match)]
+
 use ast::{ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, TypeId};
 use claw_ast as ast;
 use claw_common::{Source, StackMap};
@@ -341,7 +343,7 @@ impl FunctionResolver {
                 ResolverItem::Expression(expression) => {
                     // Apply the inferred type and detect conflicts
                     if let Some(existing_type) = self.expression_types.get(&expression) {
-                        if !next_type.with(&context.component).type_eq(existing_type) {
+                        if !next_type.with(context.component).type_eq(existing_type) {
                             let span = context.component.expr().get_span(expression);
                             return Err(ResolverError::TypeConflict {
                                 src: context.src.clone(),

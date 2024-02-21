@@ -1,3 +1,7 @@
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::while_let_loop)]
+#![allow(clippy::while_let_on_iterator)]
+
 mod component;
 mod expressions;
 mod lexer;
