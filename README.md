@@ -1,4 +1,17 @@
-# Component Language for Wasm (CLAW)
+<div align="center">
+  <h1><code>claw-cli</code></h1>
+
+  <p>
+    <strong>The compiler for the Claw programming language</strong>
+  </p>
+
+  <p>
+    <a href="https://github.com/esoterra/claw-lang/actions?query=workflow%3ACI"><img src="https://github.com/esoterra/claw-lang/workflows/CI/badge.svg" alt="build status" /></a>
+    <a href="https://crates.io/crates/claw-cli"><img src="https://img.shields.io/crates/v/claw-cli.svg?style=flat-square" alt="Crates.io version" /></a>
+    <a href="https://crates.io/crates/claw-cli"><img src="https://img.shields.io/crates/d/claw-cli.svg?style=flat-square" alt="Download" /></a>
+    <a href="https://docs.rs/claw-cli"><img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square" alt="docs.rs docs" /></a>
+  </p>
+</div>
 
 Claw is a programming language that compiles to Wasm Components.
 Values in Claw have the exact same types as Component model values and the imports/exports of a Claw source file represent a Component "World".
