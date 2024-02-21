@@ -1,6 +1,7 @@
-use crate::ast::{Component, PrimitiveType, TypeId, ValType};
+use claw_ast as ast;
+use ast::{Component, PrimitiveType, TypeId, ValType};
 use crate::lexer::Token;
-use crate::parser::{ParseInput, ParserError};
+use crate::{ParseInput, ParserError};
 
 pub fn parse_valtype(input: &mut ParseInput, comp: &mut Component) -> Result<TypeId, ParserError> {
     let next = input.next()?;

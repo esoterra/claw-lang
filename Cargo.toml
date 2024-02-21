@@ -1,22 +1,62 @@
 [package]
-name = "claw"
-version = "0.1.2"
-authors = ["Robin Brown"]
-license = "MIT OR Apache-2.0"
-edition = "2018"
-description = " The compiler for the Claw language "
-repository = "https://github.com/esoterra/claw-lang"
+name = "claw-cli"
+description = "The compiler for the Claw language"
 readme = "README.md"
-
-[lib]
-name = "claw"
-path = "src/lib.rs"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
 
 [[bin]]
-name = "claw"
+name = "claw-cli"
 path = "src/bin.rs"
 
 [dependencies]
+claw-common = { workspace = true }
+claw-ast = { workspace = true }
+claw-parser = { workspace = true }
+claw-resolver = { workspace = true }
+claw-codegen = { workspace = true }
+
+clap = { workspace = true }
+thiserror = { workspace = true }
+miette = { workspace = true }
+logos = { workspace = true }
+wasm-encoder ={ workspace = true }
+cranelift-entity = { workspace = true }
+wat = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+wasmtime = { workspace = true }
+wasmprinter = { workspace = true }
+
+[workspace]
+members = [
+    "crates/ast",
+    "crates/codegen",
+    "crates/common",
+    "crates/lib",
+    "crates/parser",
+    "crates/resolver",
+]
+
+[workspace.package]
+version = "0.2.0"
+authors = ["Robin Brown"]
+license = "MIT OR Apache-2.0"
+edition = "2018"
+homepage = "https://claw-lang.dev/"
+repository = "https://github.com/esoterra/claw-lang"
+
+[workspace.dependencies]
+claw-common = { path = "./crates/common" }
+claw-ast = { path = "./crates/ast" }
+claw-parser = { path = "./crates/parser" }
+claw-resolver = { path = "./crates/resolver" }
+claw-codegen = { path = "./crates/codegen" }
+
 clap = { version = "3.0.0-rc.7", features = ["derive"] }
 thiserror = "1.0.30"
 miette = { version = "7.1.0", features = ["fancy"] }
@@ -24,8 +64,6 @@ logos = "0.13.0"
 wasm-encoder = "0.38"
 cranelift-entity = "0.104.0"
 wat = "1.200.0"
-
-[dev-dependencies]
 pretty_assertions = "1.1.0"
 wasmtime = { version = "15.0.0", features = ["component-model"]}
 wasmprinter = "0.2.75"

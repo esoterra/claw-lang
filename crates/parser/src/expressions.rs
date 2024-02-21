@@ -1,7 +1,7 @@
-use crate::ast::{self, expressions::BinaryOp, expressions::ExpressionId, merge};
-use crate::ast::{Component, UnaryOp};
+use claw_ast as ast;
+use claw_ast::{self, expressions::BinaryOp, expressions::ExpressionId, merge, Component, UnaryOp};
 use crate::lexer::Token;
-use crate::parser::{ParseInput, ParserError};
+use crate::{ParseInput, ParserError};
 
 use super::statements::parse_ident;
 
@@ -207,10 +207,10 @@ fn infix_binding_power(op: BinaryOp) -> (u8, u8) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagnostic::UnwrapPretty;
-    use crate::parser::{make_input, make_span};
+    use claw_common::UnwrapPretty;
+    use crate::{make_input, make_span};
 
-    use crate::ast::expressions::{ContextEq, Literal};
+    use claw_ast::expressions::{ContextEq, Literal};
 
     #[test]
     fn parsing_supports_integers() {

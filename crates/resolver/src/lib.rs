@@ -1,8 +1,7 @@
-use crate::{
-    ast::{self, ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, TypeId},
-    context::{WithContext, C},
-    stack_map::StackMap,
-};
+use claw_common::{Source, StackMap};
+use claw_ast as ast;
+use ast::{ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, TypeId};
+
 use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 use std::collections::{HashMap, VecDeque};
 
@@ -14,7 +13,7 @@ use miette::Report;
 
 #[derive(Debug)]
 struct ComponentContext<'ctx> {
-    src: crate::Source,
+    src: Source,
     component: &'ctx ast::Component,
     mappings: HashMap<String, ItemId>,
     global_vals: HashMap<GlobalId, ast::Literal>,
@@ -27,7 +26,7 @@ impl<'ctx> ComponentContext<'ctx> {
 }
 
 pub struct ResolvedComponent {
-    pub src: crate::Source,
+    pub src: Source,
     pub component: ast::Component,
     pub global_vals: HashMap<GlobalId, ast::Literal>,
     pub resolved_funcs: HashMap<FunctionId, FunctionResolver>,
@@ -55,14 +54,14 @@ pub enum ResolverError {
     #[error("Failed to resolve")]
     Base {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("This bit")]
         span: SourceSpan,
     },
     #[error("Conflicting types inferred for expression {type_a} != {type_b}")]
     TypeConflict {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("This bit")]
         span: SourceSpan,
 
@@ -72,7 +71,7 @@ pub enum ResolverError {
     #[error("Failed to resolve name \"{ident}\"")]
     NameError {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("Name referenced here")]
         span: SourceSpan,
         ident: String,
@@ -80,7 +79,7 @@ pub enum ResolverError {
     #[error("Function call with wrong number of arguments \"{ident}\"")]
     CallArgumentsMismatch {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("Here")]
         span: SourceSpan,
         ident: String,
@@ -95,42 +94,42 @@ pub enum Notification {
     #[error("Skipping already resolved expression")]
     ExpressionSkipped {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("here")]
         span: SourceSpan,
     },
     #[error("Resolved type of expression")]
     ExpressionResolved {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("here")]
         span: SourceSpan,
     },
     #[error("No parent exists to be updated for")]
     ExpressionOrphan {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("here")]
         span: SourceSpan,
     },
     #[error("Skipping already resolved local")]
     LocalSkipped {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("here")]
         span: SourceSpan,
     },
     #[error("Resolved type of local")]
     LocalResolved {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("here")]
         span: SourceSpan,
     },
 }
 
 pub fn resolve(
-    src: crate::Source,
+    src: Source,
     component: ast::Component,
 ) -> Result<ResolvedComponent, ResolverError> {
     let mut mappings: HashMap<String, ItemId> = Default::default();
@@ -345,7 +344,7 @@ impl FunctionResolver {
                 ResolverItem::Expression(expression) => {
                     // Apply the inferred type and detect conflicts
                     if let Some(existing_type) = self.expression_types.get(&expression) {
-                        if !next_type.with(context.component).type_eq(existing_type) {
+                        if !next_type.with(&context.component).type_eq(existing_type) {
                             let span = context.component.expr().get_span(expression);
                             return Err(ResolverError::TypeConflict {
                                 src: context.src.clone(),
@@ -506,33 +505,32 @@ impl std::fmt::Display for ResolvedType {
     }
 }
 
-impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
-    pub fn as_primitive(&self) -> Option<ast::PrimitiveType> {
-        match self.value {
-            ResolvedType::Unit => None,
-            ResolvedType::Primitive(s) => Some(*s),
-            ResolvedType::ValType(v) => match self.context.get_type(*v) {
-                ast::ValType::Result { .. } => None,
-                ast::ValType::String => None,
-                ast::ValType::Primitive(s) => Some(*s),
-            },
-        }
-    }
+struct ResolvedTypeContext<'ctx> {
+    rtype: ResolvedType,
+    context: &'ctx ast::Component
+}
 
+impl ResolvedType {
+    fn with<'ctx>(&'ctx self, context: &'ctx ast::Component) -> ResolvedTypeContext<'ctx> {
+        ResolvedTypeContext { rtype: *self, context }
+    }
+}
+
+impl<'ctx> ResolvedTypeContext<'ctx> {
     pub fn type_eq(&self, other: &ResolvedType) -> bool {
-        match (self.value, other) {
+        match (self.rtype, *other) {
             (ResolvedType::Unit, ResolvedType::Unit) => true,
             (ResolvedType::Primitive(left), ResolvedType::Primitive(right)) => left == right,
             (ResolvedType::ValType(left), ResolvedType::ValType(right)) => {
-                let l_valtype = self.context.get_type(*left);
-                let r_valtype = self.context.get_type(*right);
+                let l_valtype = self.context.get_type(left);
+                let r_valtype = self.context.get_type(right);
                 l_valtype.eq(r_valtype, self.context)
             }
             (ResolvedType::Primitive(p), ResolvedType::ValType(v))
             | (ResolvedType::ValType(v), ResolvedType::Primitive(p)) => {
-                let valtype = self.context.get_type(*v);
+                let valtype = self.context.get_type(v);
                 match valtype {
-                    ast::ValType::Primitive(p2) => p == p2,
+                    ast::ValType::Primitive(p2) => p == *p2,
                     _ => false,
                 }
             }
@@ -866,17 +864,28 @@ impl ResolveExpression for ast::Identifier {
 
 impl ResolveExpression for ast::Literal {}
 
-impl<'ctx> C<'ctx, ItemId, ast::Component> {
+pub struct ItemContext<'ctx> {
+    item: ItemId,
+    component: &'ctx ast::Component
+}
+
+impl ItemId {
+    pub fn with<'ctx>(&self, component: &'ctx ast::Component) -> ItemContext<'ctx> {
+        ItemContext { item: *self, component }
+    }
+}
+
+impl<'ctx> ItemContext<'ctx> {
     fn get_fn_type(&self) -> Option<&dyn ast::FnTypeInfo> {
-        match self.value {
+        match self.item {
             ItemId::Import(import) => {
-                let import = &self.context.imports[*import];
+                let import = &self.component.imports[import];
                 match &import.external_type {
                     ast::ExternalType::Function(fn_type) => Some(fn_type),
                 }
             }
             ItemId::Function(function) => {
-                let function = &self.context.functions[*function];
+                let function = &self.component.functions[function];
                 Some(function)
             }
             _ => None,
@@ -892,7 +901,7 @@ impl ResolveExpression for ast::Call {
         context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         let item = resolver.use_name(context, self.ident)?;
-        let item: C<'_, ItemId, ast::Component> = item.with(context.component);
+        let item = item.with(context.component);
         let fn_type = item.get_fn_type().unwrap();
 
         setup_call(self, fn_type, resolver, context, expression)?;
@@ -939,21 +948,6 @@ impl ResolveExpression for ast::UnaryExpression {
 }
 
 // Binary Operators
-
-impl ast::BinaryExpression {
-    fn is_relation(&self) -> bool {
-        use ast::BinaryOp as BE;
-        matches!(
-            self.op,
-            BE::LessThan
-                | BE::LessThanEqual
-                | BE::GreaterThan
-                | BE::GreaterThanEqual
-                | BE::Equals
-                | BE::NotEquals
-        )
-    }
-}
 
 impl ResolveExpression for ast::BinaryExpression {
     fn setup_resolve(

@@ -10,11 +10,9 @@ pub use expression::*;
 use module_builder::*;
 pub use statement::*;
 
-use crate::{
-    ast::{self, FunctionId, ImportId, TypeId},
-    context::{WithContext, C},
-    resolver::{FunctionResolver, ResolvedComponent, ResolvedType, ResolverError},
-};
+use claw_ast as ast;
+use ast::{FunctionId, ImportId, PrimitiveType, TypeId};
+use claw_resolver::{FunctionResolver, ResolvedComponent, ResolvedType, ResolverError};
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -146,17 +144,15 @@ impl CodeGenerator {
     }
 
     fn encode_globals(&mut self, component: &ResolvedComponent) {
-        let comp = &component.component;
-
         for (id, global) in component.component.globals.iter() {
-            let valtype = global.type_id.with(comp).as_valtype();
+            let valtype = type_id_to_core_valtype(global.type_id, &component.component);
 
             let init_expr = if let Some(init_value) = component.global_vals.get(&id) {
                 let valtype = component.component.get_type(global.type_id);
                 match valtype {
                     ast::ValType::Result { .. } => todo!(),
                     ast::ValType::String => todo!(),
-                    ast::ValType::Primitive(p) => init_value.to_const_expr(*p),
+                    ast::ValType::Primitive(ptype) => literal_to_const_expr(init_value, *ptype),
                 }
             } else {
                 panic!("Cannot generate WASM for unresolved global")
@@ -249,11 +245,11 @@ impl CodeGenerator {
         let params = fn_type
             .get_args()
             .iter()
-            .map(|(_name, valtype)| valtype.with(comp).as_valtype());
+            .map(|(_name, type_id)| type_id_to_core_valtype(*type_id, comp));
 
         match fn_type.get_return_type() {
             Some(return_type) => {
-                let result_type = return_type.with(comp).as_valtype();
+                let result_type = type_id_to_core_valtype(return_type, comp);
                 self.module.func_type(params, [result_type])
             }
             None => self.module.func_type(params, []),
@@ -268,12 +264,12 @@ impl CodeGenerator {
         let params = fn_type.get_args().iter().map(|(name, type_id)| {
             let name = comp.get_name(*name);
             let valtype = comp.get_type(*type_id);
-            (name, valtype.with(comp).as_comp_valtype())
+            (name, valtype_to_comp_valtype(valtype))
         });
 
         let result = fn_type.get_return_type().map(|return_type| {
             let valtype = comp.get_type(return_type);
-            valtype.with(comp).as_comp_valtype()
+            valtype_to_comp_valtype(valtype)
         });
         self.component.func_type(params, result)
     }
@@ -286,185 +282,140 @@ fn encode_locals(
     let mut locals = Vec::with_capacity(resolver.locals.len());
     for (id, _local) in resolver.locals.iter() {
         let rtype = resolver.get_resolved_local_type(id, &resolved_comp.component)?;
-        locals.push((1, rtype.with(&resolved_comp.component).as_valtype()));
+        locals.push((1, rtype_to_core_valtype(rtype, &resolved_comp.component)));
     }
     Ok(locals)
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-enum Signedness {
-    Unsigned,
-    Signed,
-    NotApplicable,
-}
-
-impl ast::PrimitiveType {
-    fn core_type(&self) -> enc::ValType {
-        use ast::PrimitiveType;
-
-        match self {
-            PrimitiveType::Bool => enc::ValType::I32,
-
-            PrimitiveType::U64 | PrimitiveType::S64 => enc::ValType::I64,
-
-            PrimitiveType::U32
-            | PrimitiveType::U16
-            | PrimitiveType::U8
-            | PrimitiveType::S32
-            | PrimitiveType::S16
-            | PrimitiveType::S8 => enc::ValType::I32,
-
-            PrimitiveType::F32 => enc::ValType::F32,
-            PrimitiveType::F64 => enc::ValType::F64,
-        }
-    }
-
-    fn signedness(&self) -> Signedness {
-        use ast::PrimitiveType;
-
-        match self {
-            PrimitiveType::U64 | PrimitiveType::U32 | PrimitiveType::U16 | PrimitiveType::U8 => {
-                Signedness::Unsigned
-            }
-            PrimitiveType::S64 | PrimitiveType::S32 | PrimitiveType::S16 | PrimitiveType::S8 => {
-                Signedness::Signed
-            }
-            _ => Signedness::NotApplicable,
-        }
-    }
-}
-
 // Literal
 
-impl ast::Literal {
-    fn to_const_expr(&self, ptype: ast::PrimitiveType) -> enc::ConstExpr {
-        use ast::{Literal, PrimitiveType};
-        match (ptype, self) {
-            (PrimitiveType::S32 | PrimitiveType::U32, Literal::Integer(value)) => {
-                enc::ConstExpr::i32_const(*value as i32)
-            }
-            (PrimitiveType::S64 | PrimitiveType::U64, Literal::Integer(value)) => {
-                enc::ConstExpr::i64_const(*value as i64)
-            }
-            (PrimitiveType::F32, Literal::Float(value)) => enc::ConstExpr::f32_const(*value as f32),
-            (PrimitiveType::F64, Literal::Float(value)) => enc::ConstExpr::f64_const(*value),
-            _ => todo!(),
+fn literal_to_const_expr(literal: &ast::Literal, ptype: ast::PrimitiveType) -> enc::ConstExpr {
+    use ast::Literal;
+    match (ptype, literal) {
+        (PrimitiveType::S32 | PrimitiveType::U32, Literal::Integer(value)) => {
+            enc::ConstExpr::i32_const(*value as i32)
         }
+        (PrimitiveType::S64 | PrimitiveType::U64, Literal::Integer(value)) => {
+            enc::ConstExpr::i64_const(*value as i64)
+        }
+        (PrimitiveType::F32, Literal::Float(value)) => enc::ConstExpr::f32_const(*value as f32),
+        (PrimitiveType::F64, Literal::Float(value)) => enc::ConstExpr::f64_const(*value),
+        _ => todo!(),
     }
 }
 
 // ResolvedType
 
-#[allow(dead_code)]
-impl<'ctx> C<'ctx, ResolvedType, ast::Component> {
-    fn as_valtype(&self) -> enc::ValType {
-        match self.value {
-            ResolvedType::Unit => panic!("Not able to encode as valtype"),
-            ResolvedType::Primitive(p) => p.as_valtype(),
-            ResolvedType::ValType(type_id) => type_id.with(self.context).as_valtype(),
-        }
+fn rtype_to_core_valtype(rtype: ResolvedType, component: &ast::Component) -> enc::ValType {
+    match rtype {
+        ResolvedType::Unit => panic!("Not able to encode as valtype"),
+        ResolvedType::Primitive(ptype) => ptype_to_valtype(ptype),
+        ResolvedType::ValType(type_id) => type_id_to_core_valtype(type_id, component),
     }
+}
 
-    fn as_comp_valtype(&self) -> enc::ComponentValType {
-        match self.value {
-            ResolvedType::Unit => panic!("Not able to encode as valtype"),
-            ResolvedType::Primitive(p) => p.as_comp_valtype(),
-            ResolvedType::ValType(t) => t.with(self.context).as_comp_valtype(),
-        }
+pub fn rtype_to_ptype(rtype: ResolvedType, component: &ast::Component) -> Option<PrimitiveType> {
+    match rtype {
+        ResolvedType::Unit => None,
+        ResolvedType::Primitive(ptype) => Some(ptype),
+        ResolvedType::ValType(type_id) => {
+            match component.get_type(type_id) {
+                ast::ValType::Result { .. } => None,
+                ast::ValType::String => None,
+                ast::ValType::Primitive(ptype) => Some(*ptype),
+            }
+        },
     }
 }
 
 // TypeId
 
-#[allow(dead_code)]
-impl<'ctx> C<'ctx, TypeId, ast::Component> {
-    fn as_valtype(&self) -> enc::ValType {
-        let valtype = self.context.get_type(*self.value);
-        valtype.with(self.context).as_valtype()
-    }
-
-    fn as_comp_valtype(&self) -> enc::ComponentValType {
-        let valtype = self.context.get_type(*self.value);
-        valtype.with(self.context).as_comp_valtype()
-    }
+fn type_id_to_core_valtype(type_id: TypeId, component: &ast::Component) -> enc::ValType {
+    let valtype = component.get_type(type_id);
+    valtype_to_core_valtype(valtype)
 }
 
 // ast::ValType
 
-impl<'ctx> C<'ctx, ast::ValType, ast::Component> {
-    fn as_valtype(&self) -> enc::ValType {
-        match self.value {
-            ast::ValType::Primitive(p) => p.as_valtype(),
-            _ => panic!("Cannot encode non-primitive as a valtype"),
-        }
+fn valtype_to_core_valtype(valtype: &ast::ValType) -> enc::ValType {
+    match valtype {
+        ast::ValType::Primitive(ptype) => ptype_to_valtype(*ptype),
+        _ => panic!("Cannot encode non-primitive as a valtype"),
     }
+}
 
-    fn as_comp_valtype(&self) -> enc::ComponentValType {
-        match self.value {
-            ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => todo!(),
-            ast::ValType::Primitive(p) => p.as_comp_valtype(),
-        }
+fn valtype_to_comp_valtype(valtype: &ast::ValType) -> enc::ComponentValType {
+    match valtype {
+        ast::ValType::Result { .. } => todo!(),
+        ast::ValType::String => todo!(),
+        ast::ValType::Primitive(ptype) => ptype_to_comp_valtype(*ptype),
     }
 }
 
 // PrimitiveType
 
-impl ast::PrimitiveType {
-    fn as_valtype(&self) -> enc::ValType {
-        use ast::PrimitiveType;
-        match self {
-            PrimitiveType::U32
-            | PrimitiveType::S32
-            | PrimitiveType::U16
-            | PrimitiveType::S16
-            | PrimitiveType::U8
-            | PrimitiveType::S8
-            | PrimitiveType::Bool => enc::ValType::I32,
+fn ptype_to_valtype(ptype: PrimitiveType) -> enc::ValType {
+    use ast::PrimitiveType as PType;
+    match ptype {
+        PType::U32
+        | PType::S32
+        | PType::U16
+        | PType::S16
+        | PType::U8
+        | PType::S8
+        | PType::Bool => enc::ValType::I32,
 
-            PrimitiveType::U64 | PrimitiveType::S64 => enc::ValType::I64,
+        PType::U64 | PType::S64 => enc::ValType::I64,
 
-            PrimitiveType::F32 => enc::ValType::F32,
-            PrimitiveType::F64 => enc::ValType::F64,
-        }
+        PType::F32 => enc::ValType::F32,
+        PType::F64 => enc::ValType::F64,
     }
+}
 
-    fn as_primitive_valtype(&self) -> enc::PrimitiveValType {
-        use ast::PrimitiveType;
-        match self {
-            PrimitiveType::U64 => enc::PrimitiveValType::U64,
-            PrimitiveType::U32 => enc::PrimitiveValType::U32,
-            PrimitiveType::U16 => enc::PrimitiveValType::U16,
-            PrimitiveType::U8 => enc::PrimitiveValType::U8,
-            PrimitiveType::S64 => enc::PrimitiveValType::S64,
-            PrimitiveType::S32 => enc::PrimitiveValType::S32,
-            PrimitiveType::S16 => enc::PrimitiveValType::S16,
-            PrimitiveType::S8 => enc::PrimitiveValType::S8,
-            PrimitiveType::F32 => enc::PrimitiveValType::Float32,
-            PrimitiveType::F64 => enc::PrimitiveValType::Float64,
-            PrimitiveType::Bool => enc::PrimitiveValType::Bool,
-        }
+fn ptype_to_ptype_valtype(ptype: PrimitiveType) -> enc::PrimitiveValType {
+    use ast::PrimitiveType as PType;
+    match ptype {
+        PType::U64 => enc::PrimitiveValType::U64,
+        PType::U32 => enc::PrimitiveValType::U32,
+        PType::U16 => enc::PrimitiveValType::U16,
+        PType::U8 => enc::PrimitiveValType::U8,
+        PType::S64 => enc::PrimitiveValType::S64,
+        PType::S32 => enc::PrimitiveValType::S32,
+        PType::S16 => enc::PrimitiveValType::S16,
+        PType::S8 => enc::PrimitiveValType::S8,
+        PType::F32 => enc::PrimitiveValType::Float32,
+        PType::F64 => enc::PrimitiveValType::Float64,
+        PType::Bool => enc::PrimitiveValType::Bool,
     }
+}
 
-    fn as_comp_valtype(&self) -> enc::ComponentValType {
-        enc::ComponentValType::Primitive(self.as_primitive_valtype())
+fn ptype_to_comp_valtype(ptype: PrimitiveType) -> enc::ComponentValType {
+    enc::ComponentValType::Primitive(ptype_to_ptype_valtype(ptype))
+}
+
+fn ptype_to_core_valtype(ptype: PrimitiveType) -> enc::ValType {
+    use ast::PrimitiveType as PType;
+
+    match ptype {
+        PType::Bool => enc::ValType::I32,
+
+        PType::U64 | PType::S64 => enc::ValType::I64,
+
+        PType::U32
+        | PType::U16
+        | PType::U8
+        | PType::S32
+        | PType::S16
+        | PType::S8 => enc::ValType::I32,
+
+        PType::F32 => enc::ValType::F32,
+        PType::F64 => enc::ValType::F64,
     }
 }
 
 // ValType
 
-#[allow(dead_code)]
-impl ast::ValType {
-    fn as_comp_valtype(&self) -> enc::ComponentValType {
-        match self {
-            ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => todo!(),
-            ast::ValType::Primitive(p) => p.as_comp_valtype(),
-        }
-    }
-}
-
 pub fn gen_allocator() -> Vec<u8> {
-    let wat = include_str!("../../allocator.wat");
+    let wat = include_str!("../allocator.wat");
     wat::parse_str(wat).unwrap()
 }

@@ -84,7 +84,6 @@ pub enum Expression {
     Binary(BinaryExpression),
 }
 
-#[cfg(test)]
 impl ContextEq<super::Component> for ExpressionId {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         let self_span = context.expr().get_span(*self);
@@ -104,7 +103,6 @@ impl ContextEq<super::Component> for ExpressionId {
     }
 }
 
-#[cfg(test)]
 impl ContextEq<super::Component> for Expression {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         match (self, other) {
@@ -153,7 +151,6 @@ pub struct Call {
     pub args: Vec<ExpressionId>,
 }
 
-#[cfg(test)]
 impl ContextEq<super::Component> for Call {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         let ident_eq = self.ident.context_eq(&other.ident, context);
@@ -181,7 +178,6 @@ pub struct UnaryExpression {
     pub inner: ExpressionId,
 }
 
-#[cfg(test)]
 impl ContextEq<super::Component> for UnaryExpression {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         let self_inner = context.expr().get_exp(self.inner);
@@ -231,7 +227,6 @@ pub struct BinaryExpression {
     pub right: ExpressionId,
 }
 
-#[cfg(test)]
 impl ContextEq<super::Component> for BinaryExpression {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         let self_left = context.expr().get_exp(self.left);
@@ -243,5 +238,20 @@ impl ContextEq<super::Component> for BinaryExpression {
         let right_eq = self_right.context_eq(other_right, context);
 
         left_eq && right_eq
+    }
+}
+
+impl BinaryExpression {
+    pub fn is_relation(&self) -> bool {
+        use BinaryOp as BE;
+        matches!(
+            self.op,
+            BE::LessThan
+                | BE::LessThanEqual
+                | BE::GreaterThan
+                | BE::GreaterThanEqual
+                | BE::Equals
+                | BE::NotEquals
+        )
     }
 }
