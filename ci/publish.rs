@@ -102,12 +102,6 @@ fn main() {
             assert!(crates.is_empty(), "failed to publish all crates");
 
             println!("");
-            println!("===================================================================");
-            println!("");
-            println!("Don't forget to push a git tag for this release!");
-            println!("");
-            println!("    $ git tag vX.Y.Z");
-            println!("    $ git push git@github.com:bytecodealliance/registry.git vX.Y.Z");
         }
 
         "verify" => {
