@@ -203,24 +203,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "claw-ast"
-version = "0.2.0"
-dependencies = [
- "claw-common",
- "cranelift-entity 0.104.0",
- "miette",
-]
-
-[[package]]
-name = "claw-cli"
-version = "0.2.0"
+name = "claw"
+version = "0.1.2"
 dependencies = [
  "clap",
- "claw-ast",
- "claw-codegen",
- "claw-common",
- "claw-parser",
- "claw-resolver",
  "cranelift-entity 0.104.0",
  "logos",
  "miette",
@@ -230,63 +216,6 @@ dependencies = [
  "wasmprinter",
  "wasmtime",
  "wat",
-]
-
-[[package]]
-name = "claw-codegen"
-version = "0.2.0"
-dependencies = [
- "claw-ast",
- "claw-resolver",
- "cranelift-entity 0.104.0",
- "miette",
- "thiserror",
- "wasm-encoder 0.38.1",
- "wat",
-]
-
-[[package]]
-name = "claw-common"
-version = "0.2.0"
-dependencies = [
- "miette",
- "thiserror",
-]
-
-[[package]]
-name = "claw-parser"
-version = "0.2.0"
-dependencies = [
- "claw-ast",
- "claw-common",
- "cranelift-entity 0.104.0",
- "logos",
- "miette",
- "pretty_assertions",
- "thiserror",
-]
-
-[[package]]
-name = "claw-resolver"
-version = "0.2.0"
-dependencies = [
- "claw-ast",
- "claw-common",
- "cranelift-entity 0.104.0",
- "miette",
- "thiserror",
-]
-
-[[package]]
-name = "compile-claw"
-version = "0.2.0"
-dependencies = [
- "claw-codegen",
- "claw-common",
- "claw-parser",
- "claw-resolver",
- "wasmprinter",
- "wasmtime",
 ]
 
 [[package]]
