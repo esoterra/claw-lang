@@ -1,5 +1,4 @@
-use claw::diagnostic::UnwrapPretty;
-use claw::{codegen, compile};
+use compile_claw::compile;
 
 use std::fs;
 
@@ -18,14 +17,7 @@ impl Runtime {
     pub fn new(name: &str) -> Self {
         let path = format!("./tests/programs/{}.claw", name);
         let input = fs::read_to_string(path).unwrap();
-        let output = compile(name.to_owned(), &input);
-        let output = match output {
-            Some(output) => output,
-            None => panic!("Failed to compile '{}'", name),
-        };
-
-        let generator = codegen::CodeGenerator::default();
-        let component_bytes = generator.generate(&output).unwrap_pretty();
+        let component_bytes = compile(name.to_owned(), &input).unwrap();
 
         println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());
 

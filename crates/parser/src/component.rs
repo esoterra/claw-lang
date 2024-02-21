@@ -1,16 +1,16 @@
-use crate::ast::{self, FunctionId, GlobalId, Import, ImportId, NameId, TypeId};
 use crate::lexer::Token;
-use crate::parser::{
+use crate::{
     expressions::parse_expression, statements::parse_block, types::parse_valtype, ParseInput,
     ParserError,
 };
+use ast::{FunctionId, GlobalId, Import, ImportId, NameId, TypeId};
+use claw_ast as ast;
 
-use super::statements::parse_ident;
+use claw_common::Source;
 
-pub fn parse_component(
-    src: crate::Source,
-    input: &mut ParseInput,
-) -> Result<ast::Component, ParserError> {
+use crate::statements::parse_ident;
+
+pub fn parse_component(src: Source, input: &mut ParseInput) -> Result<ast::Component, ParserError> {
     let mut component = ast::Component::new(src);
 
     while !input.done() {
@@ -182,8 +182,8 @@ fn parse_fn_type(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::diagnostic::UnwrapPretty;
-    use crate::parser::make_input;
+    use crate::make_input;
+    use claw_common::UnwrapPretty;
 
     #[test]
     fn test_increment() {

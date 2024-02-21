@@ -2,9 +2,10 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use clap::Parser;
 
-use claw::parser::parse;
-use claw::resolver::resolve;
-use claw::{diagnostic::OkPretty, lexer::tokenize};
+use claw_codegen::CodeGenerator;
+use claw_common::OkPretty;
+use claw_parser::{parse, tokenize};
+use claw_resolver::resolve;
 use miette::NamedSource;
 
 #[derive(Parser, Debug)]
@@ -38,7 +39,7 @@ impl Compile {
 
         let resolved = resolve(src, ast).ok_pretty()?;
 
-        let generator = claw::codegen::CodeGenerator::default();
+        let generator = CodeGenerator::default();
         let wasm = generator.generate(&resolved).ok_pretty()?;
 
         match fs::write(&self.output, wasm) {

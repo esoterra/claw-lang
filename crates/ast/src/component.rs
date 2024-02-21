@@ -2,13 +2,14 @@ use std::collections::HashMap;
 
 use cranelift_entity::{entity_impl, PrimaryMap};
 
-use crate::ast;
-use crate::ast::expressions::ExpressionData;
-use crate::Source;
+use crate::expressions::ExpressionData;
+use claw_common::Source;
 
 use super::{
-    expressions::ExpressionId, statements::StatementId, types::FnType, NameId, Span, TypeId,
-    ValType,
+    expressions::ExpressionId,
+    statements::{Let, Statement, StatementId},
+    types::FnType,
+    NameId, Span, TypeId, ValType,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -38,7 +39,7 @@ pub struct Component {
     pub types: PrimaryMap<TypeId, ValType>,
     pub type_spans: HashMap<TypeId, Span>,
 
-    pub statements: PrimaryMap<StatementId, ast::Statement>,
+    pub statements: PrimaryMap<StatementId, Statement>,
     pub statement_spans: HashMap<StatementId, Span>,
 
     pub expression_data: ExpressionData,
@@ -48,7 +49,7 @@ pub struct Component {
 }
 
 impl Component {
-    pub fn new(src: crate::Source) -> Self {
+    pub fn new(src: Source) -> Self {
         Self {
             src,
             imports: Default::default(),
@@ -92,13 +93,13 @@ impl Component {
         *self.type_spans.get(&id).unwrap()
     }
 
-    pub fn new_statement(&mut self, statement: ast::Statement, span: Span) -> StatementId {
+    pub fn new_statement(&mut self, statement: Statement, span: Span) -> StatementId {
         let id = self.statements.push(statement);
         self.statement_spans.insert(id, span);
         id
     }
 
-    pub fn get_statement(&self, id: StatementId) -> &ast::Statement {
+    pub fn get_statement(&self, id: StatementId) -> &Statement {
         self.statements.get(id).unwrap()
     }
 
@@ -114,13 +115,13 @@ impl Component {
         expression: ExpressionId,
         span: Span,
     ) -> StatementId {
-        let let_ = ast::Let {
+        let let_ = Let {
             mutable,
             ident,
             annotation,
             expression,
         };
-        self.new_statement(ast::Statement::Let(let_), span)
+        self.new_statement(Statement::Let(let_), span)
     }
 
     pub fn expr(&self) -> &ExpressionData {

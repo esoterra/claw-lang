@@ -1,8 +1,7 @@
 use super::{encode_expression, CodeGenerator, GenerationError};
-use crate::{
-    ast::{self, ExpressionId, FunctionId, NameId, StatementId},
-    resolver::{ItemId, ResolvedComponent},
-};
+use ast::{ExpressionId, FunctionId, NameId, StatementId};
+use claw_ast as ast;
+use claw_resolver::{ItemId, ResolvedComponent};
 
 use cranelift_entity::EntityRef;
 use wasm_encoder as enc;
@@ -15,7 +14,7 @@ pub fn encode_statement(
     func: FunctionId,
     builder: &mut enc::Function,
 ) -> Result<(), GenerationError> {
-    let s: &dyn EncodeStatement = match component.component.get_statement(statement) {
+    let s: &dyn EncodeStatement = match &component.component.get_statement(statement) {
         ast::Statement::Let(statement) => statement,
         ast::Statement::Assign(statement) => statement,
         ast::Statement::Call(statement) => statement,

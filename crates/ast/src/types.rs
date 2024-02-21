@@ -38,7 +38,26 @@ pub enum PrimitiveType {
     Bool,
 }
 
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum Signedness {
+    Unsigned,
+    Signed,
+    NotApplicable,
+}
+
 impl PrimitiveType {
+    pub fn signedness(&self) -> Signedness {
+        match self {
+            PrimitiveType::U64 | PrimitiveType::U32 | PrimitiveType::U16 | PrimitiveType::U8 => {
+                Signedness::Unsigned
+            }
+            PrimitiveType::S64 | PrimitiveType::S32 | PrimitiveType::S16 | PrimitiveType::S8 => {
+                Signedness::Signed
+            }
+            _ => Signedness::NotApplicable,
+        }
+    }
+
     pub fn core_type_mask(&self) -> Option<i32> {
         use PrimitiveType as P;
         match self {

@@ -1,0 +1,21 @@
+[package]
+name = "claw-parser"
+description = "The Claw language lexer and parser"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+claw-ast = { workspace = true }
+miette = { workspace = true }
+claw-common = { workspace = true }
+cranelift-entity = { workspace = true }
+logos = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }

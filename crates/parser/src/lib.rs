@@ -1,32 +1,40 @@
+#![allow(clippy::should_implement_trait)]
+#![allow(clippy::while_let_loop)]
+#![allow(clippy::while_let_on_iterator)]
+
 mod component;
 mod expressions;
+mod lexer;
 mod statements;
 mod types;
 
 use std::sync::Arc;
 
-use crate::ast::component::Component;
-use crate::ast::Span;
 use crate::lexer::{Token, TokenData};
+use ast::{component::Component, Span};
+use claw_ast as ast;
+use claw_common::Source;
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;
 
-use self::component::parse_component;
+use component::parse_component;
+
+pub use lexer::tokenize;
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParserError {
     #[error("Failed to parse")]
     Base {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("Unable to parse this code")]
         span: SourceSpan,
     },
     #[error("{description}")]
     UnexpectedToken {
         #[source_code]
-        src: crate::Source,
+        src: Source,
         #[label("Found {token:?}")]
         span: SourceSpan,
         description: String,
@@ -38,20 +46,20 @@ pub enum ParserError {
     NotYetSupported { feature: String, token: Token },
 }
 
-pub fn parse(src: crate::Source, tokens: Vec<TokenData>) -> Result<Component, ParserError> {
+pub fn parse(src: Source, tokens: Vec<TokenData>) -> Result<Component, ParserError> {
     let mut input = ParseInput::new(src.clone(), tokens);
     parse_component(src, &mut input)
 }
 
 #[derive(Debug, Clone)]
 pub struct ParseInput {
-    src: crate::Source,
+    src: Source,
     tokens: Vec<TokenData>,
     index: usize,
 }
 
 impl ParseInput {
-    pub fn new(src: crate::Source, tokens: Vec<TokenData>) -> Self {
+    pub fn new(src: Source, tokens: Vec<TokenData>) -> Self {
         ParseInput {
             src,
             tokens,
@@ -76,7 +84,7 @@ impl ParseInput {
         }
     }
 
-    pub fn get_source(&self) -> crate::Source {
+    pub fn get_source(&self) -> Source {
         self.src.clone()
     }
 
@@ -132,7 +140,7 @@ impl ParseInput {
     }
 }
 
-pub fn make_input(source: &str) -> (crate::Source, ParseInput) {
+pub fn make_input(source: &str) -> (Source, ParseInput) {
     let src = Arc::new(NamedSource::new("test", source.to_string()));
     let tokens = crate::lexer::tokenize(src.clone(), source).unwrap();
     (src.clone(), ParseInput::new(src, tokens))

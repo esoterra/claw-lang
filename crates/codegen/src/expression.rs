@@ -1,10 +1,8 @@
-use crate::{
-    ast::{self, ExpressionId, FunctionId},
-    context::WithContext,
-    resolver::{ItemId, ResolvedComponent},
-};
+use ast::{ExpressionId, FunctionId, Signedness};
+use claw_ast as ast;
+use claw_resolver::{ItemId, ResolvedComponent};
 
-use super::{CodeGenerator, GenerationError, Signedness};
+use super::{CodeGenerator, GenerationError};
 
 use cranelift_entity::EntityRef;
 use wasm_encoder as enc;
@@ -98,7 +96,7 @@ impl EncodeExpression for ast::Literal {
         let resolver = component.resolved_funcs.get(&func).unwrap();
 
         let rtype = resolver.get_resolved_type(expression, comp)?;
-        let valtype = rtype.with(comp).as_valtype();
+        let valtype = super::rtype_to_core_valtype(rtype, &component.component);
 
         use ast::Literal;
         let instruction = match (valtype, self) {
@@ -171,9 +169,10 @@ impl EncodeExpression for ast::BinaryExpression {
         let resolver = component.resolved_funcs.get(&func).unwrap();
         let rtype = resolver.get_resolved_type(self.left, comp)?;
 
-        let p = rtype.with(&component.component).as_primitive().unwrap();
+        let ptype = crate::rtype_to_ptype(rtype, comp).unwrap();
 
-        let instruction = match (self.op, p.core_type(), p.signedness()) {
+        let core_valtype = crate::ptype_to_core_valtype(ptype);
+        let instruction = match (self.op, core_valtype, ptype.signedness()) {
             // Multiply
             (ast::BinaryOp::Multiply, enc::ValType::I32, _) => enc::Instruction::I32Mul,
             (ast::BinaryOp::Multiply, enc::ValType::I64, _) => enc::Instruction::I64Mul,
@@ -269,7 +268,7 @@ impl EncodeExpression for ast::BinaryExpression {
         };
         builder.instruction(&instruction);
 
-        if let Some(mask) = p.core_type_mask() {
+        if let Some(mask) = ptype.core_type_mask() {
             builder.instruction(&enc::Instruction::I32Const(mask));
             builder.instruction(&enc::Instruction::I32And);
         }

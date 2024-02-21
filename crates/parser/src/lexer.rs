@@ -1,7 +1,11 @@
+#![allow(clippy::upper_case_acronyms)]
+
 use logos::Logos;
 
 use miette::{Diagnostic, SourceSpan};
 use thiserror::Error;
+
+use claw_common::Source;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct TokenData {
@@ -14,12 +18,12 @@ pub struct TokenData {
 #[diagnostic()]
 pub struct LexerError {
     #[source_code]
-    src: crate::Source,
+    src: Source,
     #[label("Here")]
     span: SourceSpan,
 }
 
-pub fn tokenize(src: crate::Source, contents: &str) -> Result<Vec<TokenData>, LexerError> {
+pub fn tokenize(src: Source, contents: &str) -> Result<Vec<TokenData>, LexerError> {
     let lexer = Token::lexer(contents);
 
     lexer
@@ -568,12 +572,13 @@ fn parse_hex_literal(s: &str) -> Option<u64> {
 #[cfg(test)]
 mod test {
     use super::*;
+    use claw_common::make_source;
     use pretty_assertions::assert_eq;
 
     #[test]
     fn tokenize_func_declaration() {
         let contents = "func test(a: u32) -> u32";
-        let src = crate::make_source("test", contents);
+        let src = make_source("test", contents);
         let ident_test = Token::Identifier("test".to_owned());
         let ident_a = Token::Identifier("a".to_owned());
         let output = vec![
@@ -600,7 +605,7 @@ mod test {
     #[test]
     fn tokenize_let() {
         let contents = r#"let a = "asdf\"";"#;
-        let src = crate::make_source("test", contents);
+        let src = make_source("test", contents);
         let ident_a = Token::Identifier("a".to_owned());
         let string_asdf = Token::StringLiteral(String::from(r#"asdf""#));
         let output = vec![

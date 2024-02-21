@@ -1,0 +1,20 @@
+[package]
+name = "compile-claw"
+description = "The Claw language compiler library"
+version = { workspace = true }
+authors = { workspace = true }
+license = { workspace = true }
+edition = { workspace = true }
+repository = { workspace = true }
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+claw-common = { workspace = true }
+claw-parser = { workspace = true }
+claw-resolver = { workspace = true }
+claw-codegen = { workspace = true }
+
+[dev-dependencies]
+wasmtime = { workspace = true }
+wasmprinter = { workspace = true }

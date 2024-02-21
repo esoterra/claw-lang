@@ -1,6 +1,6 @@
 use crate::ast::{self, merge, Component, NameId, Span, StatementId};
 use crate::lexer::Token;
-use crate::parser::{expressions::parse_expression, types::parse_valtype, ParseInput, ParserError};
+use crate::{expressions::parse_expression, types::parse_valtype, ParseInput, ParserError};
 
 pub fn parse_block(
     input: &mut ParseInput,
@@ -107,7 +107,7 @@ fn parse_if(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId,
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::parser::make_input;
+    use crate::make_input;
 
     #[test]
     fn test_parse_block_empty() {

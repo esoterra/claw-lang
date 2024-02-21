@@ -24,7 +24,6 @@ pub fn merge(left: &Span, right: &Span) -> Span {
 pub struct NameId(u32);
 entity_impl!(NameId, "name");
 
-#[cfg(test)]
 impl ContextEq<Component> for NameId {
     fn context_eq(&self, other: &Self, context: &Component) -> bool {
         let self_str = context.get_name(*self);
