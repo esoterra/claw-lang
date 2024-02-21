@@ -51,11 +51,11 @@ homepage = "https://claw-lang.dev/"
 repository = "https://github.com/esoterra/claw-lang"
 
 [workspace.dependencies]
-claw-common = { path = "./crates/common" }
-claw-ast = { path = "./crates/ast" }
-claw-parser = { path = "./crates/parser" }
-claw-resolver = { path = "./crates/resolver" }
-claw-codegen = { path = "./crates/codegen" }
+claw-common = { path = "./crates/common", version = "0.2.0" }
+claw-ast = { path = "./crates/ast", version = "0.2.0" }
+claw-parser = { path = "./crates/parser", version = "0.2.0" }
+claw-resolver = { path = "./crates/resolver", version = "0.2.0" }
+claw-codegen = { path = "./crates/codegen", version = "0.2.0" }
 
 clap = { version = "3.0.0-rc.7", features = ["derive"] }
 thiserror = "1.0.30"
