@@ -10,8 +10,8 @@ pub use expression::*;
 use module_builder::*;
 pub use statement::*;
 
-use claw_ast as ast;
 use ast::{FunctionId, ImportId, PrimitiveType, TypeId};
+use claw_ast as ast;
 use claw_resolver::{FunctionResolver, ResolvedComponent, ResolvedType, ResolverError};
 use miette::Diagnostic;
 use thiserror::Error;
@@ -318,12 +318,10 @@ pub fn rtype_to_ptype(rtype: ResolvedType, component: &ast::Component) -> Option
     match rtype {
         ResolvedType::Unit => None,
         ResolvedType::Primitive(ptype) => Some(ptype),
-        ResolvedType::ValType(type_id) => {
-            match component.get_type(type_id) {
-                ast::ValType::Result { .. } => None,
-                ast::ValType::String => None,
-                ast::ValType::Primitive(ptype) => Some(*ptype),
-            }
+        ResolvedType::ValType(type_id) => match component.get_type(type_id) {
+            ast::ValType::Result { .. } => None,
+            ast::ValType::String => None,
+            ast::ValType::Primitive(ptype) => Some(*ptype),
         },
     }
 }
@@ -357,13 +355,9 @@ fn valtype_to_comp_valtype(valtype: &ast::ValType) -> enc::ComponentValType {
 fn ptype_to_valtype(ptype: PrimitiveType) -> enc::ValType {
     use ast::PrimitiveType as PType;
     match ptype {
-        PType::U32
-        | PType::S32
-        | PType::U16
-        | PType::S16
-        | PType::U8
-        | PType::S8
-        | PType::Bool => enc::ValType::I32,
+        PType::U32 | PType::S32 | PType::U16 | PType::S16 | PType::U8 | PType::S8 | PType::Bool => {
+            enc::ValType::I32
+        }
 
         PType::U64 | PType::S64 => enc::ValType::I64,
 
@@ -401,12 +395,9 @@ fn ptype_to_core_valtype(ptype: PrimitiveType) -> enc::ValType {
 
         PType::U64 | PType::S64 => enc::ValType::I64,
 
-        PType::U32
-        | PType::U16
-        | PType::U8
-        | PType::S32
-        | PType::S16
-        | PType::S8 => enc::ValType::I32,
+        PType::U32 | PType::U16 | PType::U8 | PType::S32 | PType::S16 | PType::S8 => {
+            enc::ValType::I32
+        }
 
         PType::F32 => enc::ValType::F32,
         PType::F64 => enc::ValType::F64,

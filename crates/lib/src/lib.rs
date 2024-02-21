@@ -1,7 +1,7 @@
-use claw_common::{OkPretty, make_source};
-use claw_parser::{tokenize, parse};
-use claw_resolver::resolve;
 use claw_codegen::CodeGenerator;
+use claw_common::{make_source, OkPretty};
+use claw_parser::{parse, tokenize};
+use claw_resolver::resolve;
 
 pub fn compile(source_name: String, source_code: &str) -> Option<Vec<u8>> {
     let src = make_source(source_name.as_str(), source_code);

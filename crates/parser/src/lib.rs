@@ -1,15 +1,15 @@
 mod component;
 mod expressions;
+mod lexer;
 mod statements;
 mod types;
-mod lexer;
 
 use std::sync::Arc;
 
-use claw_common::Source;
-use claw_ast as ast;
-use ast::{Span, component::Component};
 use crate::lexer::{Token, TokenData};
+use ast::{component::Component, Span};
+use claw_ast as ast;
+use claw_common::Source;
 
 use miette::{Diagnostic, NamedSource, SourceSpan};
 use thiserror::Error;

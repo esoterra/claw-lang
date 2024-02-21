@@ -570,8 +570,8 @@ fn parse_hex_literal(s: &str) -> Option<u64> {
 #[cfg(test)]
 mod test {
     use super::*;
-    use pretty_assertions::assert_eq;
     use claw_common::make_source;
+    use pretty_assertions::assert_eq;
 
     #[test]
     fn tokenize_func_declaration() {

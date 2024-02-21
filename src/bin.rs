@@ -2,10 +2,10 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use clap::Parser;
 
-use claw_common::OkPretty;
-use claw_parser::{tokenize, parse};
-use claw_resolver::resolve;
 use claw_codegen::CodeGenerator;
+use claw_common::OkPretty;
+use claw_parser::{parse, tokenize};
+use claw_resolver::resolve;
 use miette::NamedSource;
 
 #[derive(Parser, Debug)]

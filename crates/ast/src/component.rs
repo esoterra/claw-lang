@@ -6,8 +6,10 @@ use crate::expressions::ExpressionData;
 use claw_common::Source;
 
 use super::{
-    expressions::ExpressionId, statements::{StatementId, Statement, Let}, types::FnType, NameId, Span, TypeId,
-    ValType,
+    expressions::ExpressionId,
+    statements::{Let, Statement, StatementId},
+    types::FnType,
+    NameId, Span, TypeId, ValType,
 };
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]

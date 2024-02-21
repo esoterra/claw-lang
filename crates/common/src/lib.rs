@@ -1,8 +1,8 @@
 mod diagnostic;
 mod stack_map;
 
-use std::sync::Arc;
 use miette::NamedSource;
+use std::sync::Arc;
 
 pub use diagnostic::*;
 pub use stack_map::*;

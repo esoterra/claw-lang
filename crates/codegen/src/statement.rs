@@ -1,6 +1,6 @@
 use super::{encode_expression, CodeGenerator, GenerationError};
-use claw_ast as ast;
 use ast::{ExpressionId, FunctionId, NameId, StatementId};
+use claw_ast as ast;
 use claw_resolver::{ItemId, ResolvedComponent};
 
 use cranelift_entity::EntityRef;

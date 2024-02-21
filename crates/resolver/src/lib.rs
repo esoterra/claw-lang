@@ -1,6 +1,6 @@
-use claw_common::{Source, StackMap};
-use claw_ast as ast;
 use ast::{ExpressionId, FunctionId, GlobalId, ImportId, NameId, Span, TypeId};
+use claw_ast as ast;
+use claw_common::{Source, StackMap};
 
 use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 use std::collections::{HashMap, VecDeque};
@@ -128,10 +128,7 @@ pub enum Notification {
     },
 }
 
-pub fn resolve(
-    src: Source,
-    component: ast::Component,
-) -> Result<ResolvedComponent, ResolverError> {
+pub fn resolve(src: Source, component: ast::Component) -> Result<ResolvedComponent, ResolverError> {
     let mut mappings: HashMap<String, ItemId> = Default::default();
 
     for (id, import) in component.imports.iter() {
@@ -507,12 +504,15 @@ impl std::fmt::Display for ResolvedType {
 
 struct ResolvedTypeContext<'ctx> {
     rtype: ResolvedType,
-    context: &'ctx ast::Component
+    context: &'ctx ast::Component,
 }
 
 impl ResolvedType {
     fn with<'ctx>(&'ctx self, context: &'ctx ast::Component) -> ResolvedTypeContext<'ctx> {
-        ResolvedTypeContext { rtype: *self, context }
+        ResolvedTypeContext {
+            rtype: *self,
+            context,
+        }
     }
 }
 
@@ -866,12 +866,15 @@ impl ResolveExpression for ast::Literal {}
 
 pub struct ItemContext<'ctx> {
     item: ItemId,
-    component: &'ctx ast::Component
+    component: &'ctx ast::Component,
 }
 
 impl ItemId {
     pub fn with<'ctx>(&self, component: &'ctx ast::Component) -> ItemContext<'ctx> {
-        ItemContext { item: *self, component }
+        ItemContext {
+            item: *self,
+            component,
+        }
     }
 }
 

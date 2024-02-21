@@ -1,9 +1,8 @@
-
-use claw_ast as ast;
 use ast::{ExpressionId, FunctionId, Signedness};
+use claw_ast as ast;
 use claw_resolver::{ItemId, ResolvedComponent};
 
-use super::{CodeGenerator, GenerationError, };
+use super::{CodeGenerator, GenerationError};
 
 use cranelift_entity::EntityRef;
 use wasm_encoder as enc;
