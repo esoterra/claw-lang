@@ -185,7 +185,7 @@ pub fn resolve(src: Source, component: ast::Component) -> Result<ResolvedCompone
 pub struct FunctionResolver {
     id: FunctionId,
 
-    params: PrimaryMap<ParamId, TypeId>,
+    pub params: PrimaryMap<ParamId, TypeId>,
 
     // Name Resolution
     /// Entries for each unique local
@@ -489,7 +489,6 @@ impl FunctionResolver {
 
 #[derive(Clone, Copy, Debug)]
 pub enum ResolvedType {
-    Unit,
     Primitive(ast::PrimitiveType),
     ValType(TypeId),
 }
@@ -497,7 +496,6 @@ pub enum ResolvedType {
 impl std::fmt::Display for ResolvedType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ResolvedType::Unit => f.write_str("Unit"),
             ResolvedType::Primitive(p) => (p as &dyn std::fmt::Debug).fmt(f),
             ResolvedType::ValType(v) => (v as &dyn std::fmt::Debug).fmt(f),
         }
@@ -521,7 +519,6 @@ impl ResolvedType {
 impl<'ctx> ResolvedTypeContext<'ctx> {
     pub fn type_eq(&self, other: &ResolvedType) -> bool {
         match (self.rtype, *other) {
-            (ResolvedType::Unit, ResolvedType::Unit) => true,
             (ResolvedType::Primitive(left), ResolvedType::Primitive(right)) => left == right,
             (ResolvedType::ValType(left), ResolvedType::ValType(right)) => {
                 let l_valtype = self.context.get_type(left);
@@ -536,7 +533,6 @@ impl<'ctx> ResolvedTypeContext<'ctx> {
                     _ => false,
                 }
             }
-            _ => false,
         }
     }
 }

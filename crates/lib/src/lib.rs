@@ -1,4 +1,4 @@
-use claw_codegen::CodeGenerator;
+use claw_codegen::generate;
 use claw_common::{make_source, OkPretty};
 use claw_parser::{parse, tokenize};
 use claw_resolver::resolve;
@@ -12,6 +12,5 @@ pub fn compile(source_name: String, source_code: &str) -> Option<Vec<u8>> {
 
     let resolved = resolve(src, ast).ok_pretty()?;
 
-    let gen = CodeGenerator::default();
-    gen.generate(&resolved).ok_pretty()
+    generate(&resolved).ok_pretty()
 }

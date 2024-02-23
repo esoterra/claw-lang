@@ -2,7 +2,7 @@ use std::{fs, path::PathBuf, sync::Arc};
 
 use clap::Parser;
 
-use claw_codegen::CodeGenerator;
+use claw_codegen::generate;
 use claw_common::OkPretty;
 use claw_parser::{parse, tokenize};
 use claw_resolver::resolve;
@@ -39,8 +39,7 @@ impl Compile {
 
         let resolved = resolve(src, ast).ok_pretty()?;
 
-        let generator = CodeGenerator::default();
-        let wasm = generator.generate(&resolved).ok_pretty()?;
+        let wasm = generate(&resolved).ok_pretty()?;
 
         match fs::write(&self.output, wasm) {
             Ok(_) => println!("Done"),

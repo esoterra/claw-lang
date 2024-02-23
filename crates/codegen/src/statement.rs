@@ -1,161 +1,181 @@
-use super::{encode_expression, CodeGenerator, GenerationError};
-use ast::{ExpressionId, FunctionId, NameId, StatementId};
+use crate::code::{CodeGenerator, ExpressionAllocator};
+
+use super::GenerationError;
+use ast::{ExpressionId, NameId, Statement};
 use claw_ast as ast;
-use claw_resolver::{ItemId, ResolvedComponent};
+use claw_resolver::ItemId;
 
 use cranelift_entity::EntityRef;
 use wasm_encoder as enc;
 use wasm_encoder::Instruction;
 
-pub fn encode_statement(
-    generator: &CodeGenerator,
-    component: &ResolvedComponent,
-    statement: StatementId,
-    func: FunctionId,
-    builder: &mut enc::Function,
-) -> Result<(), GenerationError> {
-    let s: &dyn EncodeStatement = match &component.component.get_statement(statement) {
-        ast::Statement::Let(statement) => statement,
-        ast::Statement::Assign(statement) => statement,
-        ast::Statement::Call(statement) => statement,
-        ast::Statement::If(statement) => statement,
-        ast::Statement::Return(statement) => statement,
-    };
-    s.encode_statement(generator, component, func, builder)?;
-    Ok(())
+pub trait EncodeStatement {
+    fn alloc_expr_locals(&self, allocator: &mut ExpressionAllocator)
+        -> Result<(), GenerationError>;
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError>;
 }
 
-pub trait EncodeStatement {
-    fn encode_statement(
+impl EncodeStatement for Statement {
+    fn alloc_expr_locals(
         &self,
-        generator: &CodeGenerator,
-        component: &ResolvedComponent,
-        func: FunctionId,
-        builder: &mut enc::Function,
-    ) -> Result<(), GenerationError>;
+        allocator: &mut ExpressionAllocator,
+    ) -> Result<(), GenerationError> {
+        let statement: &dyn EncodeStatement = match self {
+            Statement::Let(statement) => statement,
+            Statement::Assign(statement) => statement,
+            Statement::Call(statement) => statement,
+            Statement::If(statement) => statement,
+            Statement::Return(statement) => statement,
+        };
+        statement.alloc_expr_locals(allocator)
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        let statement: &dyn EncodeStatement = match self {
+            Statement::Let(statement) => statement,
+            Statement::Assign(statement) => statement,
+            Statement::Call(statement) => statement,
+            Statement::If(statement) => statement,
+            Statement::Return(statement) => statement,
+        };
+        statement.encode(code_gen)
+    }
 }
 
 impl EncodeStatement for ast::Let {
-    fn encode_statement(
+    fn alloc_expr_locals(
         &self,
-        generator: &CodeGenerator,
-        component: &ResolvedComponent,
-        func: FunctionId,
-        builder: &mut enc::Function,
+        allocator: &mut ExpressionAllocator,
     ) -> Result<(), GenerationError> {
-        encode_assignment(
-            generator,
-            component,
-            func,
-            self.ident,
-            self.expression,
-            builder,
-        )
+        allocator.alloc_child(self.expression)
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        encode_assignment(self.ident, self.expression, code_gen)
     }
 }
 
 impl EncodeStatement for ast::Assign {
-    fn encode_statement(
+    fn alloc_expr_locals(
         &self,
-        generator: &CodeGenerator,
-        component: &ResolvedComponent,
-        func: FunctionId,
-        builder: &mut enc::Function,
+        allocator: &mut ExpressionAllocator,
     ) -> Result<(), GenerationError> {
-        encode_assignment(
-            generator,
-            component,
-            func,
-            self.ident,
-            self.expression,
-            builder,
-        )
+        allocator.alloc_child(self.expression)
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        encode_assignment(self.ident, self.expression, code_gen)
     }
 }
 
 impl EncodeStatement for ast::Call {
-    fn encode_statement(
+    fn alloc_expr_locals(
         &self,
-        generator: &CodeGenerator,
-        component: &ResolvedComponent,
-        func: FunctionId,
-        builder: &mut enc::Function,
+        allocator: &mut ExpressionAllocator,
     ) -> Result<(), GenerationError> {
-        let resolver = component.resolved_funcs.get(&func).unwrap();
-
         for arg in self.args.iter() {
-            encode_expression(generator, component, *arg, func, builder)?;
+            allocator.alloc_child(*arg)?;
         }
-        let index = match resolver.bindings.get(&self.ident).unwrap() {
-            ItemId::Import(import) => *generator.func_idx_for_import.get(import).unwrap(),
-            ItemId::Function(function) => *generator.func_idx_for_func.get(function).unwrap(),
-            _ => panic!(""),
-        };
-        builder.instruction(&Instruction::Call(index.into()));
+        Ok(())
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        for arg in self.args.iter() {
+            code_gen.encode_child(*arg)?;
+        }
+        let item = code_gen.lookup_name(self.ident);
+        code_gen.encode_call(item)?;
         Ok(())
     }
 }
 
 impl EncodeStatement for ast::If {
-    fn encode_statement(
+    fn alloc_expr_locals(
         &self,
-        generator: &CodeGenerator,
-        component: &ResolvedComponent,
-        func: FunctionId,
-        builder: &mut enc::Function,
+        allocator: &mut ExpressionAllocator,
     ) -> Result<(), GenerationError> {
-        encode_expression(generator, component, self.condition, func, builder)?;
-        builder.instruction(&Instruction::If(enc::BlockType::Empty));
+        allocator.alloc_child(self.condition)?;
         for statement in self.block.iter() {
-            encode_statement(generator, component, *statement, func, builder)?;
+            allocator.alloc_statement(*statement)?;
         }
-        builder.instruction(&Instruction::End);
+        Ok(())
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        code_gen.encode_child(self.condition)?;
+        let fields = code_gen.fields(self.condition)?;
+        assert_eq!(fields.len(), 1);
+        code_gen.read_expr_field(self.condition, &fields[0]);
+        code_gen.instruction(&Instruction::If(enc::BlockType::Empty));
+        for statement in self.block.iter() {
+            code_gen.encode_statement(*statement)?;
+        }
+        code_gen.instruction(&Instruction::End);
         Ok(())
     }
 }
 
 impl EncodeStatement for ast::Return {
-    fn encode_statement(
+    fn alloc_expr_locals(
         &self,
-        generator: &CodeGenerator,
-        component: &ResolvedComponent,
-        func: FunctionId,
-        builder: &mut enc::Function,
+        allocator: &mut ExpressionAllocator,
     ) -> Result<(), GenerationError> {
         if let Some(expression) = self.expression {
-            encode_expression(generator, component, expression, func, builder)?;
+            allocator.alloc_child(expression)?;
         }
-        builder.instruction(&Instruction::Return);
+        Ok(())
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        if let Some(expression) = self.expression {
+            code_gen.encode_child(expression)?;
+
+            let fields = code_gen.fields(expression)?;
+            for field in fields.iter() {
+                if code_gen.spill_return() {
+                    code_gen.read_return_ptr()?;
+                    code_gen.field_address(field);
+                    code_gen.read_expr_field(expression, field);
+                    code_gen.write_mem(field);
+                } else {
+                    code_gen.read_expr_field(expression, field);
+                }
+            }
+
+            if code_gen.spill_return() {
+                code_gen.read_return_ptr()?;
+            }
+        }
+        code_gen.instruction(&Instruction::Return);
         Ok(())
     }
 }
 
 fn encode_assignment(
-    generator: &CodeGenerator,
-    component: &ResolvedComponent,
-    func: FunctionId,
     ident: NameId,
     expression: ExpressionId,
-    builder: &mut enc::Function,
+    code_gen: &mut CodeGenerator,
 ) -> Result<(), GenerationError> {
-    let resolver = component.resolved_funcs.get(&func).unwrap();
-    encode_expression(generator, component, expression, func, builder)?;
-    match resolver.bindings.get(&ident).unwrap() {
-        ItemId::Import(_) => unimplemented!(),
+    code_gen.encode_child(expression)?;
+    let fields = code_gen.fields(expression)?;
+    match code_gen.lookup_name(ident) {
+        ItemId::Import(_) => panic!("Assigning to imports isn't allowed!!"),
         ItemId::Global(global) => {
-            builder.instruction(&Instruction::GlobalSet(global.index() as u32));
+            // TODO handle composite globals
+            for field in fields {
+                code_gen.read_expr_field(expression, &field);
+                code_gen.instruction(&Instruction::GlobalSet(global.index() as u32));
+            }
         }
-        ItemId::Param(param) => {
-            let local_index = param.index() as u32;
-            builder.instruction(&Instruction::LocalSet(local_index));
-        }
+        ItemId::Param(_) => panic!("Assigning to parameters isn't allowed!!"),
         ItemId::Local(local) => {
-            let func = component.component.functions.get(func).unwrap();
-            let local_index = local.index() + func.arguments.len();
-            let local_index = local_index as u32;
-            builder.instruction(&Instruction::LocalSet(local_index));
+            for field in fields {
+                code_gen.read_expr_field(expression, &field);
+                code_gen.write_local_field(local, &field);
+            }
         }
-        ItemId::Function(_) => unimplemented!(),
+        ItemId::Function(_) => panic!("Assigning to functions isn't allowed!!"),
     }
     Ok(())
 }
