@@ -4,11 +4,6 @@ use claw_ast as ast;
 use claw_resolver::ResolvedType;
 use wasm_encoder as enc;
 
-const PTYPE_FLAT_SIZE: u32 = 1;
-
-const STRING_FLAT_SIZE: u32 = 2;
-const STRING_COMP_VALTYPE: enc::ComponentValType =
-    enc::ComponentValType::Primitive(enc::PrimitiveValType::String);
 const STRING_ALIGNMENT: u32 = 2;
 const STRING_MEM_SIZE: u32 = 8;
 
@@ -63,7 +58,6 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.flat_size(comp),
             ResolvedType::ValType(type_id) => type_id.flat_size(comp),
-            ResolvedType::String => STRING_FLAT_SIZE,
         }
     }
 
@@ -71,7 +65,6 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.append_flattened(comp, out),
             ResolvedType::ValType(type_id) => type_id.append_flattened(comp, out),
-            ResolvedType::String => string_append_flatten(out),
         }
     }
 
@@ -79,7 +72,6 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.append_fields(comp, out),
             ResolvedType::ValType(type_id) => type_id.append_fields(comp, out),
-            ResolvedType::String => string_append_fields(out),
         }
     }
 
@@ -87,7 +79,6 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp),
             ResolvedType::ValType(type_id) => type_id.to_comp_valtype(comp),
-            ResolvedType::String => STRING_COMP_VALTYPE,
         }
     }
 
@@ -95,7 +86,6 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.align(comp),
             ResolvedType::ValType(type_id) => type_id.align(comp),
-            ResolvedType::String => STRING_ALIGNMENT,
         }
     }
 
@@ -103,7 +93,6 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.mem_size(comp),
             ResolvedType::ValType(type_id) => type_id.mem_size(comp),
-            ResolvedType::String => STRING_MEM_SIZE,
         }
     }
 }
@@ -144,7 +133,6 @@ impl EncodeType for ast::ValType {
     fn flat_size(&self, comp: &ast::Component) -> u32 {
         match *self {
             ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => STRING_FLAT_SIZE,
             ast::ValType::Primitive(ptype) => ptype.flat_size(comp),
         }
     }
@@ -152,10 +140,6 @@ impl EncodeType for ast::ValType {
     fn append_flattened(&self, comp: &ast::Component, out: &mut Vec<enc::ValType>) {
         match *self {
             ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => {
-                out.push(enc::ValType::I32);
-                out.push(enc::ValType::I32);
-            }
             ast::ValType::Primitive(ptype) => ptype.append_flattened(comp, out),
         }
     }
@@ -163,10 +147,6 @@ impl EncodeType for ast::ValType {
     fn append_fields(&self, comp: &ast::Component, out: &mut Vec<FieldInfo>) {
         match *self {
             ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => {
-                out.push(STRING_OFFSET_FIELD);
-                out.push(STRING_LENGTH_FIELD);
-            }
             ast::ValType::Primitive(ptype) => ptype.append_fields(comp, out),
         }
     }
@@ -174,7 +154,6 @@ impl EncodeType for ast::ValType {
     fn to_comp_valtype(&self, comp: &ast::Component) -> enc::ComponentValType {
         match *self {
             ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => STRING_COMP_VALTYPE,
             ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(comp),
         }
     }
@@ -182,7 +161,6 @@ impl EncodeType for ast::ValType {
     fn align(&self, comp: &ast::Component) -> u32 {
         match *self {
             ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => STRING_ALIGNMENT,
             ast::ValType::Primitive(ptype) => ptype.align(comp),
         }
     }
@@ -190,7 +168,6 @@ impl EncodeType for ast::ValType {
     fn mem_size(&self, comp: &ast::Component) -> u32 {
         match *self {
             ast::ValType::Result { .. } => todo!(),
-            ast::ValType::String => STRING_MEM_SIZE,
             ast::ValType::Primitive(ptype) => ptype.mem_size(comp),
         }
     }
@@ -198,7 +175,10 @@ impl EncodeType for ast::ValType {
 
 impl EncodeType for ast::PrimitiveType {
     fn flat_size(&self, _comp: &ast::Component) -> u32 {
-        PTYPE_FLAT_SIZE
+        match *self {
+            ast::PrimitiveType::String => 2,
+            _ => 1,
+        }
     }
 
     fn append_flattened(&self, _comp: &ast::Component, out: &mut Vec<enc::ValType>) {
@@ -213,6 +193,10 @@ impl EncodeType for ast::PrimitiveType {
             ast::PrimitiveType::U64 | ast::PrimitiveType::S64 => enc::ValType::I64,
             ast::PrimitiveType::F32 => enc::ValType::F32,
             ast::PrimitiveType::F64 => enc::ValType::F64,
+            ast::PrimitiveType::String => {
+                string_append_flatten(out);
+                return;
+            }
         };
         out.push(valtype);
     }
@@ -230,6 +214,10 @@ impl EncodeType for ast::PrimitiveType {
             ast::PrimitiveType::S64 => S64_FIELD,
             ast::PrimitiveType::F32 => F32_FIELD,
             ast::PrimitiveType::F64 => F64_FIELD,
+            ast::PrimitiveType::String => {
+                string_append_fields(out);
+                return;
+            }
         };
         out.push(field);
     }
@@ -253,6 +241,7 @@ fn ptype_align(ptype: ast::PrimitiveType) -> u32 {
         ast::PrimitiveType::U16 | ast::PrimitiveType::S16 => 1,
         ast::PrimitiveType::U32 | ast::PrimitiveType::S32 | ast::PrimitiveType::F32 => 2,
         ast::PrimitiveType::U64 | ast::PrimitiveType::S64 | ast::PrimitiveType::F64 => 3,
+        ast::PrimitiveType::String => STRING_ALIGNMENT,
     }
 }
 
@@ -262,6 +251,7 @@ fn ptype_mem_size(ptype: ast::PrimitiveType) -> u32 {
         ast::PrimitiveType::U16 | ast::PrimitiveType::S16 => 2,
         ast::PrimitiveType::U32 | ast::PrimitiveType::S32 | ast::PrimitiveType::F32 => 4,
         ast::PrimitiveType::U64 | ast::PrimitiveType::S64 | ast::PrimitiveType::F64 => 8,
+        ast::PrimitiveType::String => STRING_MEM_SIZE,
     }
 }
 
@@ -279,6 +269,7 @@ pub fn ptype_to_pvaltype(ptype: ast::PrimitiveType) -> enc::PrimitiveValType {
         PType::F32 => enc::PrimitiveValType::Float32,
         PType::F64 => enc::PrimitiveValType::Float64,
         PType::Bool => enc::PrimitiveValType::Bool,
+        PType::String => enc::PrimitiveValType::String,
     }
 }
 

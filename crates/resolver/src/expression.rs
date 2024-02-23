@@ -160,7 +160,10 @@ impl ResolveExpression for ast::Literal {
     ) -> Result<(), ResolverError> {
         match self {
             ast::Literal::String(_) => {
-                resolver.set_expr_type(expression, ResolvedType::String);
+                resolver.set_expr_type(
+                    expression,
+                    ResolvedType::Primitive(ast::PrimitiveType::String),
+                );
             }
             _ => {}
         }

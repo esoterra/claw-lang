@@ -216,7 +216,6 @@ impl ComponentGenerator {
                 let valtype = comp.get_type(global.type_id);
                 match valtype {
                     ast::ValType::Result { .. } => todo!(),
-                    ast::ValType::String => todo!(),
                     ast::ValType::Primitive(ptype) => literal_to_const_expr(init_value, *ptype),
                 }
             } else {

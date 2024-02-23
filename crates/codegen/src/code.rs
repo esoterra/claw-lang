@@ -139,6 +139,11 @@ impl<'gen> CodeGenerator<'gen> {
         self.builder.instruction(instruction);
     }
 
+    pub fn const_i32(&mut self, constant: i32) {
+        self.builder
+            .instruction(&enc::Instruction::I32Const(constant));
+    }
+
     pub fn get_resolved_type(
         &self,
         expression: ExpressionId,
@@ -146,6 +151,24 @@ impl<'gen> CodeGenerator<'gen> {
         let resolver = &self.comp.resolved_funcs[&self.id];
         let type_id = resolver.get_resolved_type(expression, &self.comp.component)?;
         Ok(type_id)
+    }
+
+    pub fn get_ptype(
+        &self,
+        expression: ExpressionId,
+    ) -> Result<Option<ast::PrimitiveType>, GenerationError> {
+        let rtype = self.get_resolved_type(expression)?;
+        let ptype = match rtype {
+            ResolvedType::Primitive(ptype) => Some(ptype),
+            ResolvedType::ValType(type_id) => {
+                let valtype = self.comp.component.get_type(type_id);
+                match valtype {
+                    ast::ValType::Result { .. } => None,
+                    ast::ValType::Primitive(ptype) => Some(*ptype),
+                }
+            }
+        };
+        Ok(ptype)
     }
 
     pub fn one_field(&self, expression: ExpressionId) -> Result<FieldInfo, GenerationError> {
@@ -198,8 +221,7 @@ impl<'gen> CodeGenerator<'gen> {
             ParamInfo::Spilled(spilled_info) => {
                 let mem_index = spilled_info.mem_offset + field.mem_offset;
                 self.builder.instruction(&enc::Instruction::LocalGet(0));
-                self.builder
-                    .instruction(&enc::Instruction::I32Const(mem_index as i32));
+                self.const_i32(mem_index as i32);
                 self.builder.instruction(&enc::Instruction::I32Add);
                 self.load_field(field);
             }
@@ -238,7 +260,7 @@ impl<'gen> CodeGenerator<'gen> {
 
     /// The value's base memory offset MUST be on the stack before calling this
     pub fn field_address(&mut self, field: &FieldInfo) {
-        self.instruction(&enc::Instruction::I32Const(field.mem_offset as i32));
+        self.const_i32(field.mem_offset as i32);
         self.instruction(&enc::Instruction::I32Add);
     }
 

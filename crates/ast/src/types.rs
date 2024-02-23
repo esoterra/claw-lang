@@ -11,9 +11,6 @@ entity_impl!(TypeId, "type");
 pub enum ValType {
     // Result Type
     Result { ok: TypeId, err: TypeId },
-
-    // String Type
-    String,
     Primitive(PrimitiveType),
 }
 
@@ -36,6 +33,8 @@ pub enum PrimitiveType {
     // Floating Point Numbers
     F32,
     F64,
+    // String type
+    String,
 }
 
 impl ValType {
@@ -61,7 +60,6 @@ impl ValType {
 
                 ok_eq && err_eq
             }
-            (ValType::String, ValType::String) => true,
             (ValType::Primitive(left), ValType::Primitive(right)) => left == right,
             _ => false,
         }

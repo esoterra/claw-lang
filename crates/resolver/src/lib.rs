@@ -496,7 +496,6 @@ impl FunctionResolver {
 #[derive(Clone, Copy, Debug)]
 pub enum ResolvedType {
     Primitive(ast::PrimitiveType),
-    String,
     ValType(TypeId),
 }
 
@@ -505,7 +504,6 @@ impl std::fmt::Display for ResolvedType {
         match self {
             ResolvedType::Primitive(p) => (p as &dyn std::fmt::Debug).fmt(f),
             ResolvedType::ValType(v) => (v as &dyn std::fmt::Debug).fmt(f),
-            ResolvedType::String => f.write_str("string"),
         }
     }
 }
@@ -529,8 +527,6 @@ impl<'ctx> ResolvedTypeContext<'ctx> {
         match (self.rtype, *other) {
             // Both primitive
             (ResolvedType::Primitive(left), ResolvedType::Primitive(right)) => left == right,
-            // Both string
-            (ResolvedType::String, ResolvedType::String) => true,
             // Both valtype
             (ResolvedType::ValType(left), ResolvedType::ValType(right)) => {
                 let l_valtype = self.context.get_type(left);
@@ -546,14 +542,6 @@ impl<'ctx> ResolvedTypeContext<'ctx> {
                     _ => false,
                 }
             }
-            // One string, other valtype
-            (ResolvedType::String, ResolvedType::ValType(v))
-            | (ResolvedType::ValType(v), ResolvedType::String) => {
-                let valtype = self.context.get_type(v);
-                matches!(valtype, ast::ValType::String)
-            }
-            // Fallback
-            _ => false,
         }
     }
 }

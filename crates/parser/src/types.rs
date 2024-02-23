@@ -22,7 +22,7 @@ pub fn parse_valtype(input: &mut ParseInput, comp: &mut Component) -> Result<Typ
         Token::F32 => ValType::Primitive(PrimitiveType::F32),
         Token::F64 => ValType::Primitive(PrimitiveType::F64),
         // String
-        Token::String => ValType::String,
+        Token::String => ValType::Primitive(PrimitiveType::String),
         _ => return Err(input.unexpected_token("Not a legal type")),
     };
     let name_id = comp.new_type(valtype, span);
