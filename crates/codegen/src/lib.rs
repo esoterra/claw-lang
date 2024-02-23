@@ -86,11 +86,13 @@ fn generate_component(
             // Alias module instance export into component
             let core_func_idx = component.alias_func(code_instance, name);
             // Alias the post return
-            let post_return_idx = component.alias_func(code_instance, format!("{}_post_return", name).as_str());
+            let post_return_idx =
+                component.alias_func(code_instance, format!("{}_post_return", name).as_str());
             // Encode component func type
             let type_idx = encode_comp_func_type(function, comp, &mut component);
             // Lift aliased function to component function
-            let func_idx = component.lift_func(core_func_idx, type_idx, memory, realloc, post_return_idx);
+            let func_idx =
+                component.lift_func(core_func_idx, type_idx, memory, realloc, post_return_idx);
             // Export component function
             component.export_func(name, func_idx, type_idx);
         }
@@ -173,7 +175,9 @@ impl ComponentGenerator {
         Ok(self.module.finalize())
     }
 
-    fn encode_import_allocator(&mut self) -> (ModuleMemoryIndex, ModuleFunctionIndex, ModuleFunctionIndex) {
+    fn encode_import_allocator(
+        &mut self,
+    ) -> (ModuleMemoryIndex, ModuleFunctionIndex, ModuleFunctionIndex) {
         let memory: ModuleMemoryIndex = self.module.import_memory("alloc", "memory");
 
         let realloc_type = self
@@ -267,8 +271,6 @@ impl ComponentGenerator {
         Ok(func_gen)
     }
 }
-
-
 
 // Literal
 
