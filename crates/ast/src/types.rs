@@ -9,8 +9,6 @@ entity_impl!(TypeId, "type");
 /// The type for all values
 #[derive(Debug, Hash, Clone)]
 pub enum ValType {
-    // TypeName(NameId),
-
     // Result Type
     Result { ok: TypeId, err: TypeId },
 
@@ -21,21 +19,23 @@ pub enum ValType {
 
 #[derive(Debug, Hash, Clone, Copy, PartialEq, Eq)]
 pub enum PrimitiveType {
-    // Unsigned Integers
-    U64,
-    U32,
-    U16,
-    U8,
-    // Signed Integers
-    S64,
-    S32,
-    S16,
-    S8,
-    // Floating Point Numbers
-    F64,
-    F32,
     // The boolean type
     Bool,
+    // 8-bit Integers
+    U8,
+    S8,
+    // 16-bit Integers
+    U16,
+    S16,
+    // 32-bit Integers
+    U32,
+    S32,
+    // 64-bit Integers
+    U64,
+    S64,
+    // Floating Point Numbers
+    F32,
+    F64,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]

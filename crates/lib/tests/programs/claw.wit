@@ -38,6 +38,10 @@ world quadratic {
     export quad-f64-let: func(a: float64, b: float64, c: float64, x: float64) -> float64;
 }
 
+world strings {
+    export identity: func(s: string) -> string;
+}
+
 world unary {
     export set: func(v: s32) -> s32;
     export get-inverse: func() -> s32;

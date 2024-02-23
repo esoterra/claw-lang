@@ -110,11 +110,13 @@ fn test_factorial() {
         Factorial::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
     for (i, val) in [1, 1, 2, 6, 24, 120].iter().enumerate() {
+        let fact = factorial
+            .call_factorial(&mut runtime.store, i as u64)
+            .unwrap();
         assert_eq!(
-            factorial
-                .call_factorial(&mut runtime.store, i as u64)
-                .unwrap(),
-            *val
+            fact, *val,
+            "factorial({}) was {} instead of {}",
+            i, fact, *val
         );
     }
 }
@@ -230,6 +232,32 @@ fn test_quadratic() {
         assert_eq!(expected as f32, actual_f32_let);
         assert_eq!(expected as f64, actual_f64);
         assert_eq!(expected as f64, actual_f64_let);
+    }
+}
+
+#[test]
+fn test_strings() {
+    bindgen!("strings" in "tests/programs");
+
+    let mut runtime = Runtime::new("strings");
+
+    let (strings, _) =
+        Strings::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+
+    let long_string = "Z".repeat(1000);
+    let cases = [
+        "",
+        "asdf",
+        "673hlksdfkjh5r;4hj6s",
+        "a",
+        long_string.as_str(),
+    ];
+
+    for case in cases {
+        assert_eq!(
+            case,
+            strings.call_identity(&mut runtime.store, case).unwrap()
+        );
     }
 }
 
