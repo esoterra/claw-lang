@@ -121,7 +121,7 @@ impl EncodeExpression for ast::Literal {
                 code_gen.instruction(&enc::Instruction::I32Const(0));
                 code_gen.instruction(&enc::Instruction::I32Const(0));
                 code_gen.instruction(&enc::Instruction::I32Const(
-                    STRING_CONTENTS_ALIGNMENT as i32,
+                    2i32.pow(STRING_CONTENTS_ALIGNMENT),
                 ));
                 code_gen.instruction(&enc::Instruction::I32Const(string.len() as i32));
                 code_gen.allocate()?;

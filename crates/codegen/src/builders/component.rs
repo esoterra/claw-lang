@@ -167,11 +167,13 @@ impl ComponentBuilder {
         fn_type: ComponentTypeIndex,
         memory: ComponentCoreMemoryIndex,
         realloc: ComponentCoreFunctionIndex,
+        post_return: ComponentCoreFunctionIndex,
     ) -> ComponentFunctionIndex {
         let mut section = enc::CanonicalFunctionSection::new();
-        let canon_opts: [enc::CanonicalOption; 2] = [
+        let canon_opts: [enc::CanonicalOption; 3] = [
             enc::CanonicalOption::Memory(memory.0),
             enc::CanonicalOption::Realloc(realloc.0),
+            enc::CanonicalOption::PostReturn(post_return.0)
         ];
         section.lift(func.0, fn_type.0, canon_opts);
         self.component.section(&section);

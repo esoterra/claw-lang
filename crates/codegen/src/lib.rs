@@ -9,6 +9,7 @@ mod types;
 
 use std::collections::HashMap;
 
+use ast::NameId;
 use builders::component::*;
 use builders::module::*;
 use code::CodeGenerator;
@@ -84,10 +85,12 @@ fn generate_component(
             let name = comp.get_name(function.ident);
             // Alias module instance export into component
             let core_func_idx = component.alias_func(code_instance, name);
+            // Alias the post return
+            let post_return_idx = component.alias_func(code_instance, format!("{}_post_return", name).as_str());
             // Encode component func type
             let type_idx = encode_comp_func_type(function, comp, &mut component);
             // Lift aliased function to component function
-            let func_idx = component.lift_func(core_func_idx, type_idx, memory, realloc);
+            let func_idx = component.lift_func(core_func_idx, type_idx, memory, realloc, post_return_idx);
             // Export component function
             component.export_func(name, func_idx, type_idx);
         }
@@ -141,7 +144,7 @@ impl ComponentGenerator {
     ) -> Result<enc::Module, GenerationError> {
         let comp = &resolved_comp.component;
         // There is only ever one memory, memory zero
-        let (_memory, realloc) = self.encode_import_allocator();
+        let (_memory, realloc, clear) = self.encode_import_allocator();
 
         for (id, import) in comp.imports.iter() {
             self.encode_import(id, import, comp);
@@ -151,26 +154,37 @@ impl ComponentGenerator {
 
         let mut functions = Vec::new();
         for (id, function) in resolved_comp.component.functions.iter() {
-            let func_gen = FunctionGenerator::new(function, comp);
-            functions.push((id, func_gen));
-            self.encode_func(id, function, comp)?;
+            let func_gen = self.encode_func(id, function, comp)?;
+            let ident = function.ident;
+            let post_return = self.encode_post_return_func(ident, &func_gen, comp)?;
+            functions.push((id, post_return, func_gen));
         }
 
-        for (id, function) in functions {
+        for (id, post_return, function) in functions {
             let func_gen = CodeGenerator::new(&mut self, resolved_comp, function, realloc, id)?;
             func_gen.finalize()?;
+
+            let mut builder = enc::Function::new(vec![]);
+            builder.instruction(&enc::Instruction::Call(clear.into()));
+            builder.instruction(&enc::Instruction::End);
+            self.module.code(post_return, builder);
         }
 
         Ok(self.module.finalize())
     }
 
-    fn encode_import_allocator(&mut self) -> (ModuleMemoryIndex, ModuleFunctionIndex) {
+    fn encode_import_allocator(&mut self) -> (ModuleMemoryIndex, ModuleFunctionIndex, ModuleFunctionIndex) {
         let memory: ModuleMemoryIndex = self.module.import_memory("alloc", "memory");
+
         let realloc_type = self
             .module
             .func_type(vec![enc::ValType::I32; 4], vec![enc::ValType::I32; 1]);
         let realloc = self.module.import_func("alloc", "realloc", realloc_type);
-        (memory, realloc)
+
+        let clear_type = self.module.func_type(vec![], vec![]);
+        let clear = self.module.import_func("alloc", "clear", clear_type);
+
+        (memory, realloc, clear)
     }
 
     fn encode_import(&mut self, id: ImportId, import: &ast::Import, comp: &ast::Component) {
@@ -210,12 +224,33 @@ impl ComponentGenerator {
         Ok(())
     }
 
+    fn encode_post_return_func(
+        &mut self,
+        ident: NameId,
+        func_gen: &FunctionGenerator,
+        comp: &ast::Component,
+    ) -> Result<ModuleFunctionIndex, GenerationError> {
+        let return_type = &func_gen.return_type;
+        let type_idx = match return_type {
+            function::ReturnInfo::Flat(valtype) => self.module.func_type([*valtype], []),
+            function::ReturnInfo::Spilled => self.module.func_type([enc::ValType::I32], []),
+            function::ReturnInfo::None => self.module.func_type([], []),
+        };
+        let func_idx = self.module.function(type_idx);
+
+        let name = comp.get_name(ident);
+        let name = format!("{}_post_return", name);
+        self.module.export_func(name.as_str(), func_idx);
+
+        Ok(func_idx)
+    }
+
     fn encode_func(
         &mut self,
         id: FunctionId,
         function: &ast::Function,
         comp: &ast::Component,
-    ) -> Result<(), GenerationError> {
+    ) -> Result<FunctionGenerator, GenerationError> {
         let func_gen = FunctionGenerator::new(function, comp);
         let type_idx = func_gen.encode_func_type(&mut self.module);
         let func_idx = self.module.function(type_idx);
@@ -229,9 +264,11 @@ impl ComponentGenerator {
             self.module.export_func(name, func_idx);
         }
 
-        Ok(())
+        Ok(func_gen)
     }
 }
+
+
 
 // Literal
 
