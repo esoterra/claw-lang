@@ -137,6 +137,7 @@ impl ContextEq<super::Component> for Identifier {
 pub enum Literal {
     Integer(u64),
     Float(f64),
+    String(String),
 }
 
 impl ContextEq<super::Component> for Literal {

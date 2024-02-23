@@ -97,7 +97,7 @@ fn parse_literal(
     let next = input.next()?;
     let span = next.span;
     let literal = match &next.token {
-        Token::StringLiteral(_value) => return Err(input.unsupported_error("StringLiteral")),
+        Token::StringLiteral(value) => ast::Literal::String(value.to_owned()),
         Token::IntLiteral(value) => ast::Literal::Integer(*value),
         Token::FloatLiteral(value) => ast::Literal::Float(*value),
         _ => return Err(input.unexpected_token("Parse Literal")),

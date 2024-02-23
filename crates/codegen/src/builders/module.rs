@@ -7,6 +7,7 @@ pub struct ModuleBuilder {
     funcs: enc::FunctionSection,
     globals: enc::GlobalSection,
     exports: enc::ExportSection,
+    data: enc::DataSection,
 
     code: Vec<Option<enc::Function>>,
 
@@ -14,6 +15,7 @@ pub struct ModuleBuilder {
     num_funcs: u32,
     num_memories: u32,
     num_globals: u32,
+    num_data: u32,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -30,8 +32,17 @@ pub struct ModuleMemoryIndex(u32);
 #[derive(Clone, Copy, Debug)]
 pub struct ModuleGlobalIndex(u32);
 
+#[derive(Clone, Copy, Debug)]
+pub struct ModuleDataIndex(u32);
+
 impl From<ModuleFunctionIndex> for u32 {
     fn from(value: ModuleFunctionIndex) -> Self {
+        value.0
+    }
+}
+
+impl From<ModuleDataIndex> for u32 {
+    fn from(value: ModuleDataIndex) -> Self {
         value.0
     }
 }
@@ -46,6 +57,19 @@ impl ModuleBuilder {
     {
         self.types.function(params, results);
         self.next_type_idx()
+    }
+
+    pub fn import_memory(&mut self, module: &str, field: &str) -> ModuleMemoryIndex {
+        let mem_type = enc::MemoryType {
+            minimum: 1,
+            maximum: None,
+            memory64: false,
+            shared: false,
+        };
+        let mem_ty = enc::EntityType::Memory(mem_type);
+        self.imports.import(module, field, mem_ty);
+
+        self.next_memory_idx()
     }
 
     pub fn import_func(
@@ -76,23 +100,6 @@ impl ModuleBuilder {
         }
     }
 
-    pub fn export_func(&mut self, name: &str, func: ModuleFunctionIndex) {
-        self.exports.export(name, enc::ExportKind::Func, func.0);
-    }
-
-    pub fn import_memory(&mut self, module: &str, field: &str) -> ModuleMemoryIndex {
-        let mem_type = enc::MemoryType {
-            minimum: 1,
-            maximum: None,
-            memory64: false,
-            shared: false,
-        };
-        let mem_ty = enc::EntityType::Memory(mem_type);
-        self.imports.import(module, field, mem_ty);
-
-        self.next_memory_idx()
-    }
-
     pub fn global(
         &mut self,
         mutable: bool,
@@ -107,6 +114,15 @@ impl ModuleBuilder {
         self.next_global_idx()
     }
 
+    pub fn export_func(&mut self, name: &str, func: ModuleFunctionIndex) {
+        self.exports.export(name, enc::ExportKind::Func, func.0);
+    }
+
+    pub fn data(&mut self, data: &[u8]) -> ModuleDataIndex {
+        self.data.passive(data.iter().copied());
+        self.next_data_idx()
+    }
+
     pub fn finalize(self) -> enc::Module {
         let mut module = enc::Module::new();
         module.section(&self.types);
@@ -114,6 +130,12 @@ impl ModuleBuilder {
         module.section(&self.funcs);
         module.section(&self.globals);
         module.section(&self.exports);
+
+        if self.num_data > 0 {
+            module.section(&enc::DataCountSection {
+                count: self.num_data,
+            });
+        }
 
         // Encode code sections
         let mut code = enc::CodeSection::new();
@@ -126,6 +148,9 @@ impl ModuleBuilder {
             }
         }
         module.section(&code);
+        if self.num_data > 0 {
+            module.section(&self.data);
+        }
 
         module
     }
@@ -151,6 +176,12 @@ impl ModuleBuilder {
     fn next_global_idx(&mut self) -> ModuleGlobalIndex {
         let index = ModuleGlobalIndex(self.num_globals);
         self.num_globals += 1;
+        index
+    }
+
+    fn next_data_idx(&mut self) -> ModuleDataIndex {
+        let index = ModuleDataIndex(self.num_data);
+        self.num_data += 1;
         index
     }
 }

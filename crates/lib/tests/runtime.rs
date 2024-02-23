@@ -259,6 +259,11 @@ fn test_strings() {
             strings.call_identity(&mut runtime.store, case).unwrap()
         );
     }
+
+    assert_eq!(
+        strings.call_hello_world(&mut runtime.store).unwrap(),
+        "hello, world!"
+    );
 }
 
 #[test]

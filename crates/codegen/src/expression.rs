@@ -1,8 +1,11 @@
-use ast::{ExpressionId, Signedness};
+use ast::ExpressionId;
 use claw_ast as ast;
 use claw_resolver::ItemId;
 
 use crate::code::{CodeGenerator, ExpressionAllocator};
+use crate::types::{
+    Signedness, STRING_CONTENTS_ALIGNMENT, STRING_LENGTH_FIELD, STRING_OFFSET_FIELD,
+};
 use crate::GenerationError;
 
 use cranelift_entity::EntityRef;
@@ -112,14 +115,40 @@ impl EncodeExpression for ast::Literal {
         expression: ExpressionId,
         code_gen: &mut CodeGenerator,
     ) -> Result<(), GenerationError> {
-        let fields = code_gen.fields(expression)?;
-        dbg!(&fields);
-        for field in fields.iter() {
-            match self {
-                ast::Literal::Integer(int) => code_gen.encode_const_int(*int, field),
-                ast::Literal::Float(float) => code_gen.encode_const_float(*float, field),
+        match self {
+            ast::Literal::String(string) => {
+                // Allocate string pointer
+                code_gen.instruction(&enc::Instruction::I32Const(0));
+                code_gen.instruction(&enc::Instruction::I32Const(0));
+                code_gen.instruction(&enc::Instruction::I32Const(
+                    STRING_CONTENTS_ALIGNMENT as i32,
+                ));
+                code_gen.instruction(&enc::Instruction::I32Const(string.len() as i32));
+                code_gen.allocate()?;
+                code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
+                // Store the string length
+                code_gen.instruction(&enc::Instruction::I32Const(string.len() as i32));
+                code_gen.write_expr_field(expression, &STRING_LENGTH_FIELD);
+                // Copy in the data segment
+                let index = code_gen.encode_const_bytes(string.as_bytes());
+                code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
+                code_gen.instruction(&enc::Instruction::I32Const(0));
+                code_gen.read_expr_field(expression, &STRING_LENGTH_FIELD);
+                code_gen.instruction(&enc::Instruction::MemoryInit {
+                    mem: 0,
+                    data_index: index.into(),
+                })
             }
-            code_gen.write_expr_field(expression, field);
+            ast::Literal::Integer(int) => {
+                let field = code_gen.one_field(expression)?;
+                code_gen.encode_const_int(*int, &field);
+                code_gen.write_expr_field(expression, &field);
+            }
+            ast::Literal::Float(float) => {
+                let field = code_gen.one_field(expression)?;
+                code_gen.encode_const_float(*float, &field);
+                code_gen.write_expr_field(expression, &field);
+            }
         }
         Ok(())
     }
@@ -186,9 +215,6 @@ impl EncodeExpression for ast::UnaryExpression {
     }
 }
 
-const S: Signedness = Signedness::Signed;
-const U: Signedness = Signedness::Unsigned;
-
 impl EncodeExpression for ast::BinaryExpression {
     fn alloc_expr_locals(
         &self,
@@ -220,10 +246,9 @@ impl EncodeExpression for ast::BinaryExpression {
 
         if left_fields.len() == 1 {
             let field = &left_fields[0];
-            let ptype = field.ptype;
-            let valtype = primitive_to_valtype(ptype);
-            let signedness = ptype.signedness();
-            let mask = ptype.core_type_mask();
+            let valtype = field.stack_type;
+            let signedness = field.signedness;
+            let mask = field.arith_mask;
             encode_binary_arithmetic(self.op, valtype, signedness, mask, code_gen);
         } else {
             todo!()
@@ -238,27 +263,13 @@ impl EncodeExpression for ast::BinaryExpression {
     }
 }
 
-fn primitive_to_valtype(ptype: ast::PrimitiveType) -> enc::ValType {
-    match ptype {
-        ast::PrimitiveType::Bool
-        | ast::PrimitiveType::U8
-        | ast::PrimitiveType::S8
-        | ast::PrimitiveType::U16
-        | ast::PrimitiveType::S16
-        | ast::PrimitiveType::U32
-        | ast::PrimitiveType::S32 => enc::ValType::I32,
-
-        ast::PrimitiveType::U64 | ast::PrimitiveType::S64 => enc::ValType::I64,
-
-        ast::PrimitiveType::F32 => enc::ValType::F32,
-        ast::PrimitiveType::F64 => enc::ValType::F64,
-    }
-}
+const S: Signedness = Signedness::Signed;
+const U: Signedness = Signedness::Unsigned;
 
 fn encode_binary_arithmetic(
     op: ast::BinaryOp,
     valtype: enc::ValType,
-    signedness: ast::Signedness,
+    signedness: Signedness,
     mask: Option<i32>,
     code_gen: &mut CodeGenerator,
 ) {
