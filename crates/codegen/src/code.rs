@@ -5,8 +5,9 @@ use claw_ast as ast;
 
 use crate::{
     function::{FunctionGenerator, ParamInfo, ReturnInfo},
-    types::{ptype_mem_arg, EncodeType, FieldInfo},
-    ComponentGenerator, EncodeExpression, EncodeStatement, GenerationError, ModuleFunctionIndex,
+    types::{EncodeType, FieldInfo, Signedness},
+    ComponentGenerator, EncodeExpression, EncodeStatement, GenerationError, ModuleDataIndex,
+    ModuleFunctionIndex,
 };
 use claw_resolver::{FunctionResolver, ItemId, LocalId, ParamId, ResolvedComponent, ResolvedType};
 use cranelift_entity::EntityRef;
@@ -18,6 +19,7 @@ pub struct CodeGenerator<'gen> {
     parent: &'gen mut ComponentGenerator,
 
     builder: enc::Function,
+    realloc: ModuleFunctionIndex,
 
     params: Vec<ParamInfo>,
     return_info: ReturnInfo,
@@ -113,6 +115,7 @@ impl<'gen> CodeGenerator<'gen> {
             parent: code_gen,
             comp,
             builder,
+            realloc,
             params,
             return_info: return_type,
             return_index,
@@ -145,6 +148,17 @@ impl<'gen> CodeGenerator<'gen> {
         Ok(type_id)
     }
 
+    pub fn one_field(&self, expression: ExpressionId) -> Result<FieldInfo, GenerationError> {
+        let rtype = self.get_resolved_type(expression)?;
+        let mut fields = rtype.fields(&self.comp.component);
+        assert_eq!(
+            fields.len(),
+            1,
+            "Expected expression to only have one field"
+        );
+        Ok(fields.remove(0))
+    }
+
     pub fn fields(&self, expression: ExpressionId) -> Result<Vec<FieldInfo>, GenerationError> {
         let rtype = self.get_resolved_type(expression)?;
         Ok(rtype.fields(&self.comp.component))
@@ -157,6 +171,11 @@ impl<'gen> CodeGenerator<'gen> {
 
     pub fn spill_return(&self) -> bool {
         self.return_info.spill()
+    }
+
+    pub fn allocate(&mut self) -> Result<(), GenerationError> {
+        self.instruction(&enc::Instruction::Call(self.realloc.into()));
+        Ok(())
     }
 
     pub fn encode_call(&mut self, item: ItemId) -> Result<(), GenerationError> {
@@ -182,7 +201,7 @@ impl<'gen> CodeGenerator<'gen> {
                 self.builder
                     .instruction(&enc::Instruction::I32Const(mem_index as i32));
                 self.builder.instruction(&enc::Instruction::I32Add);
-                self.load_ptype(field.ptype);
+                self.load_field(field);
             }
         }
     }
@@ -226,36 +245,31 @@ impl<'gen> CodeGenerator<'gen> {
     /// The value's base memory offset MUST be on the stack before calling this
     pub fn read_mem_field(&mut self, field: &FieldInfo) {
         self.field_address(field);
-        self.load_ptype(field.ptype);
+        self.load_field(field);
     }
 
     /// Fields absolute offset in memory MUST be on the stack underneath the value before calling this
     pub fn write_mem(&mut self, field: &FieldInfo) {
-        self.store_ptype(field.ptype);
+        self.store_field(field);
+    }
+
+    pub fn encode_const_bytes(&mut self, data: &[u8]) -> ModuleDataIndex {
+        self.parent.module.data(data)
     }
 
     pub fn encode_const_int(&mut self, int: u64, field: &FieldInfo) {
-        let instruction = match field.ptype {
-            ast::PrimitiveType::U8
-            | ast::PrimitiveType::S8
-            | ast::PrimitiveType::U16
-            | ast::PrimitiveType::S16
-            | ast::PrimitiveType::U32
-            | ast::PrimitiveType::S32 => enc::Instruction::I32Const(int as i32),
-
-            ast::PrimitiveType::U64 | ast::PrimitiveType::S64 => {
-                enc::Instruction::I64Const(int as i64)
-            }
-
+        let instruction = match field.stack_type {
+            enc::ValType::I32 => enc::Instruction::I32Const(int as i32),
+            enc::ValType::I64 => enc::Instruction::I64Const(int as i64),
             _ => panic!("Not an integer"),
         };
         self.instruction(&instruction);
     }
 
     pub fn encode_const_float(&mut self, float: f64, field: &FieldInfo) {
-        let instruction = match field.ptype {
-            ast::PrimitiveType::F32 => enc::Instruction::F32Const(float as f32),
-            ast::PrimitiveType::F64 => enc::Instruction::F64Const(float),
+        let instruction = match field.stack_type {
+            enc::ValType::F32 => enc::Instruction::F32Const(float as f32),
+            enc::ValType::F64 => enc::Instruction::F64Const(float),
             _ => panic!("Not a float!"),
         };
         self.instruction(&instruction);
@@ -271,44 +285,37 @@ impl<'gen> CodeGenerator<'gen> {
             .instruction(&enc::Instruction::LocalSet(local_index));
     }
 
-    fn load_ptype(&mut self, ptype: ast::PrimitiveType) {
-        let mem_arg = ptype_mem_arg(ptype);
-        let instruction = match ptype {
+    fn load_field(&mut self, field: &FieldInfo) {
+        let mem_arg = field.mem_arg();
+        let instruction = match (field.stack_type, field.signedness, field.mems_size) {
             // Small types with sign-extending
-            ast::PrimitiveType::U8 => enc::Instruction::I32Load8U(mem_arg),
-            ast::PrimitiveType::S8 => enc::Instruction::I32Load8S(mem_arg),
-            ast::PrimitiveType::U16 => enc::Instruction::I32Load16U(mem_arg),
-            ast::PrimitiveType::S16 => enc::Instruction::I32Load16S(mem_arg),
+            (enc::ValType::I32, Signedness::Unsigned, 1) => enc::Instruction::I32Load8U(mem_arg),
+            (enc::ValType::I32, Signedness::Signed, 1) => enc::Instruction::I32Load8S(mem_arg),
+            (enc::ValType::I32, Signedness::Unsigned, 2) => enc::Instruction::I32Load16U(mem_arg),
+            (enc::ValType::I32, Signedness::Signed, 2) => enc::Instruction::I32Load16S(mem_arg),
             // 32 and 64 bit values don't need sign-extending
-            ast::PrimitiveType::U32 | ast::PrimitiveType::S32 => enc::Instruction::I32Load(mem_arg),
-            ast::PrimitiveType::U64 | ast::PrimitiveType::S64 => enc::Instruction::I64Load(mem_arg),
+            (enc::ValType::I32, _, 4) => enc::Instruction::I32Load(mem_arg),
+            (enc::ValType::I64, _, 8) => enc::Instruction::I64Load(mem_arg),
             // Floats
-            ast::PrimitiveType::F32 => enc::Instruction::F32Load(mem_arg),
-            ast::PrimitiveType::F64 => enc::Instruction::F64Load(mem_arg),
-            // Booleans are treated as 8-bit unsigned values
-            ast::PrimitiveType::Bool => enc::Instruction::I32Load8U(mem_arg),
+            (enc::ValType::F32, _, 4) => enc::Instruction::F32Load(mem_arg),
+            (enc::ValType::F64, _, 8) => enc::Instruction::F64Load(mem_arg),
+            // Fallback error
+            (valtype, s, size) => panic!(
+                "Cannot load value type {:?} with signedness {:?} and size {}",
+                valtype, s, size
+            ),
         };
         self.builder.instruction(&instruction);
     }
 
-    fn store_ptype(&mut self, ptype: ast::PrimitiveType) {
-        let mem_arg = ptype_mem_arg(ptype);
-        let instruction = match ptype {
-            // All types which fit in i32
-            ast::PrimitiveType::Bool
-            | ast::PrimitiveType::U8
-            | ast::PrimitiveType::S8
-            | ast::PrimitiveType::U16
-            | ast::PrimitiveType::S16
-            | ast::PrimitiveType::U32
-            | ast::PrimitiveType::S32 => enc::Instruction::I32Store(mem_arg),
-            // Types that use i64
-            ast::PrimitiveType::U64 | ast::PrimitiveType::S64 => {
-                enc::Instruction::I64Store(mem_arg)
-            }
-            // Floats
-            ast::PrimitiveType::F32 => enc::Instruction::F32Store(mem_arg),
-            ast::PrimitiveType::F64 => enc::Instruction::F64Store(mem_arg),
+    fn store_field(&mut self, field: &FieldInfo) {
+        let mem_arg = field.mem_arg();
+        let instruction = match field.stack_type {
+            enc::ValType::I32 => enc::Instruction::I32Store(mem_arg),
+            enc::ValType::I64 => enc::Instruction::I64Store(mem_arg),
+            enc::ValType::F32 => enc::Instruction::F32Store(mem_arg),
+            enc::ValType::F64 => enc::Instruction::F64Store(mem_arg),
+            valtype => panic!("Cannot store value type {:?}", valtype),
         };
         self.builder.instruction(&instruction);
     }

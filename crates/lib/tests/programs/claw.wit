@@ -40,6 +40,7 @@ world quadratic {
 
 world strings {
     export identity: func(s: string) -> string;
+    export hello-world: func() -> string;
 }
 
 world unary {

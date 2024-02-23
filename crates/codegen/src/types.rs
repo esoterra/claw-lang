@@ -12,6 +12,18 @@ const STRING_COMP_VALTYPE: enc::ComponentValType =
 const STRING_ALIGNMENT: u32 = 2;
 const STRING_MEM_SIZE: u32 = 8;
 
+fn string_append_flatten(out: &mut Vec<enc::ValType>) {
+    out.push(enc::ValType::I32);
+    out.push(enc::ValType::I32);
+}
+
+fn string_append_fields(out: &mut Vec<FieldInfo>) {
+    out.push(STRING_OFFSET_FIELD);
+    out.push(STRING_LENGTH_FIELD);
+}
+
+pub const STRING_CONTENTS_ALIGNMENT: u32 = 0;
+
 pub trait EncodeType {
     fn flat_size(&self, comp: &ast::Component) -> u32;
 
@@ -51,6 +63,7 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.flat_size(comp),
             ResolvedType::ValType(type_id) => type_id.flat_size(comp),
+            ResolvedType::String => STRING_FLAT_SIZE,
         }
     }
 
@@ -58,6 +71,7 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.append_flattened(comp, out),
             ResolvedType::ValType(type_id) => type_id.append_flattened(comp, out),
+            ResolvedType::String => string_append_flatten(out),
         }
     }
 
@@ -65,6 +79,7 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.append_fields(comp, out),
             ResolvedType::ValType(type_id) => type_id.append_fields(comp, out),
+            ResolvedType::String => string_append_fields(out),
         }
     }
 
@@ -72,6 +87,7 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp),
             ResolvedType::ValType(type_id) => type_id.to_comp_valtype(comp),
+            ResolvedType::String => STRING_COMP_VALTYPE,
         }
     }
 
@@ -79,6 +95,7 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.align(comp),
             ResolvedType::ValType(type_id) => type_id.align(comp),
+            ResolvedType::String => STRING_ALIGNMENT,
         }
     }
 
@@ -86,6 +103,7 @@ impl EncodeType for ResolvedType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.mem_size(comp),
             ResolvedType::ValType(type_id) => type_id.mem_size(comp),
+            ResolvedType::String => STRING_MEM_SIZE,
         }
     }
 }
@@ -229,14 +247,6 @@ impl EncodeType for ast::PrimitiveType {
     }
 }
 
-pub fn ptype_mem_arg(ptype: ast::PrimitiveType) -> enc::MemArg {
-    enc::MemArg {
-        offset: 0,
-        align: ptype_align(ptype),
-        memory_index: 0,
-    }
-}
-
 fn ptype_align(ptype: ast::PrimitiveType) -> u32 {
     match ptype {
         ast::PrimitiveType::Bool | ast::PrimitiveType::U8 | ast::PrimitiveType::S8 => 0,
@@ -279,87 +289,163 @@ pub fn align_to(offset: u32, alignment: u32) -> u32 {
 /// Info about a field required for reading/writing it
 #[derive(Debug)]
 pub struct FieldInfo {
-    pub ptype: ast::PrimitiveType,
+    // Type info
+    pub stack_type: enc::ValType,
+    pub signedness: Signedness,
+    // Arithmetic
+    pub arith_mask: Option<i32>,
+    // Offset from base value
     pub index_offset: u32,
     pub mem_offset: u32,
+    // Memory information
+    pub align: u32,
+    pub mems_size: u32,
+}
+
+impl FieldInfo {
+    pub fn mem_arg(&self) -> enc::MemArg {
+        enc::MemArg {
+            offset: 0,
+            align: self.align,
+            memory_index: 0,
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum Signedness {
+    Unsigned,
+    Signed,
 }
 
 // Statically known field info
 
 pub const BOOL_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::Bool,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 0,
+    mems_size: 1,
 };
 
 pub const U8_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::U8,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Unsigned,
+    arith_mask: Some(0xFF),
     index_offset: 0,
     mem_offset: 0,
+    align: 0,
+    mems_size: 1,
 };
 
 pub const S8_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::S8,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Signed,
+    arith_mask: Some(0xFF),
     index_offset: 0,
     mem_offset: 0,
+    align: 0,
+    mems_size: 1,
 };
 
 pub const U16_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::U16,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Unsigned,
+    arith_mask: Some(0xFFFF),
     index_offset: 0,
     mem_offset: 0,
+    align: 1,
+    mems_size: 2,
 };
 
 pub const S16_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::S16,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Signed,
+    arith_mask: Some(0xFFFF),
     index_offset: 0,
     mem_offset: 0,
+    align: 1,
+    mems_size: 2,
 };
 
 pub const U32_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::U32,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 2,
+    mems_size: 4,
 };
 
 pub const S32_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::S32,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Signed,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 2,
+    mems_size: 4,
 };
 
 pub const U64_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::U64,
+    stack_type: enc::ValType::I64,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 3,
+    mems_size: 8,
 };
 
 pub const S64_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::S64,
+    stack_type: enc::ValType::I64,
+    signedness: Signedness::Signed,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 3,
+    mems_size: 8,
 };
 
 pub const F32_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::F32,
+    stack_type: enc::ValType::F32,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 2,
+    mems_size: 4,
 };
 
 pub const F64_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::F64,
+    stack_type: enc::ValType::F64,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 3,
+    mems_size: 8,
 };
 
 pub const STRING_OFFSET_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::U32,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 0,
     mem_offset: 0,
+    align: 2,
+    mems_size: 4,
 };
 
 pub const STRING_LENGTH_FIELD: FieldInfo = FieldInfo {
-    ptype: ast::PrimitiveType::U32,
+    stack_type: enc::ValType::I32,
+    signedness: Signedness::Unsigned,
+    arith_mask: None,
     index_offset: 1,
     mem_offset: 4,
+    align: 2,
+    mems_size: 4,
 };

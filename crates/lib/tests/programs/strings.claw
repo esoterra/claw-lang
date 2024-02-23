@@ -2,9 +2,9 @@ export func identity(s: string) -> string {
     return s;
 }
 
-// export func hello-world() -> string {
-//     return "Hello, world!"
-// }
+export func hello-world() -> string {
+    return "hello, world!";
+}
 
 // export func concat(left: string, right: string) -> string {
 //     return left + right;
