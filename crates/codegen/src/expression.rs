@@ -118,21 +118,19 @@ impl EncodeExpression for ast::Literal {
         match self {
             ast::Literal::String(string) => {
                 // Allocate string pointer
-                code_gen.instruction(&enc::Instruction::I32Const(0));
-                code_gen.instruction(&enc::Instruction::I32Const(0));
-                code_gen.instruction(&enc::Instruction::I32Const(
-                    2i32.pow(STRING_CONTENTS_ALIGNMENT),
-                ));
-                code_gen.instruction(&enc::Instruction::I32Const(string.len() as i32));
+                code_gen.const_i32(0);
+                code_gen.const_i32(0);
+                code_gen.const_i32(2i32.pow(STRING_CONTENTS_ALIGNMENT));
+                code_gen.const_i32(string.len() as i32);
                 code_gen.allocate()?;
                 code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
                 // Store the string length
-                code_gen.instruction(&enc::Instruction::I32Const(string.len() as i32));
+                code_gen.const_i32(string.len() as i32);
                 code_gen.write_expr_field(expression, &STRING_LENGTH_FIELD);
                 // Copy in the data segment
                 let index = code_gen.encode_const_bytes(string.as_bytes());
                 code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
-                code_gen.instruction(&enc::Instruction::I32Const(0));
+                code_gen.const_i32(0);
                 code_gen.read_expr_field(expression, &STRING_LENGTH_FIELD);
                 code_gen.instruction(&enc::Instruction::MemoryInit {
                     mem: 0,
@@ -202,7 +200,7 @@ impl EncodeExpression for ast::UnaryExpression {
         expression: ExpressionId,
         code_gen: &mut CodeGenerator,
     ) -> Result<(), GenerationError> {
-        code_gen.instruction(&enc::Instruction::I32Const(0)); // TODO support 64 bit ints
+        code_gen.const_i32(0); // TODO support 64 bit ints
         code_gen.encode_child(self.inner)?;
         for field in code_gen.fields(self.inner)?.iter() {
             code_gen.read_expr_field(self.inner, field);
@@ -234,6 +232,45 @@ impl EncodeExpression for ast::BinaryExpression {
     ) -> Result<(), GenerationError> {
         code_gen.encode_child(self.left)?;
         code_gen.encode_child(self.right)?;
+
+        let ptype = code_gen.get_ptype(expression)?;
+        if ptype == Some(ast::PrimitiveType::String) {
+            if self.op == ast::BinaryOp::Add {
+                // Compute new length
+                code_gen.read_expr_field(self.left, &STRING_LENGTH_FIELD);
+                code_gen.read_expr_field(self.right, &STRING_LENGTH_FIELD);
+                code_gen.instruction(&enc::Instruction::I32Add);
+                code_gen.write_expr_field(expression, &STRING_LENGTH_FIELD);
+                // Allocate new string
+                code_gen.const_i32(0);
+                code_gen.const_i32(0);
+                code_gen.const_i32(2i32.pow(STRING_CONTENTS_ALIGNMENT));
+                code_gen.read_expr_field(expression, &STRING_LENGTH_FIELD);
+                code_gen.allocate()?;
+                code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
+                // Copy in the left string
+                code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
+                code_gen.read_expr_field(self.left, &STRING_OFFSET_FIELD);
+                code_gen.read_expr_field(self.left, &STRING_LENGTH_FIELD);
+                code_gen.instruction(&enc::Instruction::MemoryCopy {
+                    src_mem: 0,
+                    dst_mem: 0,
+                });
+                // Copy in the right string
+                code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
+                code_gen.read_expr_field(self.left, &STRING_LENGTH_FIELD);
+                code_gen.instruction(&enc::Instruction::I32Add);
+                code_gen.read_expr_field(self.right, &STRING_OFFSET_FIELD);
+                code_gen.read_expr_field(self.right, &STRING_LENGTH_FIELD);
+                code_gen.instruction(&enc::Instruction::MemoryCopy {
+                    src_mem: 0,
+                    dst_mem: 0,
+                });
+                return Ok(());
+            } else {
+                panic!("Strings can only be concatenated with '+'");
+            }
+        }
 
         let left_fields = code_gen.fields(self.left)?;
         for field in left_fields.iter() {
@@ -370,7 +407,7 @@ fn encode_binary_arithmetic(
     code_gen.instruction(&instruction);
 
     if let Some(mask) = mask {
-        code_gen.instruction(&enc::Instruction::I32Const(mask));
+        code_gen.const_i32(mask);
         code_gen.instruction(&enc::Instruction::I32And);
     }
 }

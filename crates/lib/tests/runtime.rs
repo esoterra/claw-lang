@@ -264,6 +264,15 @@ fn test_strings() {
         strings.call_hello_world(&mut runtime.store).unwrap(),
         "hello, world!"
     );
+
+    for case in cases {
+        assert_eq!(
+            format!("{}Lorem Ipsum", case).as_str(),
+            strings
+                .call_concat(&mut runtime.store, case, "Lorem Ipsum")
+                .unwrap()
+        );
+    }
 }
 
 #[test]
