@@ -40,14 +40,21 @@ pub enum ModuleInstiateArgs {
 
 impl ComponentBuilder {
     pub fn module(&mut self, module: enc::Module) -> ComponentModuleIndex {
-        self.component.section(&enc::ModuleSection(&module));
+        use wasm_opt_wrapper::optimize;
+        let optimized = optimize(module.finish());
+        self.component.section(&enc::RawSection {
+            id: enc::ComponentSectionId::CoreModule.into(),
+            data: optimized.as_slice(),
+        });
         self.next_mod_idx()
     }
 
     pub fn module_bytes(&mut self, bytes: Vec<u8>) -> ComponentModuleIndex {
+        use wasm_opt_wrapper::optimize;
+        let optimized = optimize(bytes);
         self.component.section(&enc::RawSection {
             id: enc::ComponentSectionId::CoreModule.into(),
-            data: bytes.as_slice(),
+            data: optimized.as_slice(),
         });
         self.next_mod_idx()
     }

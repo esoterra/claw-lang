@@ -40,6 +40,7 @@ members = [
     "crates/lib",
     "crates/parser",
     "crates/resolver",
+    "crates/wasm-opt-wrapper",
 ]
 
 [workspace.package]
@@ -56,6 +57,7 @@ claw-ast = { path = "./crates/ast", version = "0.2.0" }
 claw-parser = { path = "./crates/parser", version = "0.2.0" }
 claw-resolver = { path = "./crates/resolver", version = "0.2.0" }
 claw-codegen = { path = "./crates/codegen", version = "0.2.0" }
+wasm-opt-wrapper = { path = "./crates/wasm-opt-wrapper", version = "0.2.0" }
 
 clap = { version = "3.0.0-rc.7", features = ["derive"] }
 thiserror = "1.0.30"
@@ -67,3 +69,4 @@ wat = "1.200.0"
 pretty_assertions = "1.1.0"
 wasmtime = { version = "15.0.0", features = ["component-model"]}
 wasmprinter = "0.2.75"
+wasm-opt = "0.116.0"
