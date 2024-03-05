@@ -5,6 +5,7 @@
 mod component;
 mod expressions;
 mod lexer;
+mod names;
 mod statements;
 mod types;
 

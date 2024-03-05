@@ -1,5 +1,6 @@
-use crate::ast::{self, merge, Component, NameId, Span, StatementId};
+use crate::ast::{self, merge, Component, Span, StatementId};
 use crate::lexer::Token;
+use crate::names::parse_ident;
 use crate::{expressions::parse_expression, types::parse_valtype, ParseInput, ParserError};
 
 pub fn parse_block(
@@ -17,18 +18,6 @@ pub fn parse_block(
 
     let span = merge(&start_span, &end_span);
     Ok((statements, span))
-}
-
-/// Parse an identifier
-pub fn parse_ident(input: &mut ParseInput, comp: &mut Component) -> Result<NameId, ParserError> {
-    match &input.peek()?.token {
-        Token::Identifier(ident) => {
-            let ident = ident.clone();
-            let span = input.next().unwrap().span;
-            Ok(comp.new_name(ident, span))
-        }
-        _ => Err(input.unexpected_token("Expected identifier")),
-    }
 }
 
 pub fn parse_statement(

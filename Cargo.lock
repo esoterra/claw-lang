@@ -209,6 +209,7 @@ dependencies = [
  "claw-common",
  "cranelift-entity 0.104.0",
  "miette",
+ "wit-parser 0.200.0",
 ]
 
 [[package]]
@@ -275,6 +276,7 @@ dependencies = [
  "cranelift-entity 0.104.0",
  "miette",
  "thiserror",
+ "wit-parser 0.200.0",
 ]
 
 [[package]]
@@ -287,6 +289,7 @@ dependencies = [
  "claw-resolver",
  "wasmprinter",
  "wasmtime",
+ "wit-parser 0.200.0",
 ]
 
 [[package]]
@@ -1395,6 +1398,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasmparser"
+version = "0.200.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a03f65ac876612140c57ff6c3b8fe4990067cce97c2cfdb07368a3cc3354b062"
+dependencies = [
+ "bitflags 2.4.1",
+ "indexmap 2.1.0",
+ "semver",
+]
+
+[[package]]
 name = "wasmprinter"
 version = "0.2.75"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1485,7 +1499,7 @@ dependencies = [
  "syn 2.0.49",
  "wasmtime-component-util",
  "wasmtime-wit-bindgen",
- "wit-parser",
+ "wit-parser 0.13.0",
 ]
 
 [[package]]
@@ -1703,7 +1717,7 @@ dependencies = [
  "anyhow",
  "heck",
  "indexmap 2.1.0",
- "wit-parser",
+ "wit-parser 0.13.0",
 ]
 
 [[package]]
@@ -1928,6 +1942,24 @@ dependencies = [
  "serde_derive",
  "serde_json",
  "unicode-xid",
+]
+
+[[package]]
+name = "wit-parser"
+version = "0.200.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f717576b37f01c15696bda7f6f13868367b9c5913485f9f0ec8e59fd28c8e13"
+dependencies = [
+ "anyhow",
+ "id-arena",
+ "indexmap 2.1.0",
+ "log",
+ "semver",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "unicode-xid",
+ "wasmparser 0.200.0",
 ]
 
 [[package]]

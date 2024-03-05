@@ -1,4 +1,8 @@
 /target
 .vscode
 
-test.wat
+# So that files from debugging don't get committed
+# Only applies to wat/wasm files in root
+# Not e.g. crates/codegen/allocator.wat
+*.wat
+*.wasm

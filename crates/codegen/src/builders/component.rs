@@ -10,7 +10,11 @@ pub struct ComponentBuilder {
     num_core_mems: u32,
     num_modules: u32,
     num_module_instances: u32,
+    num_instances: u32,
 }
+
+#[derive(Clone, Copy, Debug)]
+pub struct ComponentInstanceIndex(u32);
 
 #[derive(Clone, Copy, Debug)]
 pub struct ComponentModuleIndex(u32);
@@ -34,8 +38,13 @@ pub enum InlineExportItem {
     Func(ComponentCoreFunctionIndex),
 }
 
-pub enum ModuleInstiateArgs {
+pub enum ModuleInstantiateArgs {
     Instance(ComponentModuleInstanceIndex),
+}
+
+pub enum ComponentTypeKind {
+    Type,
+    Func,
 }
 
 impl ComponentBuilder {
@@ -55,12 +64,12 @@ impl ComponentBuilder {
     #[allow(dead_code)]
     pub fn inline_export(
         &mut self,
-        exports: Vec<(String, InlineExportItem)>,
+        exports: &Vec<(String, InlineExportItem)>,
     ) -> ComponentModuleInstanceIndex {
         let exports: Vec<(String, enc::ExportKind, u32)> = exports
             .into_iter()
             .map(|(name, arg)| match arg {
-                InlineExportItem::Func(func) => (name, enc::ExportKind::Func, func.0),
+                InlineExportItem::Func(func) => (name.to_owned(), enc::ExportKind::Func, func.0),
             })
             .collect();
         let mut section = enc::InstanceSection::new();
@@ -69,15 +78,18 @@ impl ComponentBuilder {
         self.next_mod_instance_idx()
     }
 
-    pub fn instantiate(
+    pub fn instantiate<S>(
         &mut self,
         module: ComponentModuleIndex,
-        args: Vec<(String, ModuleInstiateArgs)>,
-    ) -> ComponentModuleInstanceIndex {
+        args: Vec<(S, ModuleInstantiateArgs)>,
+    ) -> ComponentModuleInstanceIndex
+    where
+        S: AsRef<str>,
+    {
         let args: Vec<_> = args
             .into_iter()
             .map(|(name, arg)| match arg {
-                ModuleInstiateArgs::Instance(instance) => {
+                ModuleInstantiateArgs::Instance(instance) => {
                     (name, enc::ModuleArg::Instance(instance.0))
                 }
             })
@@ -88,10 +100,22 @@ impl ComponentBuilder {
         self.next_mod_instance_idx()
     }
 
+    pub fn enum_type<'a, T>(&mut self, tags: T) -> ComponentTypeIndex
+    where
+        T: IntoIterator<Item = &'a str>,
+        T::IntoIter: ExactSizeIterator,
+    {
+        let mut section = enc::ComponentTypeSection::new();
+        let builder = section.defined_type();
+        builder.enum_type(tags);
+        self.component.section(&section);
+        self.next_type_idx()
+    }
+
     pub fn func_type<'b, P>(
         &mut self,
         params: P,
-        result: Option<enc::ComponentValType>,
+        results: Option<enc::ComponentValType>,
     ) -> ComponentTypeIndex
     where
         P: IntoIterator<Item = (&'b str, enc::ComponentValType)>,
@@ -100,7 +124,7 @@ impl ComponentBuilder {
         let mut section = enc::ComponentTypeSection::new();
         let mut builder = section.function();
         builder.params(params);
-        match result {
+        match results {
             Some(return_type) => {
                 builder.result(return_type);
             }
@@ -109,6 +133,16 @@ impl ComponentBuilder {
             }
         }
         self.component.section(&section);
+        self.next_type_idx()
+    }
+
+    pub fn start_instance_type(&mut self) -> enc::InstanceType {
+        enc::InstanceType::new()
+    }
+
+    pub fn end_instance_type(&mut self, instance_type: &enc::InstanceType) -> ComponentTypeIndex {
+        let mut section = enc::ComponentTypeSection::new();
+        section.instance(&instance_type);
         self.next_type_idx()
     }
 
@@ -122,6 +156,18 @@ impl ComponentBuilder {
         section.import(name, ty);
         self.component.section(&section);
         self.next_func_idx()
+    }
+
+    pub fn import_instance(
+        &mut self,
+        name: &str,
+        instance_type_index: ComponentTypeIndex,
+    ) -> ComponentInstanceIndex {
+        let mut section = enc::ComponentImportSection::new();
+        let ty = enc::ComponentTypeRef::Instance(instance_type_index.0);
+        section.import(name, ty);
+        self.component.section(&section);
+        self.next_instance_idx()
     }
 
     pub fn lower_func(&mut self, func: ComponentFunctionIndex) -> ComponentCoreFunctionIndex {
@@ -146,7 +192,7 @@ impl ComponentBuilder {
         self.next_core_memory_idx()
     }
 
-    pub fn alias_func(
+    pub fn alias_core_func(
         &mut self,
         instance: ComponentModuleInstanceIndex,
         name: &str,
@@ -159,6 +205,21 @@ impl ComponentBuilder {
         });
         self.component.section(&section);
         self.next_core_func_idx()
+    }
+
+    pub fn alias_func(
+        &mut self,
+        instance: ComponentInstanceIndex,
+        name: &str,
+    ) -> ComponentFunctionIndex {
+        let mut section = enc::ComponentAliasSection::new();
+        section.alias(enc::Alias::InstanceExport {
+            instance: instance.0,
+            kind: enc::ComponentExportKind::Func,
+            name,
+        });
+        self.component.section(&section);
+        self.next_func_idx()
     }
 
     pub fn lift_func(
@@ -222,6 +283,12 @@ impl ComponentBuilder {
     fn next_func_idx(&mut self) -> ComponentFunctionIndex {
         let index = ComponentFunctionIndex(self.num_funcs);
         self.num_funcs += 1;
+        index
+    }
+
+    fn next_instance_idx(&mut self) -> ComponentInstanceIndex {
+        let index = ComponentInstanceIndex(self.num_instances);
+        self.num_instances += 1;
         index
     }
 

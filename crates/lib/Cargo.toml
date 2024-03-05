@@ -14,6 +14,7 @@ claw-common = { workspace = true }
 claw-parser = { workspace = true }
 claw-resolver = { workspace = true }
 claw-codegen = { workspace = true }
+wit-parser = { workspace = true }
 
 [dev-dependencies]
 wasmtime = { workspace = true }

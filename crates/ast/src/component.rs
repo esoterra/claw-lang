@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use cranelift_entity::{entity_impl, PrimaryMap};
 
-use crate::expressions::ExpressionData;
+use crate::{expressions::ExpressionData, PackageName, TypeDefId, TypeDefinition};
 use claw_common::Source;
 
 use super::{
@@ -32,6 +32,7 @@ pub struct Component {
 
     // Top level items
     pub imports: PrimaryMap<ImportId, Import>,
+    pub type_defs: PrimaryMap<TypeDefId, TypeDefinition>,
     pub globals: PrimaryMap<GlobalId, Global>,
     pub functions: PrimaryMap<FunctionId, Function>,
 
@@ -53,6 +54,7 @@ impl Component {
         Self {
             src,
             imports: Default::default(),
+            type_defs: Default::default(),
             globals: Default::default(),
             functions: Default::default(),
             types: Default::default(),
@@ -135,9 +137,24 @@ impl Component {
 
 ///
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct Import {
+pub enum Import {
+    Plain(PlainImport),
+    ImportFrom(ImportFrom),
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct PlainImport {
     pub ident: NameId,
     pub external_type: ExternalType,
+}
+
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct ImportFrom {
+    /// The first name is the imported item's name
+    /// The second optional name is an alias
+    pub items: Vec<(NameId, Option<NameId>)>,
+    pub package: PackageName,
+    pub interface: String,
 }
 
 ///
@@ -151,24 +168,9 @@ pub enum ExternalType {
 pub struct Function {
     pub exported: bool,
     pub ident: NameId,
-    pub arguments: Vec<(NameId, TypeId)>,
-    pub return_type: Option<TypeId>,
+    pub params: Vec<(NameId, TypeId)>,
+    pub results: Option<TypeId>,
     pub body: Vec<StatementId>,
-}
-
-pub trait FnTypeInfo {
-    fn get_args(&self) -> &[(NameId, TypeId)];
-    fn get_return_type(&self) -> Option<TypeId>;
-}
-
-impl FnTypeInfo for Function {
-    fn get_args(&self) -> &[(NameId, TypeId)] {
-        self.arguments.as_slice()
-    }
-
-    fn get_return_type(&self) -> Option<TypeId> {
-        self.return_type
-    }
 }
 
 ///

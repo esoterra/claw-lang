@@ -75,13 +75,13 @@ impl EncodeExpression for ast::Identifier {
     ) -> Result<(), GenerationError> {
         let fields = code_gen.fields(expression)?;
         match code_gen.lookup_name(self.ident) {
-            ItemId::Import(_) => panic!("Cannot use import as value!!"),
+            ItemId::ImportFunc(_) => panic!("Cannot use imported function as value!!"),
+            ItemId::ImportType(_) => panic!("Cannot use imported type as value!!"),
             ItemId::Global(global) => {
-                for field in fields.iter() {
-                    // TODO handle composite globals
-                    code_gen.instruction(&Instruction::GlobalGet(global.index() as u32));
-                    code_gen.write_expr_field(expression, field);
-                }
+                // TODO handle composite globals
+                let field = code_gen.one_field(expression)?;
+                code_gen.instruction(&Instruction::GlobalGet(global.index() as u32));
+                code_gen.write_expr_field(expression, &field);
             }
             ItemId::Param(param) => {
                 for field in fields.iter() {
@@ -236,68 +236,53 @@ impl EncodeExpression for ast::BinaryExpression {
         let ptype = code_gen.get_ptype(expression)?;
         if ptype == Some(ast::PrimitiveType::String) {
             if self.op == ast::BinaryOp::Add {
-                // Compute new length
-                code_gen.read_expr_field(self.left, &STRING_LENGTH_FIELD);
-                code_gen.read_expr_field(self.right, &STRING_LENGTH_FIELD);
-                code_gen.instruction(&enc::Instruction::I32Add);
-                code_gen.write_expr_field(expression, &STRING_LENGTH_FIELD);
-                // Allocate new string
-                code_gen.const_i32(0);
-                code_gen.const_i32(0);
-                code_gen.const_i32(2i32.pow(STRING_CONTENTS_ALIGNMENT));
-                code_gen.read_expr_field(expression, &STRING_LENGTH_FIELD);
-                code_gen.allocate()?;
-                code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
-                // Copy in the left string
-                code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
-                code_gen.read_expr_field(self.left, &STRING_OFFSET_FIELD);
-                code_gen.read_expr_field(self.left, &STRING_LENGTH_FIELD);
-                code_gen.instruction(&enc::Instruction::MemoryCopy {
-                    src_mem: 0,
-                    dst_mem: 0,
-                });
-                // Copy in the right string
-                code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
-                code_gen.read_expr_field(self.left, &STRING_LENGTH_FIELD);
-                code_gen.instruction(&enc::Instruction::I32Add);
-                code_gen.read_expr_field(self.right, &STRING_OFFSET_FIELD);
-                code_gen.read_expr_field(self.right, &STRING_LENGTH_FIELD);
-                code_gen.instruction(&enc::Instruction::MemoryCopy {
-                    src_mem: 0,
-                    dst_mem: 0,
-                });
-                return Ok(());
+                encode_string_concatenation(expression, self.left, self.right, code_gen)
             } else {
                 panic!("Strings can only be concatenated with '+'");
             }
-        }
-
-        let left_fields = code_gen.fields(self.left)?;
-        for field in left_fields.iter() {
-            code_gen.read_expr_field(self.left, field);
-        }
-        let right_fields = code_gen.fields(self.right)?;
-        for field in right_fields.iter() {
-            code_gen.read_expr_field(self.right, field);
-        }
-
-        if left_fields.len() == 1 {
-            let field = &left_fields[0];
-            let valtype = field.stack_type;
-            let signedness = field.signedness;
-            let mask = field.arith_mask;
-            encode_binary_arithmetic(self.op, valtype, signedness, mask, code_gen);
         } else {
-            todo!()
+            encode_binary_arithmetic(self.op, expression, self.left, self.right, code_gen)
         }
-
-        let fields = code_gen.fields(expression)?;
-        for field in fields.iter() {
-            code_gen.write_expr_field(expression, field);
-        }
-
-        Ok(())
     }
+}
+
+fn encode_string_concatenation(
+    expression: ExpressionId,
+    left: ExpressionId,
+    right: ExpressionId,
+    code_gen: &mut CodeGenerator,
+) -> Result<(), GenerationError> {
+    // Compute new length
+    code_gen.read_expr_field(left, &STRING_LENGTH_FIELD);
+    code_gen.read_expr_field(right, &STRING_LENGTH_FIELD);
+    code_gen.instruction(&enc::Instruction::I32Add);
+    code_gen.write_expr_field(expression, &STRING_LENGTH_FIELD);
+    // Allocate new string
+    code_gen.const_i32(0);
+    code_gen.const_i32(0);
+    code_gen.const_i32(2i32.pow(STRING_CONTENTS_ALIGNMENT));
+    code_gen.read_expr_field(expression, &STRING_LENGTH_FIELD);
+    code_gen.allocate()?;
+    code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
+    // Copy in the left string
+    code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
+    code_gen.read_expr_field(left, &STRING_OFFSET_FIELD);
+    code_gen.read_expr_field(left, &STRING_LENGTH_FIELD);
+    code_gen.instruction(&enc::Instruction::MemoryCopy {
+        src_mem: 0,
+        dst_mem: 0,
+    });
+    // Copy in the right string
+    code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
+    code_gen.read_expr_field(left, &STRING_LENGTH_FIELD);
+    code_gen.instruction(&enc::Instruction::I32Add);
+    code_gen.read_expr_field(right, &STRING_OFFSET_FIELD);
+    code_gen.read_expr_field(right, &STRING_LENGTH_FIELD);
+    code_gen.instruction(&enc::Instruction::MemoryCopy {
+        src_mem: 0,
+        dst_mem: 0,
+    });
+    Ok(())
 }
 
 const S: Signedness = Signedness::Signed;
@@ -305,11 +290,22 @@ const U: Signedness = Signedness::Unsigned;
 
 fn encode_binary_arithmetic(
     op: ast::BinaryOp,
-    valtype: enc::ValType,
-    signedness: Signedness,
-    mask: Option<i32>,
+    expression: ExpressionId,
+    left: ExpressionId,
+    right: ExpressionId,
     code_gen: &mut CodeGenerator,
-) {
+) -> Result<(), GenerationError> {
+    let left_field = code_gen.one_field(left)?;
+    let right_field = code_gen.one_field(right)?;
+    let field = code_gen.one_field(expression)?;
+
+    let valtype = left_field.stack_type;
+    let signedness = left_field.signedness;
+    let mask = left_field.arith_mask;
+
+    code_gen.read_expr_field(left, &left_field);
+    code_gen.read_expr_field(right, &right_field);
+
     let instruction = match (op, valtype, signedness) {
         // Multiply
         (ast::BinaryOp::Multiply, enc::ValType::I32, _) => enc::Instruction::I32Mul,
@@ -410,4 +406,7 @@ fn encode_binary_arithmetic(
         code_gen.const_i32(mask);
         code_gen.instruction(&enc::Instruction::I32And);
     }
+
+    code_gen.write_expr_field(expression, &field);
+    Ok(())
 }

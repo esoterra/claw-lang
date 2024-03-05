@@ -1,7 +1,7 @@
 use ast::TypeId;
 use claw_ast as ast;
 
-use claw_resolver::ResolvedType;
+use claw_resolver::types::ResolvedType;
 use wasm_encoder as enc;
 
 const STRING_ALIGNMENT: u32 = 2;
@@ -57,42 +57,48 @@ impl EncodeType for ResolvedType {
     fn flat_size(&self, comp: &ast::Component) -> u32 {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.flat_size(comp),
-            ResolvedType::ValType(type_id) => type_id.flat_size(comp),
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => type_id.flat_size(comp),
         }
     }
 
     fn append_flattened(&self, comp: &ast::Component, out: &mut Vec<enc::ValType>) {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.append_flattened(comp, out),
-            ResolvedType::ValType(type_id) => type_id.append_flattened(comp, out),
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => type_id.append_flattened(comp, out),
         }
     }
 
     fn append_fields(&self, comp: &ast::Component, out: &mut Vec<FieldInfo>) {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.append_fields(comp, out),
-            ResolvedType::ValType(type_id) => type_id.append_fields(comp, out),
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => type_id.append_fields(comp, out),
         }
     }
 
     fn to_comp_valtype(&self, comp: &ast::Component) -> enc::ComponentValType {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp),
-            ResolvedType::ValType(type_id) => type_id.to_comp_valtype(comp),
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => type_id.to_comp_valtype(comp),
         }
     }
 
     fn align(&self, comp: &ast::Component) -> u32 {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.align(comp),
-            ResolvedType::ValType(type_id) => type_id.align(comp),
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => type_id.align(comp),
         }
     }
 
     fn mem_size(&self, comp: &ast::Component) -> u32 {
         match *self {
             ResolvedType::Primitive(ptype) => ptype.mem_size(comp),
-            ResolvedType::ValType(type_id) => type_id.mem_size(comp),
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => type_id.mem_size(comp),
         }
     }
 }
@@ -132,42 +138,42 @@ impl EncodeType for TypeId {
 impl EncodeType for ast::ValType {
     fn flat_size(&self, comp: &ast::Component) -> u32 {
         match *self {
-            ast::ValType::Result { .. } => todo!(),
+            ast::ValType::Result(_) => todo!(),
             ast::ValType::Primitive(ptype) => ptype.flat_size(comp),
         }
     }
 
     fn append_flattened(&self, comp: &ast::Component, out: &mut Vec<enc::ValType>) {
         match *self {
-            ast::ValType::Result { .. } => todo!(),
+            ast::ValType::Result(_) => todo!(),
             ast::ValType::Primitive(ptype) => ptype.append_flattened(comp, out),
         }
     }
 
     fn append_fields(&self, comp: &ast::Component, out: &mut Vec<FieldInfo>) {
         match *self {
-            ast::ValType::Result { .. } => todo!(),
+            ast::ValType::Result(_) => todo!(),
             ast::ValType::Primitive(ptype) => ptype.append_fields(comp, out),
         }
     }
 
     fn to_comp_valtype(&self, comp: &ast::Component) -> enc::ComponentValType {
         match *self {
-            ast::ValType::Result { .. } => todo!(),
+            ast::ValType::Result(_) => todo!(),
             ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(comp),
         }
     }
 
     fn align(&self, comp: &ast::Component) -> u32 {
         match *self {
-            ast::ValType::Result { .. } => todo!(),
+            ast::ValType::Result(_) => todo!(),
             ast::ValType::Primitive(ptype) => ptype.align(comp),
         }
     }
 
     fn mem_size(&self, comp: &ast::Component) -> u32 {
         match *self {
-            ast::ValType::Result { .. } => todo!(),
+            ast::ValType::Result(_) => todo!(),
             ast::ValType::Primitive(ptype) => ptype.mem_size(comp),
         }
     }
@@ -285,10 +291,10 @@ pub struct FieldInfo {
     pub signedness: Signedness,
     // Arithmetic
     pub arith_mask: Option<i32>,
-    // Offset from base value
+    // Index
     pub index_offset: u32,
-    pub mem_offset: u32,
     // Memory information
+    pub mem_offset: u32,
     pub align: u32,
     pub mems_size: u32,
 }

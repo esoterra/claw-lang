@@ -1,144 +1,146 @@
-use ast::{FnTypeInfo, TypeId};
 use claw_ast as ast;
 
+use claw_resolver::types::ResolvedType;
 use wasm_encoder as enc;
 
 use crate::{
     types::{align_to, EncodeType},
-    ModuleBuilder, ModuleTypeIndex,
+    builders::{
+        module::{ModuleBuilder, ModuleTypeIndex},
+        component::{ComponentBuilder, ComponentTypeIndex}
+    }
 };
 
 const MAX_FLAT_PARAMS: u8 = 16;
 const MAX_FLAT_RESULTS: u8 = 1;
 
 pub struct FunctionGenerator {
+    pub spill_params: bool,
     pub params: Vec<ParamInfo>,
-    pub param_types: Vec<enc::ValType>,
-    pub return_type: ReturnInfo,
+    pub flat_params: Vec<enc::ValType>,
+    pub results: Option<ResultsInfo>,
 }
 
-impl FunctionGenerator {
-    pub fn new<FnType: FnTypeInfo>(fn_type: &FnType, comp: &ast::Component) -> Self {
-        // Layout parameters
-        let ParamConfig {
-            params,
-            param_types,
-        } = prepare_params(fn_type, comp);
-
-        // Layout return types
-        let return_type = fn_type.get_return_type();
-        let return_type = prepare_return_type(return_type, comp);
-
-        Self {
-            params,
-            param_types,
-            return_type,
-        }
-    }
-
-    pub fn encode_func_type(&self, module: &mut ModuleBuilder) -> ModuleTypeIndex {
-        let params = self.param_types.iter().copied();
-        match self.return_type {
-            ReturnInfo::Flat(return_type) => module.func_type(params, [return_type]),
-            ReturnInfo::Spilled => module.func_type(params, [enc::ValType::I32]),
-            ReturnInfo::None => module.func_type(params, []),
-        }
-    }
-}
-
-pub struct ParamConfig {
-    pub params: Vec<ParamInfo>,
-    pub param_types: Vec<enc::ValType>,
-}
-
-pub enum ParamInfo {
-    Local(LocalParamInfo),
-    Spilled(SpilledParamInfo),
-}
-
-pub struct LocalParamInfo {
+pub struct ParamInfo {
+    pub name: String,
+    pub rtype: ResolvedType,
     pub index_offset: u32,
-}
-
-pub struct SpilledParamInfo {
     pub mem_offset: u32,
 }
 
-fn prepare_params<FnType: FnTypeInfo>(fn_type: &FnType, comp: &ast::Component) -> ParamConfig {
+impl FunctionGenerator {
+    pub fn new(
+        params: Vec<(String, ResolvedType)>,
+        results: Option<ResolvedType>,
+        comp: &ast::Component,
+    ) -> Self {
+        // Layout parameters
+        let (spill_params, params, flat_params) = prepare_params(params, comp);
+        // Layout return types
+        let results = results.map(|results| ResultsInfo {
+            rtype: results,
+            spill: ResultSpillInfo::new(results, comp),
+        });
+
+        Self {
+            spill_params,
+            params,
+            flat_params,
+            results,
+        }
+    }
+
+    pub fn encode_comp_type(
+        &self,
+        builder: &mut ComponentBuilder,
+        comp: &ast::Component,
+    ) -> ComponentTypeIndex {
+        let params = self
+            .params
+            .iter()
+            .map(|info| (info.name.as_str(), info.rtype.to_comp_valtype(comp)));
+        let result = self.results.as_ref().map(|info| info.rtype.to_comp_valtype(comp));
+        builder.func_type(params, result)
+    }
+
+    pub fn encode_mod_type(&self, builder: &mut ModuleBuilder) -> ModuleTypeIndex {
+        let params = self.flat_params.iter().copied();
+        type RSI = ResultSpillInfo;
+        match self.results.as_ref().map(|info| &info.spill) {
+            Some(RSI::Flat { valtype }) => builder.func_type(params, [*valtype]),
+            Some(RSI::Spilled) => builder.func_type(params, [enc::ValType::I32]),
+            None => builder.func_type(params, []),
+        }
+    }
+}
+
+fn prepare_params(
+    params: Vec<(String, ResolvedType)>,
+    comp: &ast::Component,
+) -> (bool, Vec<ParamInfo>, Vec<enc::ValType>) {
     // Flatten parameters
     let mut flat_params = Vec::new();
-    for (_name, type_id) in fn_type.get_args() {
-        type_id.append_flattened(comp, &mut flat_params);
+    let mut mem_offset = 0;
+    let mut param_info = Vec::new();
+
+    for (name, rtype) in params {
+        let index_offset = flat_params.len() as u32;
+        mem_offset = align_to(mem_offset, rtype.align(comp));
+        let info = ParamInfo {
+            name,
+            rtype,
+            index_offset,
+            mem_offset,
+        };
+        param_info.push(info);
+        rtype.append_flattened(comp, &mut flat_params);
+        mem_offset += rtype.mem_size(comp);
     }
     // Either generate as locals or spill to memory based on flattened size
-    if flat_params.len() <= MAX_FLAT_PARAMS as usize {
-        let params = param_info_local(fn_type, comp);
-        let param_types = flat_params;
-        ParamConfig {
-            params,
-            param_types,
-        }
-    } else {
-        let params = param_info_spilled(fn_type, comp);
-        let param_types = vec![enc::ValType::I32];
-        ParamConfig {
-            params,
-            param_types,
-        }
-    }
+    let spill = flat_params.len() > MAX_FLAT_PARAMS as usize;
+    let flat_params = match spill {
+        true => vec![enc::ValType::I32],
+        false => flat_params,
+    };
+    (spill, param_info, flat_params)
 }
 
-fn param_info_local<FnType: FnTypeInfo>(fn_type: &FnType, comp: &ast::Component) -> Vec<ParamInfo> {
-    let mut params = Vec::new();
-    let mut index_offset = 0;
-    for (_name, type_id) in fn_type.get_args() {
-        params.push(ParamInfo::Local(LocalParamInfo { index_offset }));
-        index_offset += type_id.flat_size(comp);
-    }
-    params
+pub struct ResultsInfo {
+    pub rtype: ResolvedType,
+    pub spill: ResultSpillInfo,
 }
 
-fn param_info_spilled<FnType: FnTypeInfo>(
-    fn_type: &FnType,
-    comp: &ast::Component,
-) -> Vec<ParamInfo> {
-    let mut params = Vec::new();
-    let mut mem_offset = 0;
-    for (_name, type_id) in fn_type.get_args() {
-        let align = type_id.align(comp);
-        let size = type_id.mem_size(comp);
-        mem_offset = align_to(mem_offset, align);
-        params.push(ParamInfo::Spilled(SpilledParamInfo { mem_offset }));
-        mem_offset += size;
-    }
-    params
-}
-
-pub enum ReturnInfo {
-    Flat(enc::ValType),
-    Spilled,
-    None,
-}
-
-impl ReturnInfo {
+impl ResultsInfo {
     pub fn spill(&self) -> bool {
-        match self {
-            ReturnInfo::Flat(_) | ReturnInfo::None => false,
-            ReturnInfo::Spilled => true,
-        }
+        self.spill.spill()
     }
 }
 
-fn prepare_return_type(return_type: Option<TypeId>, comp: &ast::Component) -> ReturnInfo {
-    if let Some(return_type) = return_type {
-        if return_type.flat_size(comp) > MAX_FLAT_RESULTS as u32 {
-            ReturnInfo::Spilled
+pub enum ResultSpillInfo {
+    Flat { valtype: enc::ValType },
+    Spilled,
+}
+
+impl ResultSpillInfo {
+    pub fn new(rtype: ResolvedType, comp: &ast::Component) -> Self {
+        if rtype.flat_size(comp) > MAX_FLAT_RESULTS as u32 {
+            ResultSpillInfo::Spilled
         } else {
-            let return_types = return_type.flatten(comp);
-            assert_eq!(return_types.len(), 1);
-            ReturnInfo::Flat(return_types[0])
+            let result_types = rtype.flatten(comp);
+            assert_eq!(result_types.len(), 1);
+            let valtype = result_types[0];
+            ResultSpillInfo::Flat { valtype }
         }
-    } else {
-        ReturnInfo::None
+    }
+
+    pub fn spill(&self) -> bool {
+        matches!(self, ResultSpillInfo::Spilled)
+    }
+
+    pub fn valtype(&self) -> enc::ValType {
+        match self {
+            ResultSpillInfo::Flat { valtype } => *valtype,
+            ResultSpillInfo::Spilled => enc::ValType::I32,
+        }
     }
 }

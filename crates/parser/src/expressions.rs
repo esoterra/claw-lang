@@ -3,7 +3,7 @@ use crate::{ParseInput, ParserError};
 use claw_ast as ast;
 use claw_ast::{self, expressions::BinaryOp, expressions::ExpressionId, merge, Component, UnaryOp};
 
-use super::statements::parse_ident;
+use crate::names::parse_ident;
 
 pub fn parse_expression(
     input: &mut ParseInput,

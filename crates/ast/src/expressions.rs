@@ -89,14 +89,12 @@ impl ContextEq<super::Component> for ExpressionId {
         let self_span = context.expr().get_span(*self);
         let other_span = context.expr().get_span(*other);
         if self_span != other_span {
-            dbg!((self_span, other_span));
             return false;
         }
 
         let self_expr = context.expr().get_exp(*self);
         let other_expr = context.expr().get_exp(*other);
         if !self_expr.context_eq(other_expr, context) {
-            dbg!((self_expr, other_expr));
             return false;
         }
         true

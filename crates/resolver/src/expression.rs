@@ -1,12 +1,10 @@
 use ast::ExpressionId;
 use claw_ast as ast;
 
-use crate::{
-    setup_call, ComponentContext, FunctionResolver, ItemId, ResolvedType, ResolverError,
-    RESOLVED_BOOL,
-};
+use crate::types::{ResolvedType, RESOLVED_BOOL};
+use crate::{FunctionResolver, ItemId, ResolverError};
 
-pub trait ResolveExpression {
+pub(crate) trait ResolveExpression {
     /// Setup must
     /// * Call `define_name` when introducing new names
     /// * Call `use_name` when using a name
@@ -18,52 +16,32 @@ pub trait ResolveExpression {
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        _ = (expression, resolver, context);
+        _ = (expression, resolver);
         Ok(())
     }
 
-    /// Set up child and record parent-child relationship
-    fn setup_child(
-        &self,
-        parent: ExpressionId,
-        child: ExpressionId,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError> {
-        // Resolve the child
-        context
-            .component
-            .expr()
-            .get_exp(child)
-            .setup_resolve(child, resolver, context)?;
-
-        // Update the parent mapping
-        resolver.expr_parent_map.insert(child, parent);
-
-        Ok(())
-    }
-
+    /// In a successful type resolution, this function will be called
+    /// exactly once when the type of this expression is known.
     fn on_resolved(
         &self,
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        _ = (rtype, expression, resolver, context);
+        _ = (rtype, expression, resolver);
         Ok(())
     }
 
+    /// In a successful type resolution, this function will be called
+    /// once for each child of this expression.
     fn on_child_resolved(
         &self,
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        _ = (rtype, expression, resolver, context);
+        _ = (rtype, expression, resolver);
         Ok(())
     }
 }
@@ -75,12 +53,11 @@ macro_rules! gen_resolve_expression {
                 &self,
                 expression: ExpressionId,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
                     $(ast::Expression::$expr_type(inner) => {
                         let inner: &dyn ResolveExpression = inner;
-                        inner.setup_resolve(expression, resolver, context)
+                        inner.setup_resolve(expression, resolver)
                     },)*
                 }
             }
@@ -89,10 +66,9 @@ macro_rules! gen_resolve_expression {
                 rtype: ResolvedType,
                 expression: ExpressionId,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
-                    $(ast::Expression::$expr_type(inner) => inner.on_resolved(rtype, expression, resolver, context),)*
+                    $(ast::Expression::$expr_type(inner) => inner.on_resolved(rtype, expression, resolver),)*
                 }
             }
 
@@ -100,10 +76,9 @@ macro_rules! gen_resolve_expression {
                 rtype: ResolvedType,
                 expression: ExpressionId,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
-                    $(ast::Expression::$expr_type(inner) => inner.on_child_resolved(rtype, expression, resolver, context),)*
+                    $(ast::Expression::$expr_type(inner) => inner.on_child_resolved(rtype, expression, resolver),)*
                 }
             }
         }
@@ -117,17 +92,16 @@ impl ResolveExpression for ast::Identifier {
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        let item = resolver.use_name(context, self.ident)?;
+        let item = resolver.use_name(self.ident)?;
         match item {
             ItemId::Global(global) => {
-                let global = context.component.globals.get(global).unwrap();
-                resolver.set_expr_type(expression, ResolvedType::ValType(global.type_id));
+                let global = resolver.component.globals.get(global).unwrap();
+                resolver.set_expr_type(expression, ResolvedType::Defined(global.type_id));
             }
             ItemId::Param(param) => {
                 let param_type = *resolver.params.get(param).unwrap();
-                resolver.set_expr_type(expression, ResolvedType::ValType(param_type));
+                resolver.set_expr_type(expression, ResolvedType::Defined(param_type));
             }
             ItemId::Local(local) => resolver.use_local(local, expression),
             _ => {}
@@ -140,9 +114,8 @@ impl ResolveExpression for ast::Identifier {
         rtype: ResolvedType,
         _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        let item = resolver.lookup_name(context, self.ident)?;
+        let item = resolver.lookup_name(self.ident)?;
         match item {
             ItemId::Local(local) => resolver.set_local_type(local, rtype),
             _ => {}
@@ -156,7 +129,6 @@ impl ResolveExpression for ast::Literal {
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         match self {
             ast::Literal::String(_) => {
@@ -171,54 +143,35 @@ impl ResolveExpression for ast::Literal {
     }
 }
 
-pub struct ItemContext<'ctx> {
-    item: ItemId,
-    component: &'ctx ast::Component,
-}
-
-impl ItemId {
-    pub fn with<'ctx>(&self, component: &'ctx ast::Component) -> ItemContext<'ctx> {
-        ItemContext {
-            item: *self,
-            component,
-        }
-    }
-}
-
-impl<'ctx> ItemContext<'ctx> {
-    fn get_fn_type(&self) -> Option<&dyn ast::FnTypeInfo> {
-        match self.item {
-            ItemId::Import(import) => {
-                let import = &self.component.imports[import];
-                match &import.external_type {
-                    ast::ExternalType::Function(fn_type) => Some(fn_type),
-                }
-            }
-            ItemId::Function(function) => {
-                let function = &self.component.functions[function];
-                Some(function)
-            }
-            _ => None,
-        }
-    }
-}
-
 impl ResolveExpression for ast::Call {
     fn setup_resolve(
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        let item = resolver.use_name(context, self.ident)?;
-        let item = item.with(context.component);
-        let fn_type = item.get_fn_type().unwrap();
-
-        setup_call(self, fn_type, resolver, context, expression)?;
-
-        for arg in self.args.iter() {
-            self.setup_child(expression, *arg, resolver, context)?;
+        let item = resolver.use_name(self.ident)?;
+        let (params, results): (Vec<_>, _) = match item {
+            ItemId::ImportFunc(import_func) => {
+                let import_func = &resolver.imports.funcs[import_func];
+                let params = import_func.params.iter().map(|(_name, rtype)| *rtype);
+                let results = import_func.results.clone().unwrap();
+                (params.collect(), results)
+            },
+            ItemId::Function(func) => {
+                let func = &resolver.component.functions[func];
+                let params = func.params.iter().map(|(_name, type_id)| ResolvedType::Defined(*type_id));
+                let results = ResolvedType::Defined(*func.results.as_ref().unwrap());
+                (params.collect(), results)
+            },
+            _ => panic!("Can only call functions")
+        };
+        assert_eq!(params.len(), self.args.len());
+        for (arg, rtype) in self.args.iter().copied().zip(params.into_iter()) {
+            resolver.setup_child_expression(expression, arg)?;
+            resolver.set_expr_type(arg, rtype);
         }
+
+        resolver.set_expr_type(expression, results);
 
         Ok(())
     }
@@ -229,9 +182,8 @@ impl ResolveExpression for ast::UnaryExpression {
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
-        self.setup_child(expression, self.inner, resolver, context)
+        resolver.setup_child_expression(expression, self.inner)
     }
 
     fn on_resolved(
@@ -239,7 +191,6 @@ impl ResolveExpression for ast::UnaryExpression {
         rtype: ResolvedType,
         _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.set_expr_type(self.inner, rtype);
         Ok(())
@@ -250,7 +201,6 @@ impl ResolveExpression for ast::UnaryExpression {
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         resolver.set_expr_type(expression, rtype);
         Ok(())
@@ -264,13 +214,12 @@ impl ResolveExpression for ast::BinaryExpression {
         &self,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         if self.is_relation() {
             resolver.set_expr_type(expression, RESOLVED_BOOL);
         }
-        self.setup_child(expression, self.left, resolver, context)?;
-        self.setup_child(expression, self.right, resolver, context)?;
+        resolver.setup_child_expression(expression, self.left)?;
+        resolver.setup_child_expression(expression, self.right)?;
         Ok(())
     }
 
@@ -279,7 +228,6 @@ impl ResolveExpression for ast::BinaryExpression {
         rtype: ResolvedType,
         _expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         if !self.is_relation() {
             resolver.set_expr_type(self.left, rtype);
@@ -293,7 +241,6 @@ impl ResolveExpression for ast::BinaryExpression {
         rtype: ResolvedType,
         expression: ExpressionId,
         resolver: &mut FunctionResolver,
-        _context: &ComponentContext<'_>,
     ) -> Result<(), ResolverError> {
         if !self.is_relation() {
             resolver.set_expr_type(expression, rtype);

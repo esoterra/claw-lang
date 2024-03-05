@@ -37,7 +37,7 @@ impl Compile {
 
         let ast = parse(src.clone(), tokens).ok_pretty()?;
 
-        let resolved = resolve(src, ast).ok_pretty()?;
+        let resolved = resolve(src, ast, todo!()).ok_pretty()?;
 
         let wasm = generate(&resolved).ok_pretty()?;
 

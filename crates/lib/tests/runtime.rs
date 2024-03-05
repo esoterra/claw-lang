@@ -4,6 +4,7 @@ use std::fs;
 
 use wasmtime::component::{bindgen, Component, Linker};
 use wasmtime::{Config, Engine, Store};
+use wit_parser::Resolve;
 
 #[allow(dead_code)]
 struct Runtime {
@@ -17,7 +18,8 @@ impl Runtime {
     pub fn new(name: &str) -> Self {
         let path = format!("./tests/programs/{}.claw", name);
         let input = fs::read_to_string(path).unwrap();
-        let component_bytes = compile(name.to_owned(), &input).unwrap();
+        let wit = Resolve::new();
+        let component_bytes = compile(name.to_owned(), &input, wit).unwrap();
 
         println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());
 

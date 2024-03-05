@@ -6,6 +6,8 @@ pub mod types;
 use cranelift_entity::entity_impl;
 use miette::SourceSpan;
 
+pub use wit_parser::PackageName;
+
 pub type Span = SourceSpan;
 
 pub use component::*;
