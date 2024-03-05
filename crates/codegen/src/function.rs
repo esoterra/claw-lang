@@ -4,11 +4,11 @@ use claw_resolver::types::ResolvedType;
 use wasm_encoder as enc;
 
 use crate::{
-    types::{align_to, EncodeType},
     builders::{
+        component::{ComponentBuilder, ComponentTypeIndex},
         module::{ModuleBuilder, ModuleTypeIndex},
-        component::{ComponentBuilder, ComponentTypeIndex}
-    }
+    },
+    types::{align_to, EncodeType},
 };
 
 const MAX_FLAT_PARAMS: u8 = 16;
@@ -59,7 +59,10 @@ impl FunctionGenerator {
             .params
             .iter()
             .map(|info| (info.name.as_str(), info.rtype.to_comp_valtype(comp)));
-        let result = self.results.as_ref().map(|info| info.rtype.to_comp_valtype(comp));
+        let result = self
+            .results
+            .as_ref()
+            .map(|info| info.rtype.to_comp_valtype(comp));
         builder.func_type(params, result)
     }
 

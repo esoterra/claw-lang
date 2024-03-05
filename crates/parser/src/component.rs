@@ -82,7 +82,7 @@ fn parse_import_from(
 
         items.push(parse_import_item(input, comp)?);
 
-        if input.next_if(Token::Comma).is_some() {
+        if input.next_if(Token::Comma).is_none() {
             break;
         }
     }

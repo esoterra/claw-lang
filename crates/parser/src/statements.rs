@@ -1,3 +1,5 @@
+use ast::{Call, Statement};
+
 use crate::ast::{self, merge, Component, Span, StatementId};
 use crate::lexer::Token;
 use crate::names::parse_ident;
@@ -24,11 +26,18 @@ pub fn parse_statement(
     input: &mut ParseInput,
     comp: &mut Component,
 ) -> Result<StatementId, ParserError> {
-    match input.peek()?.token {
-        Token::Return => parse_return(input, comp),
-        Token::Let => parse_let(input, comp),
-        Token::If => parse_if(input, comp),
-        _ => parse_assign(input, comp),
+    let peek0 = &input.peek()?.token;
+    let peek1 = input.peekn(1);
+    match (peek0, peek1) {
+        (Token::Return, _) => parse_return(input, comp),
+        (Token::Let, _) => parse_let(input, comp),
+        (Token::If, _) => parse_if(input, comp),
+        (Token::Identifier(_), Some(Token::LParen)) => parse_call(input, comp),
+        (Token::Identifier(_), _) => parse_assign(input, comp),
+        _ => {
+            _ = input.next();
+            Err(input.unexpected_token("Invalid statement start"))
+        },
     }
 }
 
@@ -70,6 +79,35 @@ fn parse_return(input: &mut ParseInput, comp: &mut Component) -> Result<Statemen
     Ok(comp.new_statement(ast::Statement::Return(statement), span))
 }
 
+fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {
+    let ident = parse_ident(input, comp)?;
+    let start_span = comp.name_span(ident);
+    input.assert_next(Token::LParen, "Function arguments")?;
+
+    let mut args = Vec::new();
+    loop {
+        if let Some(span) = input.next_if(Token::RParen) {
+            break;
+        }
+
+        args.push(parse_expression(input, comp)?);
+
+        let token = input.next()?;
+        match token.token {
+            Token::Comma => continue,
+            Token::RParen => break,
+            _ => return Err(input.unexpected_token("Argument list")),
+        }
+    };
+
+    let end_span = input.assert_next(Token::Semicolon, "Statements must end with `;`")?;
+
+    let statement = Statement::Call(Call { ident, args });
+    let span = merge(&start_span, &end_span);
+
+    Ok(comp.new_statement(statement, span))
+}
+
 fn parse_assign(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {
     let ident = parse_ident(input, comp)?;
     let start_span = comp.name_span(ident);
@@ -95,6 +133,8 @@ fn parse_if(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId,
 
 #[cfg(test)]
 mod tests {
+    use claw_common::UnwrapPretty;
+
     use super::*;
     use crate::make_input;
 
@@ -103,7 +143,8 @@ mod tests {
         let source = "{}";
         let (src, mut input) = make_input(source);
         let mut comp = Component::new(src);
-        let _assign_stmt = parse_block(&mut input, &mut comp).unwrap();
+        let _assign_stmt = parse_block(&mut input, &mut comp).unwrap_pretty();
+        assert!(input.done());
     }
 
     #[test]
@@ -111,7 +152,8 @@ mod tests {
         let source = "{a = 0;}";
         let (src, mut input) = make_input(source);
         let mut comp = Component::new(src);
-        let _assign_stmt = parse_block(&mut input, &mut comp).unwrap();
+        let _assign_stmt = parse_block(&mut input, &mut comp).unwrap_pretty();
+        assert!(input.done());
     }
 
     #[test]
@@ -119,7 +161,8 @@ mod tests {
         let source = "return 0;";
         let (src, mut input) = make_input(source);
         let mut comp = Component::new(src);
-        let _return_stmt = parse_return(&mut input, &mut comp).unwrap();
+        let _return_stmt = parse_return(&mut input, &mut comp).unwrap_pretty();
+        assert!(input.done());
     }
 
     #[test]
@@ -127,6 +170,16 @@ mod tests {
         let source = "a = 0;";
         let (src, mut input) = make_input(source);
         let mut comp = Component::new(src);
-        let _assign_stmt = parse_assign(&mut input, &mut comp).unwrap();
+        let _assign_stmt = parse_assign(&mut input, &mut comp).unwrap_pretty();
+        assert!(input.done());
+    }
+
+    #[test]
+    fn test_parse_let() {
+        let source = "let start = now();";
+        let (src, mut input) = make_input(source);
+        let mut comp = Component::new(src);
+        let _let_stmt = parse_let(&mut input, &mut comp).unwrap_pretty();
+        assert!(input.done());
     }
 }

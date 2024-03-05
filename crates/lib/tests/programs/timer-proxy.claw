@@ -1,16 +1,16 @@
 import { now } from wasi:clocks/monotonic-clock;
 import { level, log } from wasi:logging/logging;
 
-import buzz as buzz-import: func(a: string) -> string;
+import foo: func(a: string) -> string;
 
 let max-millis: u64 = 1000;
 
-export func buzz(a: string) -> string {
+export func bar(a: string) -> string {
     let start = now();
-    let result = buzz-import(a);
+    let res = foo(a);
     let end = now();
     if end - start > max-millis {
-        log(level::warning, "profiling", "Calling foo:bar/fizz/buzz took a long time");
+        log(level::warning, "profiling", "Calling foo took a long time");
     }
-    return result;
+    return res;
 }

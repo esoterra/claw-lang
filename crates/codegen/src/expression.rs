@@ -1,6 +1,6 @@
 use ast::ExpressionId;
 use claw_ast as ast;
-use claw_resolver::ItemId;
+use claw_resolver::{ItemId, ResolvedType};
 
 use crate::code::{CodeGenerator, ExpressionAllocator};
 use crate::types::{
@@ -34,6 +34,7 @@ impl EncodeExpression for ast::Expression {
     ) -> Result<(), GenerationError> {
         let expr: &dyn EncodeExpression = match self {
             ast::Expression::Identifier(expr) => expr,
+            ast::Expression::Enum(expr) => expr,
             ast::Expression::Literal(expr) => expr,
             ast::Expression::Call(expr) => expr,
             ast::Expression::Unary(expr) => expr,
@@ -49,6 +50,7 @@ impl EncodeExpression for ast::Expression {
     ) -> Result<(), GenerationError> {
         let expr: &dyn EncodeExpression = match self {
             ast::Expression::Identifier(expr) => expr,
+            ast::Expression::Enum(expr) => expr,
             ast::Expression::Literal(expr) => expr,
             ast::Expression::Call(expr) => expr,
             ast::Expression::Unary(expr) => expr,
@@ -76,7 +78,7 @@ impl EncodeExpression for ast::Identifier {
         let fields = code_gen.fields(expression)?;
         match code_gen.lookup_name(self.ident) {
             ItemId::ImportFunc(_) => panic!("Cannot use imported function as value!!"),
-            ItemId::ImportType(_) => panic!("Cannot use imported type as value!!"),
+            ItemId::Type(_) => panic!("Cannot use type as value!!"),
             ItemId::Global(global) => {
                 // TODO handle composite globals
                 let field = code_gen.one_field(expression)?;
@@ -96,6 +98,45 @@ impl EncodeExpression for ast::Identifier {
                 }
             }
             ItemId::Function(_) => panic!("Cannot use function as value!!"),
+        }
+        Ok(())
+    }
+}
+
+impl EncodeExpression for ast::EnumLiteral {
+    fn alloc_expr_locals(
+        &self,
+        expression: ExpressionId,
+        allocator: &mut ExpressionAllocator,
+    ) -> Result<(), GenerationError> {
+        allocator.alloc(expression)
+    }
+
+    fn encode(
+        &self,
+        expression: ExpressionId,
+        code_gen: &mut CodeGenerator,
+    ) -> Result<(), GenerationError> {
+        let fields = code_gen.fields(expression)?;
+        match code_gen.lookup_name(self.enum_name) {
+            ItemId::Type(rtype) => {
+                match rtype {
+                    ResolvedType::Import(import_type) => {
+                        let import_type = code_gen.lookup_import_type(import_type);
+                        match import_type {
+                            claw_resolver::ImportType::Enum(enum_type) => {
+                                let case_name = code_gen.lookup_name_str(self.case_name);
+                                let case_index = enum_type.cases.iter().position(|c| c == case_name).unwrap();
+                                code_gen.const_i32(case_index as i32);
+                                let field = code_gen.one_field(expression)?;
+                                code_gen.write_expr_field(expression, &field);
+                            },
+                        }
+                    },
+                    _ => unreachable!()
+                }
+            }
+            _ => unreachable!()
         }
         Ok(())
     }

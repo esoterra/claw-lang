@@ -18,9 +18,9 @@ pub struct ImportResolver {
     pub loose_funcs: Vec<ImportFuncId>,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug)]
 pub enum ImportItemId {
-    Type(ImportTypeId),
+    Type(ResolvedType),
     Func(ImportFuncId),
 }
 
@@ -143,7 +143,7 @@ pub struct InterfaceResolver<'ctx> {
     interface_id: InterfaceId,
     interface: &'ctx wit::Interface,
 
-    resolved_types: HashMap<wit::TypeId, (ImportItemId, ResolvedType)>,
+    resolved_types: HashMap<wit::TypeId, ResolvedType>,
     items: Vec<ImportItemId>,
 }
 
@@ -182,7 +182,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
             return Some(self.resolve_import_func(name, func));
         }
         if let Some(type_id) = self.interface.types.get(name) {
-            return Some(self.item_for_type_id(*type_id));
+            return Some(ImportItemId::Type(self.resolve_type_id(*type_id)));
         }
         None
     }
@@ -228,39 +228,17 @@ impl<'ctx> InterfaceResolver<'ctx> {
             wit::Type::Float64 => ResolvedType::Primitive(PType::F64),
             wit::Type::Char => todo!(),
             wit::Type::String => ResolvedType::Primitive(PType::String),
-            wit::Type::Id(id) => self.rtype_for_type_id(*id),
+            wit::Type::Id(id) => self.resolve_type_id(*id),
         }
     }
 
-    fn item_for_type_id(&mut self, type_id: wit::TypeId) -> ImportItemId {
-        if let Some((item_id, _)) = self.resolved_types.get(&type_id) {
-            return *item_id;
-        }
-
-        self.resolve_type_id(type_id);
-
-        let (item_id, _) = self.resolved_types.get(&type_id).unwrap();
-        *item_id
-    }
-
-    fn rtype_for_type_id(&mut self, type_id: wit::TypeId) -> ResolvedType {
-        if let Some((_, rtype)) = self.resolved_types.get(&type_id) {
-            return *rtype;
-        }
-
-        self.resolve_type_id(type_id);
-
-        let (_, rtype) = self.resolved_types.get(&type_id).unwrap();
-        *rtype
-    }
-
-    fn resolve_type_id(&mut self, type_id: wit::TypeId) {
+    fn resolve_type_id(&mut self, type_id: wit::TypeId) -> ResolvedType {
         let type_def = self.wit.resolve.types.get(type_id).unwrap();
         let name = type_def.name.as_ref().unwrap().to_owned();
         assert_eq!(type_def.owner, wit::TypeOwner::Interface(self.interface_id));
         // Construct the ImportType
         type TDK = wit::TypeDefKind;
-        let import_type = match &type_def.kind {
+        let rtype = match &type_def.kind {
             TDK::Enum(enum_type) => {
                 let name = name.clone();
                 let cases = enum_type
@@ -270,17 +248,20 @@ impl<'ctx> InterfaceResolver<'ctx> {
                     .cloned()
                     .collect();
                 let import_enum = ImportEnum { name, cases };
-                ImportType::Enum(import_enum)
+                let import_type = ImportType::Enum(import_enum);
+                let import_type_id = self.imports.types.push(import_type);
+                ResolvedType::Import(import_type_id)
             }
-            _ => todo!("Support other imported types"),
+            TDK::Type(t) => {
+                self.resolve_type(t)
+            },
+            a => panic!("Unsupported import type kind {:?}", a),
         };
-        // Store type info and generate ids
-        let import_type_id = self.imports.types.push(import_type);
-        let import_item_id = ImportItemId::Type(import_type_id);
-        let rtype = ResolvedType::Import(import_type_id);
         // Record item id and resolved type
-        self.resolved_types.insert(type_id, (import_item_id, rtype));
+        self.resolved_types.insert(type_id, rtype);
         // Record item in interface ordering
+        let import_item_id = ImportItemId::Type(rtype);
         self.items.push(import_item_id);
+        rtype
     }
 }

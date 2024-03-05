@@ -44,6 +44,14 @@ world strings {
     export concat: func(left: string, right: string) -> string;
 }
 
+world timer-proxy {
+    import wasi:clocks/monotonic-clock;
+    import wasi:logging/logging;
+
+    import foo: func(a: string) -> string;
+    export bar: func(a: string) -> string;
+}
+
 world unary {
     export set: func(v: s32) -> s32;
     export get-inverse: func() -> s32;

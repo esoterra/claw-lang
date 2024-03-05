@@ -160,7 +160,7 @@ fn encode_assignment(
     let fields = code_gen.fields(expression)?;
     match code_gen.lookup_name(ident) {
         ItemId::ImportFunc(_) => panic!("Assigning to imported function isn't allowed!!"),
-        ItemId::ImportType(_) => panic!("Assigning to imported type isn't allowed!!"),
+        ItemId::Type(_) => panic!("Assigning to imported type isn't allowed!!"),
         ItemId::Global(global) => {
             // TODO handle composite globals
             for field in fields {

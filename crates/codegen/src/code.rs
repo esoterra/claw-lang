@@ -13,7 +13,7 @@ use crate::{
     GenerationError,
 };
 use claw_resolver::{
-    types::ResolvedType, ItemId, LocalId, ParamId, ResolvedComponent, ResolvedFunction,
+    types::ResolvedType, ImportType, ImportTypeId, ItemId, LocalId, ParamId, ResolvedComponent, ResolvedFunction
 };
 use cranelift_entity::EntityRef;
 use wasm_encoder as enc;
@@ -67,7 +67,8 @@ impl<'gen> CodeGenerator<'gen> {
 
         let locals_start = local_space.len();
 
-        let return_index = results.as_ref()
+        let return_index = results
+            .as_ref()
             .map(|info| {
                 if info.spill.spill() {
                     let index = local_space.len();
@@ -206,6 +207,14 @@ impl<'gen> CodeGenerator<'gen> {
 
     pub fn lookup_name(&self, ident: NameId) -> ItemId {
         self.func.bindings[&ident]
+    }
+
+    pub fn lookup_name_str(&self, ident: NameId) -> &str {
+        self.comp.component.get_name(ident)
+    }
+
+    pub fn lookup_import_type(&self, id: ImportTypeId) -> &ImportType {
+        &self.comp.imports.types[id]
     }
 
     pub fn spill_return(&self) -> bool {

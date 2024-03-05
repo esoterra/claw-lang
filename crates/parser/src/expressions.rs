@@ -1,5 +1,6 @@
 use crate::lexer::Token;
 use crate::{ParseInput, ParserError};
+use ast::{EnumLiteral, Expression};
 use claw_ast as ast;
 use claw_ast::{self, expressions::BinaryOp, expressions::ExpressionId, merge, Component, UnaryOp};
 
@@ -50,18 +51,15 @@ fn pratt_parse(
 }
 
 fn parse_leaf(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
-    if input.peek()?.token == Token::LParen {
-        return parse_parenthetical(input, comp);
+    let peek0 = &input.peek()?.token;
+    let peek1 = input.peekn(1);
+    match (peek0, peek1) {
+        (Token::LParen, _) => parse_parenthetical(input, comp),
+        (Token::Identifier(_), Some(Token::LParen)) => parse_call(input, comp),
+        (Token::Identifier(_), Some(Token::Colon)) => parse_enum(input, comp),
+        (Token::Identifier(_), _) => parse_ident_expr(input, comp),
+        _ => parse_literal(input, comp),
     }
-    if matches!(input.peekn(0), Some(Token::Identifier(_)))
-        && matches!(input.peekn(1), Some(Token::LParen))
-    {
-        return parse_call(input, comp);
-    }
-    if matches!(input.peek()?.token, Token::Identifier(_)) {
-        return parse_ident_expr(input, comp);
-    }
-    parse_literal(input, comp)
 }
 
 fn parse_parenthetical(
@@ -86,7 +84,7 @@ pub fn parse_ident_expr(
             let ident = comp.new_name(ident, span);
             Ok(comp.expr_mut().alloc_ident(ident, span))
         }
-        _ => Err(input.unexpected_token("Expected identifier")),
+        _ => Err(input.unexpected_token("Parsing identifier expression")),
     }
 }
 
@@ -112,6 +110,10 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
 
     let mut args = Vec::new();
     let end_span = loop {
+        if let Some(span) = input.next_if(Token::RParen) {
+            break span;
+        }
+
         args.push(parse_expression(input, comp)?);
 
         let token = input.next()?;
@@ -125,6 +127,19 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
     let span = merge(&start_span, &end_span);
 
     Ok(comp.expr_mut().alloc_call(ident, args, span))
+}
+
+fn parse_enum(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
+
+    let enum_name = parse_ident(input, comp)?;
+    input.assert_next(Token::Colon, "Enum type name and case are separated by '::'")?;
+    input.assert_next(Token::Colon, "Enum type name and case are separated by '::'")?;
+    let case_name = parse_ident(input, comp)?;
+
+    let enum_lit = Expression::Enum(EnumLiteral { enum_name, case_name });
+    let span = merge(&comp.name_span(enum_name), &comp.name_span(case_name));
+
+    Ok(comp.expr_mut().alloc(enum_lit, span))
 }
 
 fn peek_unary_op(input: &mut ParseInput) -> Option<UnaryOp> {
@@ -289,6 +304,38 @@ mod tests {
             assert!(found_expression.context_eq(&expected_expression, &comp));
             let found_expression = parse_expression(&mut input, &mut comp).unwrap();
             assert!(found_expression.context_eq(&expected_expression, &comp));
+        }
+    }
+
+    #[test]
+    fn parsing_supports_empty_arg_calls() {
+        // parenthesized, raw, raw-span
+        let cases = ["foo", "foobar", "asdf", "asdf2"];
+        for ident in cases {
+            // Compute case information
+            let ident_span = make_span(0, ident.len());
+            let source = format!("{}()", ident);
+            let src_span = make_span(0, source.len());
+            // Construct ast
+            let (src, input) = make_input(source.as_str());
+            let mut comp = Component::new(src);
+            let ident = comp.new_name(ident.to_owned(), ident_span);
+            let expected_expression = comp.expr_mut().alloc_call(ident, vec![], src_span);
+            // Test `parse_call`
+            let mut case_input = input.clone();
+            let found_expression = parse_call(&mut case_input, &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
+            assert!(case_input.done());
+            // Test `parse_leaf`
+            let mut case_input = input.clone();
+            let found_expression = parse_leaf(&mut case_input, &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
+            assert!(case_input.done());
+            // Test `parse_expression`
+            let mut case_input = input;
+            let found_expression = parse_expression(&mut case_input, &mut comp).unwrap();
+            assert!(found_expression.context_eq(&expected_expression, &comp));
+            assert!(case_input.done());
         }
     }
 

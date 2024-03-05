@@ -95,13 +95,10 @@ impl ModuleGenerator {
         import_func: &ImportFunction,
         comp: &ast::Component,
     ) {
-
         let params = import_func
             .params
             .iter()
-            .map(|(name, rtype)| {
-                (name.to_owned(), *rtype)
-            })
+            .map(|(name, rtype)| (name.to_owned(), *rtype))
             .collect();
         let results = import_func.results;
         let func_gen = FunctionGenerator::new(params, results, comp);
@@ -168,7 +165,9 @@ impl ModuleGenerator {
                 (name, rtype)
             })
             .collect();
-        let results = function.results.map(|type_id| ResolvedType::Defined(type_id));
+        let results = function
+            .results
+            .map(|type_id| ResolvedType::Defined(type_id));
         let func_gen = FunctionGenerator::new(params, results, comp);
         let type_idx = func_gen.encode_mod_type(&mut self.module);
         let func_idx = self.module.function(type_idx);

@@ -4,15 +4,15 @@ mod builders;
 mod code;
 mod expression;
 mod function;
+mod imports;
 mod module;
 mod statement;
-mod imports;
 mod types;
 
 use builders::component::*;
 
-use claw_resolver::{ResolvedComponent, ResolverError};
 use claw_ast as ast;
+use claw_resolver::{ResolvedComponent, ResolverError};
 use miette::Diagnostic;
 use thiserror::Error;
 use types::EncodeType;
@@ -56,8 +56,6 @@ fn generate_component(
 
     Ok(builder)
 }
-
-
 
 fn generate_exports(
     component: &mut ComponentBuilder,

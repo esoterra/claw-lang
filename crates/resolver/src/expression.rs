@@ -85,7 +85,7 @@ macro_rules! gen_resolve_expression {
     }
 }
 
-gen_resolve_expression!([Identifier, Literal, Call, Unary, Binary]);
+gen_resolve_expression!([Identifier, Literal, Enum, Call, Unary, Binary]);
 
 impl ResolveExpression for ast::Identifier {
     fn setup_resolve(
@@ -143,6 +143,23 @@ impl ResolveExpression for ast::Literal {
     }
 }
 
+impl ResolveExpression for ast::EnumLiteral {
+    fn setup_resolve(
+        &self,
+        expression: ExpressionId,
+        resolver: &mut FunctionResolver,
+    ) -> Result<(), ResolverError> {
+        let item = resolver.use_name(self.enum_name)?;
+        match item {
+            ItemId::Type(rtype) => {
+                resolver.set_expr_type(expression, rtype);
+            }
+            _ => panic!("Can only use literals for enums"),
+        };
+        Ok(())
+    }
+}
+
 impl ResolveExpression for ast::Call {
     fn setup_resolve(
         &self,
@@ -156,14 +173,17 @@ impl ResolveExpression for ast::Call {
                 let params = import_func.params.iter().map(|(_name, rtype)| *rtype);
                 let results = import_func.results.clone().unwrap();
                 (params.collect(), results)
-            },
+            }
             ItemId::Function(func) => {
                 let func = &resolver.component.functions[func];
-                let params = func.params.iter().map(|(_name, type_id)| ResolvedType::Defined(*type_id));
+                let params = func
+                    .params
+                    .iter()
+                    .map(|(_name, type_id)| ResolvedType::Defined(*type_id));
                 let results = ResolvedType::Defined(*func.results.as_ref().unwrap());
                 (params.collect(), results)
-            },
-            _ => panic!("Can only call functions")
+            }
+            _ => panic!("Can only call functions"),
         };
         assert_eq!(params.len(), self.args.len());
         for (arg, rtype) in self.args.iter().copied().zip(params.into_iter()) {

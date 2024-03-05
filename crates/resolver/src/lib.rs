@@ -30,10 +30,10 @@ pub struct ResolvedComponent {
     pub funcs: HashMap<FunctionId, ResolvedFunction>,
 }
 
-#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug)]
 pub enum ItemId {
     ImportFunc(ImportFuncId),
-    ImportType(ImportTypeId),
+    Type(ResolvedType),
     Global(GlobalId),
     Param(ParamId),
     Local(LocalId),
@@ -94,10 +94,12 @@ pub fn resolve(
     imports.resolve_imports(&comp, &wit)?;
     for (name, import) in imports.mapping.iter() {
         match import {
-            ImportItemId::Type(_) => todo!(),
+            ImportItemId::Type(rtype) => {
+                mappings.insert(name.to_owned(), ItemId::Type(*rtype));
+            },
             ImportItemId::Func(func) => {
                 mappings.insert(name.to_owned(), ItemId::ImportFunc(*func));
-            },
+            }
         }
     }
 

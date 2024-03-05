@@ -11,9 +11,9 @@ use miette::{Diagnostic, Report, SourceSpan};
 use thiserror::Error;
 
 use crate::expression::*;
+use crate::imports::ImportResolver;
 use crate::statement::*;
 use crate::types::ResolvedType;
-use crate::imports::ImportResolver;
 use crate::{ItemId, ResolverError};
 
 pub(crate) struct FunctionResolver<'ctx> {

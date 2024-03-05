@@ -78,6 +78,7 @@ pub trait ContextEq<Context> {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Expression {
     Identifier(Identifier),
+    Enum(EnumLiteral),
     Literal(Literal),
     Call(Call),
     Unary(UnaryExpression),
@@ -89,12 +90,14 @@ impl ContextEq<super::Component> for ExpressionId {
         let self_span = context.expr().get_span(*self);
         let other_span = context.expr().get_span(*other);
         if self_span != other_span {
+            dbg!(self_span, other_span);
             return false;
         }
 
         let self_expr = context.expr().get_exp(*self);
         let other_expr = context.expr().get_exp(*other);
         if !self_expr.context_eq(other_expr, context) {
+            dbg!(self_expr, other_expr);
             return false;
         }
         true
@@ -128,6 +131,19 @@ pub struct Identifier {
 impl ContextEq<super::Component> for Identifier {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         context.get_name(self.ident) == context.get_name(other.ident)
+    }
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct EnumLiteral {
+    pub enum_name: NameId,
+    pub case_name: NameId
+}
+
+impl ContextEq<super::Component> for EnumLiteral {
+    fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
+        context.get_name(self.enum_name) == context.get_name(other.enum_name)
+        && context.get_name(self.case_name) == context.get_name(other.case_name)
     }
 }
 
