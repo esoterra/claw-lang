@@ -77,9 +77,7 @@ impl<'gen> FunctionEncoder<'gen> {
                 (name, rtype)
             })
             .collect();
-        let results = function
-            .results
-            .map(ResolvedType::Defined);
+        let results = function.results.map(ResolvedType::Defined);
 
         let func = EncodedFunction::new(params, results, self.resolved_comp);
         Ok(func)

@@ -76,18 +76,15 @@ impl<'gen> CodeGenerator<'gen> {
         let locals_start = local_space.len();
 
         // If the result spills, allocate it a local right after the flat params
-        let return_index = encoded_func
-            .results
-            .as_ref()
-            .and_then(|info| {
-                if info.spill.spill() {
-                    let index = local_space.len();
-                    local_space.push(enc::ValType::I32);
-                    Some(index as u32)
-                } else {
-                    None
-                }
-            });
+        let return_index = encoded_func.results.as_ref().and_then(|info| {
+            if info.spill.spill() {
+                let index = local_space.len();
+                local_space.push(enc::ValType::I32);
+                Some(index as u32)
+            } else {
+                None
+            }
+        });
 
         let call_params_index = local_space.len() as u32;
         local_space.push(enc::ValType::I32);

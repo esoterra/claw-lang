@@ -148,10 +148,7 @@ impl<'gen> ImportEncoder<'gen> {
         })
     }
 
-    fn encode_interface(
-        &mut self,
-        interface: &ResolvedInterface,
-    ) -> Result<(), GenerationError> {
+    fn encode_interface(&mut self, interface: &ResolvedInterface) -> Result<(), GenerationError> {
         ImportInterfaceEncoder::new(self, interface).encode()
     }
 
