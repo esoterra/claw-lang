@@ -10,7 +10,7 @@ export func bar(a: string) -> string {
     let res = foo(a);
     let end = now();
     if end - start > max-millis {
-        log(level::warning, "profiling", "Calling foo took a long time");
+        log(level::warn, "profiling", "Calling foo took a long time");
     }
     return res;
 }

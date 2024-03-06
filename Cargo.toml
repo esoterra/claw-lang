@@ -26,6 +26,7 @@ logos = { workspace = true }
 wasm-encoder ={ workspace = true }
 cranelift-entity = { workspace = true }
 wat = { workspace = true }
+wit-parser = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }

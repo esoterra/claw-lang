@@ -37,7 +37,7 @@ pub fn parse_statement(
         _ => {
             _ = input.next();
             Err(input.unexpected_token("Invalid statement start"))
-        },
+        }
     }
 }
 
@@ -98,7 +98,7 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<StatementI
             Token::RParen => break,
             _ => return Err(input.unexpected_token("Argument list")),
         }
-    };
+    }
 
     let end_span = input.assert_next(Token::Semicolon, "Statements must end with `;`")?;
 

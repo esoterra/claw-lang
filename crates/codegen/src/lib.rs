@@ -35,22 +35,26 @@ fn generate_component(
     let mut builder = ComponentBuilder::default();
 
     let alloc_module = builder.module_bytes(gen_allocator());
-    let code_module = builder.module(module::generate(resolved_comp)?);
-
-    let import_encoder = imports::ImportEncoder::new(&mut builder, resolved_comp);
-    let imports_instance = import_encoder.encode()?;
 
     let args: Vec<(&str, ModuleInstantiateArgs)> = vec![];
     let alloc_instance = builder.instantiate(alloc_module, args);
 
-    let args = vec![
-        ("claw", ModuleInstantiateArgs::Instance(imports_instance)),
-        ("alloc", ModuleInstantiateArgs::Instance(alloc_instance)),
-    ];
-    let code_instance = builder.instantiate(code_module, args);
-
     let memory = builder.alias_memory(alloc_instance, "memory");
     let realloc = builder.alias_core_func(alloc_instance, "realloc");
+
+    let import_encoder = imports::ImportEncoder::new(&mut builder, resolved_comp, memory, realloc);
+    let imports = import_encoder.encode()?;
+
+    let function_encoder = function::FunctionEncoder::new(resolved_comp);
+    let functions = function_encoder.encode()?;
+
+    let code_module = builder.module(module::generate(resolved_comp, &imports, &functions)?);
+
+    let args = vec![
+        ("alloc", ModuleInstantiateArgs::Instance(alloc_instance)),
+        ("claw", ModuleInstantiateArgs::Instance(imports.imports_instance)),
+    ];
+    let code_instance = builder.instantiate(code_module, args);
 
     generate_exports(&mut builder, resolved_comp, code_instance, memory, realloc)?;
 
@@ -81,7 +85,7 @@ fn generate_exports(
                 let param_type = comp.get_type(*param_type);
                 let param_type = match param_type {
                     ast::ValType::Result(_) => todo!(),
-                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(comp),
+                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(&resolved_comp),
                 };
                 (param_name, param_type)
             });
@@ -89,7 +93,7 @@ fn generate_exports(
                 let result_type = comp.get_type(result_type);
                 match result_type {
                     ast::ValType::Result(_) => todo!(),
-                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(comp),
+                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(&resolved_comp),
                 }
             });
             let type_idx = component.func_type(params, results);

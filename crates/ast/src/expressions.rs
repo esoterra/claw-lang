@@ -137,13 +137,13 @@ impl ContextEq<super::Component> for Identifier {
 #[derive(Debug, PartialEq, Clone)]
 pub struct EnumLiteral {
     pub enum_name: NameId,
-    pub case_name: NameId
+    pub case_name: NameId,
 }
 
 impl ContextEq<super::Component> for EnumLiteral {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         context.get_name(self.enum_name) == context.get_name(other.enum_name)
-        && context.get_name(self.case_name) == context.get_name(other.case_name)
+            && context.get_name(self.case_name) == context.get_name(other.case_name)
     }
 }
 

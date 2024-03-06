@@ -96,7 +96,7 @@ pub fn resolve(
         match import {
             ImportItemId::Type(rtype) => {
                 mappings.insert(name.to_owned(), ItemId::Type(*rtype));
-            },
+            }
             ImportItemId::Func(func) => {
                 mappings.insert(name.to_owned(), ItemId::ImportFunc(*func));
             }

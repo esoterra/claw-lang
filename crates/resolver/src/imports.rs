@@ -208,6 +208,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
             results,
         };
         let import_func_id = self.imports.funcs.push(import_func);
+        self.items.push(ImportItemId::Func(import_func_id));
         ImportItemId::Func(import_func_id)
     }
 
@@ -228,7 +229,13 @@ impl<'ctx> InterfaceResolver<'ctx> {
             wit::Type::Float64 => ResolvedType::Primitive(PType::F64),
             wit::Type::Char => todo!(),
             wit::Type::String => ResolvedType::Primitive(PType::String),
-            wit::Type::Id(id) => self.resolve_type_id(*id),
+            wit::Type::Id(id) => {
+                if let Some(rtype) = self.resolved_types.get(id) {
+                    *rtype
+                } else {
+                    self.resolve_type_id(*id)
+                }
+            },
         }
     }
 
@@ -253,8 +260,8 @@ impl<'ctx> InterfaceResolver<'ctx> {
                 ResolvedType::Import(import_type_id)
             }
             TDK::Type(t) => {
-                self.resolve_type(t)
-            },
+                return self.resolve_type(t);
+            }
             a => panic!("Unsupported import type kind {:?}", a),
         };
         // Record item id and resolved type

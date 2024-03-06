@@ -42,11 +42,6 @@ pub enum ModuleInstantiateArgs {
     Instance(ComponentModuleInstanceIndex),
 }
 
-pub enum ComponentTypeKind {
-    Type,
-    Func,
-}
-
 impl ComponentBuilder {
     pub fn module(&mut self, module: enc::Module) -> ComponentModuleIndex {
         self.component.section(&enc::ModuleSection(&module));
@@ -100,18 +95,6 @@ impl ComponentBuilder {
         self.next_mod_instance_idx()
     }
 
-    pub fn enum_type<'a, T>(&mut self, tags: T) -> ComponentTypeIndex
-    where
-        T: IntoIterator<Item = &'a str>,
-        T::IntoIter: ExactSizeIterator,
-    {
-        let mut section = enc::ComponentTypeSection::new();
-        let builder = section.defined_type();
-        builder.enum_type(tags);
-        self.component.section(&section);
-        self.next_type_idx()
-    }
-
     pub fn func_type<'b, P>(
         &mut self,
         params: P,
@@ -136,13 +119,10 @@ impl ComponentBuilder {
         self.next_type_idx()
     }
 
-    pub fn start_instance_type(&mut self) -> enc::InstanceType {
-        enc::InstanceType::new()
-    }
-
-    pub fn end_instance_type(&mut self, instance_type: &enc::InstanceType) -> ComponentTypeIndex {
+    pub fn instance_type(&mut self, instance_type: &enc::InstanceType) -> ComponentTypeIndex {
         let mut section = enc::ComponentTypeSection::new();
         section.instance(&instance_type);
+        self.component.section(&section);
         self.next_type_idx()
     }
 
@@ -170,9 +150,15 @@ impl ComponentBuilder {
         self.next_instance_idx()
     }
 
-    pub fn lower_func(&mut self, func: ComponentFunctionIndex) -> ComponentCoreFunctionIndex {
+    pub fn lower_func(&mut self, func: ComponentFunctionIndex,
+        memory: ComponentCoreMemoryIndex,
+        realloc: ComponentCoreFunctionIndex,) -> ComponentCoreFunctionIndex {
+        let options: [enc::CanonicalOption; 2] = [
+            enc::CanonicalOption::Memory(memory.0),
+            enc::CanonicalOption::Realloc(realloc.0),
+        ];
         let mut section = enc::CanonicalFunctionSection::new();
-        section.lower(func.0, []);
+        section.lower(func.0, options);
         self.component.section(&section);
         self.next_core_func_idx()
     }
@@ -231,12 +217,12 @@ impl ComponentBuilder {
         post_return: ComponentCoreFunctionIndex,
     ) -> ComponentFunctionIndex {
         let mut section = enc::CanonicalFunctionSection::new();
-        let canon_opts: [enc::CanonicalOption; 3] = [
+        let options: [enc::CanonicalOption; 3] = [
             enc::CanonicalOption::Memory(memory.0),
             enc::CanonicalOption::Realloc(realloc.0),
             enc::CanonicalOption::PostReturn(post_return.0),
         ];
-        section.lift(func.0, fn_type.0, canon_opts);
+        section.lift(func.0, fn_type.0, options);
         self.component.section(&section);
         self.next_func_idx()
     }

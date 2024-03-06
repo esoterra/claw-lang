@@ -13,7 +13,7 @@ pub fn parse_ident(input: &mut ParseInput, comp: &mut Component) -> Result<NameI
         _ => {
             input.next().unwrap();
             Err(input.unexpected_token("Parsing identifier"))
-        },
+        }
     }
 }
 

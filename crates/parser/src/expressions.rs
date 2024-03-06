@@ -130,13 +130,21 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<Expression
 }
 
 fn parse_enum(input: &mut ParseInput, comp: &mut Component) -> Result<ExpressionId, ParserError> {
-
     let enum_name = parse_ident(input, comp)?;
-    input.assert_next(Token::Colon, "Enum type name and case are separated by '::'")?;
-    input.assert_next(Token::Colon, "Enum type name and case are separated by '::'")?;
+    input.assert_next(
+        Token::Colon,
+        "Enum type name and case are separated by '::'",
+    )?;
+    input.assert_next(
+        Token::Colon,
+        "Enum type name and case are separated by '::'",
+    )?;
     let case_name = parse_ident(input, comp)?;
 
-    let enum_lit = Expression::Enum(EnumLiteral { enum_name, case_name });
+    let enum_lit = Expression::Enum(EnumLiteral {
+        enum_name,
+        case_name,
+    });
     let span = merge(&comp.name_span(enum_name), &comp.name_span(case_name));
 
     Ok(comp.expr_mut().alloc(enum_lit, span))

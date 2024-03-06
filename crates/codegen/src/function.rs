@@ -1,6 +1,8 @@
-use claw_ast as ast;
+use std::collections::HashMap;
 
-use claw_resolver::types::ResolvedType;
+use claw_ast::FunctionId;
+use claw_ast as ast;
+use claw_resolver::{types::ResolvedType, ResolvedComponent};
 use wasm_encoder as enc;
 
 use crate::{
@@ -8,13 +10,23 @@ use crate::{
         component::{ComponentBuilder, ComponentTypeIndex},
         module::{ModuleBuilder, ModuleTypeIndex},
     },
-    types::{align_to, EncodeType},
+    types::{align_to, EncodeType}, GenerationError,
 };
 
 const MAX_FLAT_PARAMS: u8 = 16;
 const MAX_FLAT_RESULTS: u8 = 1;
 
-pub struct FunctionGenerator {
+pub struct FunctionEncoder<'gen> {
+    resolved_comp: &'gen ResolvedComponent,
+
+    funcs: HashMap<FunctionId, EncodedFunction>,
+}
+
+pub struct EncodedFuncs {
+    pub funcs: HashMap<FunctionId, EncodedFunction>,
+}
+
+pub struct EncodedFunction {
     pub spill_params: bool,
     pub params: Vec<ParamInfo>,
     pub flat_params: Vec<enc::ValType>,
@@ -28,11 +40,58 @@ pub struct ParamInfo {
     pub mem_offset: u32,
 }
 
-impl FunctionGenerator {
+impl<'gen> FunctionEncoder<'gen> {
+    pub fn new(
+        resolved_comp: &'gen ResolvedComponent,
+    ) -> Self {
+        let funcs = HashMap::new();
+
+        Self {
+            resolved_comp,
+            funcs,
+        }
+    }
+
+    pub fn encode(mut self) -> Result<EncodedFuncs, GenerationError> {
+        // Encode function
+        for (id, function) in self.resolved_comp.component.functions.iter() {
+            let func = self.encode_func(function)?;
+            self.funcs.insert(id, func);
+        }
+
+        Ok(EncodedFuncs {
+            funcs: self.funcs,
+        })
+    }
+
+    fn encode_func(
+        &mut self,
+        function: &ast::Function
+    ) -> Result<EncodedFunction, GenerationError> {
+        let comp = &self.resolved_comp.component;
+        let params = function
+            .params
+            .iter()
+            .map(|(name, type_id)| {
+                let name = comp.get_name(*name).to_owned();
+                let rtype = ResolvedType::Defined(*type_id);
+                (name, rtype)
+            })
+            .collect();
+        let results = function
+            .results
+            .map(|type_id| ResolvedType::Defined(type_id));
+
+        let func = EncodedFunction::new(params, results, self.resolved_comp);
+        Ok(func)
+    }
+}
+
+impl EncodedFunction {
     pub fn new(
         params: Vec<(String, ResolvedType)>,
         results: Option<ResolvedType>,
-        comp: &ast::Component,
+        comp: &ResolvedComponent,
     ) -> Self {
         // Layout parameters
         let (spill_params, params, flat_params) = prepare_params(params, comp);
@@ -50,10 +109,11 @@ impl FunctionGenerator {
         }
     }
 
+    #[allow(dead_code)]
     pub fn encode_comp_type(
         &self,
         builder: &mut ComponentBuilder,
-        comp: &ast::Component,
+        comp: &ResolvedComponent,
     ) -> ComponentTypeIndex {
         let params = self
             .params
@@ -79,7 +139,7 @@ impl FunctionGenerator {
 
 fn prepare_params(
     params: Vec<(String, ResolvedType)>,
-    comp: &ast::Component,
+    comp: &ResolvedComponent,
 ) -> (bool, Vec<ParamInfo>, Vec<enc::ValType>) {
     // Flatten parameters
     let mut flat_params = Vec::new();
@@ -125,7 +185,7 @@ pub enum ResultSpillInfo {
 }
 
 impl ResultSpillInfo {
-    pub fn new(rtype: ResolvedType, comp: &ast::Component) -> Self {
+    pub fn new(rtype: ResolvedType, comp: &ResolvedComponent) -> Self {
         if rtype.flat_size(comp) > MAX_FLAT_RESULTS as u32 {
             ResultSpillInfo::Spilled
         } else {

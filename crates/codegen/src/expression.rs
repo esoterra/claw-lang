@@ -117,7 +117,6 @@ impl EncodeExpression for ast::EnumLiteral {
         expression: ExpressionId,
         code_gen: &mut CodeGenerator,
     ) -> Result<(), GenerationError> {
-        let fields = code_gen.fields(expression)?;
         match code_gen.lookup_name(self.enum_name) {
             ItemId::Type(rtype) => {
                 match rtype {
@@ -126,17 +125,19 @@ impl EncodeExpression for ast::EnumLiteral {
                         match import_type {
                             claw_resolver::ImportType::Enum(enum_type) => {
                                 let case_name = code_gen.lookup_name_str(self.case_name);
-                                let case_index = enum_type.cases.iter().position(|c| c == case_name).unwrap();
+                                // TODO nice error instead of unwrap
+                                let case_index =
+                                    enum_type.cases.iter().position(|c| c == case_name).unwrap();
                                 code_gen.const_i32(case_index as i32);
                                 let field = code_gen.one_field(expression)?;
                                 code_gen.write_expr_field(expression, &field);
-                            },
+                            }
                         }
-                    },
-                    _ => unreachable!()
+                    }
+                    _ => unreachable!(),
                 }
             }
-            _ => unreachable!()
+            _ => unreachable!(),
         }
         Ok(())
     }

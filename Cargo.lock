@@ -231,6 +231,7 @@ dependencies = [
  "wasmprinter",
  "wasmtime",
  "wat",
+ "wit-parser 0.200.0",
 ]
 
 [[package]]
