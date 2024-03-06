@@ -91,7 +91,7 @@ fn generate_exports(
                 let param_type = comp.get_type(*param_type);
                 let param_type = match param_type {
                     ast::ValType::Result(_) => todo!(),
-                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(&resolved_comp),
+                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(resolved_comp),
                 };
                 (param_name, param_type)
             });
@@ -99,7 +99,7 @@ fn generate_exports(
                 let result_type = comp.get_type(result_type);
                 match result_type {
                     ast::ValType::Result(_) => todo!(),
-                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(&resolved_comp),
+                    ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(resolved_comp),
                 }
             });
             let type_idx = component.func_type(params, results);

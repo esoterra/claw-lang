@@ -79,7 +79,7 @@ impl<'gen> FunctionEncoder<'gen> {
             .collect();
         let results = function
             .results
-            .map(|type_id| ResolvedType::Defined(type_id));
+            .map(ResolvedType::Defined);
 
         let func = EncodedFunction::new(params, results, self.resolved_comp);
         Ok(func)
@@ -127,10 +127,9 @@ impl EncodedFunction {
 
     pub fn encode_mod_type(&self, builder: &mut ModuleBuilder) -> ModuleTypeIndex {
         let params = self.flat_params.iter().copied();
-        type RSI = ResultSpillInfo;
         match self.results.as_ref().map(|info| &info.spill) {
-            Some(RSI::Flat { valtype }) => builder.func_type(params, [*valtype]),
-            Some(RSI::Spilled) => builder.func_type(params, [enc::ValType::I32]),
+            Some(ResultSpillInfo::Flat { valtype }) => builder.func_type(params, [*valtype]),
+            Some(ResultSpillInfo::Spilled) => builder.func_type(params, [enc::ValType::I32]),
             None => builder.func_type(params, []),
         }
     }

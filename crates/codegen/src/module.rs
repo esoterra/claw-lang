@@ -74,8 +74,8 @@ impl<'gen> ModuleGenerator<'gen> {
             let code_gen = CodeGenerator::new(
                 &mut self.module,
                 self.resolved_comp,
-                &self.imports,
-                &self.functions,
+                self.imports,
+                self.functions,
                 &self.func_idx_for_import,
                 &self.func_idx_for_func,
                 encoded_func,
@@ -92,7 +92,7 @@ impl<'gen> ModuleGenerator<'gen> {
             // Encode function
             let ident = function.ident;
             let encoded_func = self.functions.funcs.get(&id).unwrap();
-            let post_return = self.encode_post_return_func(ident, &encoded_func)?;
+            let post_return = self.encode_post_return_func(ident, encoded_func)?;
             // Encode code
             let mut builder = enc::Function::new(vec![]);
             builder.instruction(&enc::Instruction::Call(clear.into()));

@@ -59,10 +59,10 @@ impl ComponentBuilder {
     #[allow(dead_code)]
     pub fn inline_export(
         &mut self,
-        exports: &Vec<(String, InlineExportItem)>,
+        exports: &[(String, InlineExportItem)],
     ) -> ComponentModuleInstanceIndex {
         let exports: Vec<(String, enc::ExportKind, u32)> = exports
-            .into_iter()
+            .iter()
             .map(|(name, arg)| match arg {
                 InlineExportItem::Func(func) => (name.to_owned(), enc::ExportKind::Func, func.0),
             })
@@ -121,7 +121,7 @@ impl ComponentBuilder {
 
     pub fn instance_type(&mut self, instance_type: &enc::InstanceType) -> ComponentTypeIndex {
         let mut section = enc::ComponentTypeSection::new();
-        section.instance(&instance_type);
+        section.instance(instance_type);
         self.component.section(&section);
         self.next_type_idx()
     }

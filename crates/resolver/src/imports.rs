@@ -201,7 +201,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
                 assert_eq!(named_types.len(), 0); // Can only handle "empty" named types
                 None
             }
-            wit_parser::Results::Anon(result_type) => Some(self.resolve_type(&result_type)),
+            wit_parser::Results::Anon(result_type) => Some(self.resolve_type(result_type)),
         };
 
         let import_func = ImportFunction {
@@ -246,9 +246,8 @@ impl<'ctx> InterfaceResolver<'ctx> {
         let name = type_def.name.as_ref().unwrap().to_owned();
         assert_eq!(type_def.owner, wit::TypeOwner::Interface(self.interface_id));
         // Construct the ImportType
-        type TDK = wit::TypeDefKind;
         let rtype = match &type_def.kind {
-            TDK::Enum(enum_type) => {
+            wit::TypeDefKind::Enum(enum_type) => {
                 let name = name.clone();
                 let cases = enum_type
                     .cases
@@ -261,7 +260,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
                 let import_type_id = self.imports.types.push(import_type);
                 ResolvedType::Import(import_type_id)
             }
-            TDK::Type(t) => {
+            wit::TypeDefKind::Type(t) => {
                 return self.resolve_type(t);
             }
             a => panic!("Unsupported import type kind {:?}", a),

@@ -148,9 +148,9 @@ impl<'gen> ImportEncoder<'gen> {
         })
     }
 
-    fn encode_interface<'int>(
+    fn encode_interface(
         &mut self,
-        interface: &'int ResolvedInterface,
+        interface: &ResolvedInterface,
     ) -> Result<(), GenerationError> {
         ImportInterfaceEncoder::new(self, interface).encode()
     }
@@ -165,7 +165,7 @@ impl<'gen> ImportEncoder<'gen> {
             let func_idx = self.builder.import_func(import_name, type_idx);
             let core_func_idx = self.builder.lower_func(func_idx, self.memory, self.realloc);
 
-            let enc_import_func = EncodedImportFunc::new(import_func, &self.resolved_comp);
+            let enc_import_func = EncodedImportFunc::new(import_func, self.resolved_comp);
             self.funcs.insert(id, enc_import_func);
 
             self.inline_export_args.push((
@@ -287,7 +287,7 @@ impl<'a, 'b, 'c> ImportInterfaceEncoder<'a, 'b, 'c> {
         let ty = enc::ComponentTypeRef::Func(func_type_id);
         self.instance_type.export(&import_func.name, ty);
 
-        let enc_import_func = EncodedImportFunc::new(import_func, &self.parent.resolved_comp);
+        let enc_import_func = EncodedImportFunc::new(import_func, self.parent.resolved_comp);
         self.parent.funcs.insert(id, enc_import_func);
     }
 

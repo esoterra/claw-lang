@@ -57,6 +57,7 @@ impl From<u32> for CoreLocalId {
 }
 
 impl<'gen> CodeGenerator<'gen> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         mod_builder: &'gen mut ModuleBuilder,
         comp: &'gen ResolvedComponent,
@@ -78,7 +79,7 @@ impl<'gen> CodeGenerator<'gen> {
         let return_index = encoded_func
             .results
             .as_ref()
-            .map(|info| {
+            .and_then(|info| {
                 if info.spill.spill() {
                     let index = local_space.len();
                     local_space.push(enc::ValType::I32);
@@ -86,8 +87,7 @@ impl<'gen> CodeGenerator<'gen> {
                 } else {
                     None
                 }
-            })
-            .flatten();
+            });
 
         let call_params_index = local_space.len() as u32;
         local_space.push(enc::ValType::I32);
@@ -101,7 +101,7 @@ impl<'gen> CodeGenerator<'gen> {
             let rtype = resolved_func.local_type(id, &comp.component)?;
             let local_id = CoreLocalId((local_space.len() + locals.len()) as u32);
             index_for_local.insert(id, local_id);
-            rtype.append_flattened(&comp, &mut locals);
+            rtype.append_flattened(comp, &mut locals);
         }
         local_space.extend(locals);
 
@@ -125,11 +125,11 @@ impl<'gen> CodeGenerator<'gen> {
 
             let result_type = comp.component.functions[id].results.unwrap();
             // align
-            let align = result_type.align(&comp);
+            let align = result_type.align(comp);
             let align = 2u32.pow(align);
             builder.instruction(&enc::Instruction::I32Const(align as i32));
             // new size
-            let size = result_type.mem_size(&comp);
+            let size = result_type.mem_size(comp);
             builder.instruction(&enc::Instruction::I32Const(size as i32));
             // call allocator
             builder.instruction(&enc::Instruction::Call(realloc.into()));
@@ -208,7 +208,7 @@ impl<'gen> CodeGenerator<'gen> {
 
     pub fn one_field(&self, expression: ExpressionId) -> Result<FieldInfo, GenerationError> {
         let rtype = self.expression_type(expression)?;
-        let mut fields = rtype.fields(&self.comp);
+        let mut fields = rtype.fields(self.comp);
         assert_eq!(
             fields.len(),
             1,
@@ -219,7 +219,7 @@ impl<'gen> CodeGenerator<'gen> {
 
     pub fn fields(&self, expression: ExpressionId) -> Result<Vec<FieldInfo>, GenerationError> {
         let rtype = self.expression_type(expression)?;
-        Ok(rtype.fields(&self.comp))
+        Ok(rtype.fields(self.comp))
     }
 
     pub fn lookup_name(&self, ident: NameId) -> ItemId {
@@ -601,7 +601,7 @@ impl<'a> ExpressionAllocator<'a> {
         let rtype = self
             .func
             .expression_type(expression, &self.comp.component)?;
-        rtype.append_flattened(&self.comp, self.local_space);
+        rtype.append_flattened(self.comp, self.local_space);
         Ok(())
     }
 

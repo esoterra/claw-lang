@@ -118,23 +118,18 @@ impl EncodeExpression for ast::EnumLiteral {
         code_gen: &mut CodeGenerator,
     ) -> Result<(), GenerationError> {
         match code_gen.lookup_name(self.enum_name) {
-            ItemId::Type(rtype) => {
-                match rtype {
-                    ResolvedType::Import(import_type) => {
-                        let import_type = code_gen.lookup_import_type(import_type);
-                        match import_type {
-                            claw_resolver::ImportType::Enum(enum_type) => {
-                                let case_name = code_gen.lookup_name_str(self.case_name);
-                                // TODO nice error instead of unwrap
-                                let case_index =
-                                    enum_type.cases.iter().position(|c| c == case_name).unwrap();
-                                code_gen.const_i32(case_index as i32);
-                                let field = code_gen.one_field(expression)?;
-                                code_gen.write_expr_field(expression, &field);
-                            }
-                        }
+            ItemId::Type(ResolvedType::Import(import_type)) => {
+                let import_type = code_gen.lookup_import_type(import_type);
+                match import_type {
+                    claw_resolver::ImportType::Enum(enum_type) => {
+                        let case_name = code_gen.lookup_name_str(self.case_name);
+                        // TODO nice error instead of unwrap
+                        let case_index =
+                            enum_type.cases.iter().position(|c| c == case_name).unwrap();
+                        code_gen.const_i32(case_index as i32);
+                        let field = code_gen.one_field(expression)?;
+                        code_gen.write_expr_field(expression, &field);
                     }
-                    _ => unreachable!(),
                 }
             }
             _ => unreachable!(),

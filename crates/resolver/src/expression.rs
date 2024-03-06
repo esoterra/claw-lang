@@ -171,7 +171,7 @@ impl ResolveExpression for ast::Call {
             ItemId::ImportFunc(import_func) => {
                 let import_func = &resolver.imports.funcs[import_func];
                 let params = import_func.params.iter().map(|(_name, rtype)| *rtype);
-                let results = import_func.results.clone().unwrap();
+                let results = import_func.results.unwrap();
                 (params.collect(), results)
             }
             ItemId::Function(func) => {
