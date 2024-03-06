@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
-use claw_ast::FunctionId;
 use claw_ast as ast;
+use claw_ast::FunctionId;
 use claw_resolver::{types::ResolvedType, ResolvedComponent};
 use wasm_encoder as enc;
 
@@ -10,11 +10,9 @@ use crate::{
         component::{ComponentBuilder, ComponentTypeIndex},
         module::{ModuleBuilder, ModuleTypeIndex},
     },
-    types::{align_to, EncodeType}, GenerationError,
+    types::{align_to, EncodeType},
+    GenerationError, MAX_FLAT_PARAMS, MAX_FLAT_RESULTS,
 };
-
-const MAX_FLAT_PARAMS: u8 = 16;
-const MAX_FLAT_RESULTS: u8 = 1;
 
 pub struct FunctionEncoder<'gen> {
     resolved_comp: &'gen ResolvedComponent,
@@ -27,10 +25,15 @@ pub struct EncodedFuncs {
 }
 
 pub struct EncodedFunction {
-    pub spill_params: bool,
+    pub spill_params: Option<SpilledParams>,
     pub params: Vec<ParamInfo>,
     pub flat_params: Vec<enc::ValType>,
     pub results: Option<ResultsInfo>,
+}
+
+pub struct SpilledParams {
+    pub size: u32,
+    pub align: u32,
 }
 
 pub struct ParamInfo {
@@ -41,9 +44,7 @@ pub struct ParamInfo {
 }
 
 impl<'gen> FunctionEncoder<'gen> {
-    pub fn new(
-        resolved_comp: &'gen ResolvedComponent,
-    ) -> Self {
+    pub fn new(resolved_comp: &'gen ResolvedComponent) -> Self {
         let funcs = HashMap::new();
 
         Self {
@@ -59,14 +60,12 @@ impl<'gen> FunctionEncoder<'gen> {
             self.funcs.insert(id, func);
         }
 
-        Ok(EncodedFuncs {
-            funcs: self.funcs,
-        })
+        Ok(EncodedFuncs { funcs: self.funcs })
     }
 
     fn encode_func(
         &mut self,
-        function: &ast::Function
+        function: &ast::Function,
     ) -> Result<EncodedFunction, GenerationError> {
         let comp = &self.resolved_comp.component;
         let params = function
@@ -140,15 +139,18 @@ impl EncodedFunction {
 fn prepare_params(
     params: Vec<(String, ResolvedType)>,
     comp: &ResolvedComponent,
-) -> (bool, Vec<ParamInfo>, Vec<enc::ValType>) {
+) -> (Option<SpilledParams>, Vec<ParamInfo>, Vec<enc::ValType>) {
     // Flatten parameters
     let mut flat_params = Vec::new();
     let mut mem_offset = 0;
+    let mut align = 0;
     let mut param_info = Vec::new();
 
     for (name, rtype) in params {
         let index_offset = flat_params.len() as u32;
-        mem_offset = align_to(mem_offset, rtype.align(comp));
+        let alignment = rtype.align(comp);
+        mem_offset = align_to(mem_offset, alignment);
+        align = std::cmp::max(align, alignment);
         let info = ParamInfo {
             name,
             rtype,
@@ -161,9 +163,13 @@ fn prepare_params(
     }
     // Either generate as locals or spill to memory based on flattened size
     let spill = flat_params.len() > MAX_FLAT_PARAMS as usize;
-    let flat_params = match spill {
-        true => vec![enc::ValType::I32],
-        false => flat_params,
+    let spill = if spill {
+        flat_params.clear();
+        flat_params.push(enc::ValType::I32);
+        let size = mem_offset;
+        Some(SpilledParams { size, align })
+    } else {
+        None
     };
     (spill, param_info, flat_params)
 }

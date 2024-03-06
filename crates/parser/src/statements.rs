@@ -86,7 +86,7 @@ fn parse_call(input: &mut ParseInput, comp: &mut Component) -> Result<StatementI
 
     let mut args = Vec::new();
     loop {
-        if let Some(span) = input.next_if(Token::RParen) {
+        if input.next_if(Token::RParen).is_some() {
             break;
         }
 

@@ -3,13 +3,13 @@ import { level, log } from wasi:logging/logging;
 
 import foo: func(a: string) -> string;
 
-let max-millis: u64 = 1000;
+let max-nanos: u64 = 1000000;
 
 export func bar(a: string) -> string {
     let start = now();
     let res = foo(a);
     let end = now();
-    if end - start > max-millis {
+    if end - start > max-nanos {
         log(level::warn, "profiling", "Calling foo took a long time");
     }
     return res;

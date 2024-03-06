@@ -6,10 +6,19 @@ use claw_resolver::{ImportFuncId, ImportFunction, ResolvedComponent};
 use wasm_encoder as enc;
 
 use crate::{
-    builders::module::*, code::CodeGenerator, function::{EncodedFuncs, EncodedFunction}, imports::{EncodedImportFunc, EncodedImports}, types::EncodeType, GenerationError
+    builders::module::*,
+    code::CodeGenerator,
+    function::{EncodedFuncs, EncodedFunction},
+    imports::{EncodedImportFunc, EncodedImports},
+    types::EncodeType,
+    GenerationError,
 };
 
-pub(crate) fn generate(resolved_comp: &ResolvedComponent, imports: &EncodedImports, functions: &EncodedFuncs) -> Result<enc::Module, GenerationError> {
+pub(crate) fn generate(
+    resolved_comp: &ResolvedComponent,
+    imports: &EncodedImports,
+    functions: &EncodedFuncs,
+) -> Result<enc::Module, GenerationError> {
     ModuleGenerator::new(resolved_comp, imports, functions).generate()
 }
 
@@ -24,8 +33,12 @@ pub struct ModuleGenerator<'gen> {
     func_idx_for_func: HashMap<FunctionId, ModuleFunctionIndex>,
 }
 
-impl<'gen> ModuleGenerator<'gen>     {
-    fn new(resolved_comp: &'gen ResolvedComponent, imports: &'gen EncodedImports, functions: &'gen EncodedFuncs) -> Self {
+impl<'gen> ModuleGenerator<'gen> {
+    fn new(
+        resolved_comp: &'gen ResolvedComponent,
+        imports: &'gen EncodedImports,
+        functions: &'gen EncodedFuncs,
+    ) -> Self {
         Self {
             resolved_comp,
             comp: &resolved_comp.component,
@@ -58,7 +71,17 @@ impl<'gen> ModuleGenerator<'gen>     {
         // Encode function code
         for (id, encoded_func) in self.functions.funcs.iter() {
             let id = *id;
-            let code_gen = CodeGenerator::new(&mut self.module, self.resolved_comp, &self.func_idx_for_import, &self.func_idx_for_func, encoded_func, id, realloc)?;
+            let code_gen = CodeGenerator::new(
+                &mut self.module,
+                self.resolved_comp,
+                &self.imports,
+                &self.functions,
+                &self.func_idx_for_import,
+                &self.func_idx_for_func,
+                encoded_func,
+                id,
+                realloc,
+            )?;
             let builder = code_gen.finalize()?;
             let mod_func_idx = self.func_idx_for_func[&id];
             self.module.code(mod_func_idx, builder);
@@ -99,7 +122,7 @@ impl<'gen> ModuleGenerator<'gen>     {
     fn encode_import_func(
         &mut self,
         import_func: &ImportFunction,
-        encoded_import_func: &EncodedImportFunc
+        encoded_import_func: &EncodedImportFunc,
     ) -> ModuleFunctionIndex {
         let type_idx = encoded_import_func.encode_mod_type(&mut self.module);
         let import_name = import_func.name.as_str();

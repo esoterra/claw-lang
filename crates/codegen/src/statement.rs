@@ -85,7 +85,7 @@ impl EncodeStatement for ast::Call {
             code_gen.encode_child(*arg)?;
         }
         let item = code_gen.lookup_name(self.ident);
-        code_gen.encode_call(item)?;
+        code_gen.encode_call(item, &self.args, None)?;
         Ok(())
     }
 }

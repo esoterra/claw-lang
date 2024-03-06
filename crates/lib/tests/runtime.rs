@@ -315,9 +315,8 @@ fn test_timer_proxy() {
     let (timer, _) =
         TimerProxy::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
 
-    for x in 0..10_i32 {
-        todo!();
-    }
+    let found = timer.call_bar(&mut runtime.store, "asdf").unwrap();
+    assert_eq!(found, "asdf");
 }
 
 #[test]

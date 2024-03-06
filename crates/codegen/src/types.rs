@@ -143,7 +143,7 @@ impl EncodeType for ImportType {
     }
 
     fn to_comp_valtype(&self, _comp: &ResolvedComponent) -> enc::ComponentValType {
-        enc::ComponentValType::Type(todo!())
+        todo!()
     }
 
     fn align(&self, _comp: &ResolvedComponent) -> u32 {

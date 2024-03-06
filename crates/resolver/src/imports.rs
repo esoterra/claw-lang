@@ -149,6 +149,7 @@ pub struct InterfaceResolver<'ctx> {
 
 pub struct ResolvedInterface {
     pub interface_id: InterfaceId,
+    pub name: String,
     pub items: Vec<ImportItemId>,
 }
 
@@ -173,6 +174,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
     pub fn finalize(self) -> ResolvedInterface {
         ResolvedInterface {
             interface_id: self.interface_id,
+            name: self.wit.resolve.id_of(self.interface_id).unwrap(),
             items: self.items,
         }
     }
@@ -235,7 +237,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
                 } else {
                     self.resolve_type_id(*id)
                 }
-            },
+            }
         }
     }
 

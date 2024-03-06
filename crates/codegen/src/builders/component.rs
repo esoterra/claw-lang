@@ -150,9 +150,12 @@ impl ComponentBuilder {
         self.next_instance_idx()
     }
 
-    pub fn lower_func(&mut self, func: ComponentFunctionIndex,
+    pub fn lower_func(
+        &mut self,
+        func: ComponentFunctionIndex,
         memory: ComponentCoreMemoryIndex,
-        realloc: ComponentCoreFunctionIndex,) -> ComponentCoreFunctionIndex {
+        realloc: ComponentCoreFunctionIndex,
+    ) -> ComponentCoreFunctionIndex {
         let options: [enc::CanonicalOption; 2] = [
             enc::CanonicalOption::Memory(memory.0),
             enc::CanonicalOption::Realloc(realloc.0),

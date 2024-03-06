@@ -24,6 +24,9 @@ pub enum GenerationError {
     Resolver(#[from] ResolverError),
 }
 
+pub const MAX_FLAT_PARAMS: u8 = 16;
+pub const MAX_FLAT_RESULTS: u8 = 1;
+
 pub fn generate(resolved_comp: &ResolvedComponent) -> Result<Vec<u8>, GenerationError> {
     let component = generate_component(resolved_comp)?;
     Ok(component.finalize().finish())
@@ -52,7 +55,10 @@ fn generate_component(
 
     let args = vec![
         ("alloc", ModuleInstantiateArgs::Instance(alloc_instance)),
-        ("claw", ModuleInstantiateArgs::Instance(imports.imports_instance)),
+        (
+            "claw",
+            ModuleInstantiateArgs::Instance(imports.imports_instance),
+        ),
     ];
     let code_instance = builder.instantiate(code_module, args);
 

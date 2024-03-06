@@ -164,7 +164,7 @@ impl EncodeExpression for ast::Literal {
                 code_gen.const_i32(0);
                 code_gen.const_i32(2i32.pow(STRING_CONTENTS_ALIGNMENT));
                 code_gen.const_i32(string.len() as i32);
-                code_gen.allocate()?;
+                code_gen.allocate();
                 code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
                 // Store the string length
                 code_gen.const_i32(string.len() as i32);
@@ -214,16 +214,9 @@ impl EncodeExpression for ast::Call {
     ) -> Result<(), GenerationError> {
         for arg in self.args.iter() {
             code_gen.encode_child(*arg)?;
-            for field in code_gen.fields(*arg)?.iter() {
-                code_gen.read_expr_field(*arg, field);
-            }
         }
         let item = code_gen.lookup_name(self.ident);
-        code_gen.encode_call(item)?;
-        for field in code_gen.fields(expression)?.iter() {
-            code_gen.write_expr_field(expression, field);
-        }
-        Ok(())
+        code_gen.encode_call(item, &self.args, Some(expression))
     }
 }
 
@@ -304,7 +297,7 @@ fn encode_string_concatenation(
     code_gen.const_i32(0);
     code_gen.const_i32(2i32.pow(STRING_CONTENTS_ALIGNMENT));
     code_gen.read_expr_field(expression, &STRING_LENGTH_FIELD);
-    code_gen.allocate()?;
+    code_gen.allocate();
     code_gen.write_expr_field(expression, &STRING_OFFSET_FIELD);
     // Copy in the left string
     code_gen.read_expr_field(expression, &STRING_OFFSET_FIELD);
