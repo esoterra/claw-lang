@@ -4,6 +4,7 @@ use std::fs;
 
 use wasmtime::component::{bindgen, Component, Linker};
 use wasmtime::{Config, Engine, Store};
+use wit_parser::Resolve;
 
 #[allow(dead_code)]
 struct Runtime {
@@ -17,7 +18,9 @@ impl Runtime {
     pub fn new(name: &str) -> Self {
         let path = format!("./tests/programs/{}.claw", name);
         let input = fs::read_to_string(path).unwrap();
-        let component_bytes = compile(name.to_owned(), &input).unwrap();
+        let mut wit = Resolve::new();
+        wit.push_path("./tests/programs/wit").unwrap();
+        let component_bytes = compile(name.to_owned(), &input, wit).unwrap();
 
         println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());
 
@@ -40,7 +43,7 @@ impl Runtime {
 
 #[test]
 fn test_arithmetic() {
-    bindgen!("arithmetic" in "tests/programs");
+    bindgen!("arithmetic" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("arithmetic");
 
@@ -52,7 +55,7 @@ fn test_arithmetic() {
 
 #[test]
 fn test_counter() {
-    bindgen!("counter" in "tests/programs");
+    bindgen!("counter" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("counter");
 
@@ -102,7 +105,7 @@ fn test_counter() {
 
 #[test]
 fn test_factorial() {
-    bindgen!("factorial" in "tests/programs");
+    bindgen!("factorial" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("factorial");
 
@@ -123,7 +126,7 @@ fn test_factorial() {
 
 #[test]
 fn test_identity() {
-    bindgen!("identity" in "tests/programs");
+    bindgen!("identity" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("identity");
 
@@ -137,7 +140,7 @@ fn test_identity() {
 
 #[test]
 fn test_compare() {
-    bindgen!("compare" in "tests/programs");
+    bindgen!("compare" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("compare");
 
@@ -183,7 +186,7 @@ fn test_compare() {
 
 #[test]
 fn test_proxy_call() {
-    bindgen!("proxy-call" in "tests/programs");
+    bindgen!("proxy-call" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("proxy_call");
 
@@ -206,7 +209,7 @@ fn test_proxy_call() {
 
 #[test]
 fn test_quadratic() {
-    bindgen!("quadratic" in "tests/programs");
+    bindgen!("quadratic" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("quadratic");
 
@@ -237,7 +240,7 @@ fn test_quadratic() {
 
 #[test]
 fn test_strings() {
-    bindgen!("strings" in "tests/programs");
+    bindgen!("strings" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("strings");
 
@@ -276,8 +279,49 @@ fn test_strings() {
 }
 
 #[test]
+fn test_timer_proxy() {
+    bindgen!("timer-proxy" in "tests/programs/wit");
+
+    let mut runtime = Runtime::new("timer-proxy");
+
+    impl TimerProxyImports for () {
+        fn foo(&mut self, a: String) -> wasmtime::Result<String> {
+            wasmtime::Result::Ok(a)
+        }
+    }
+
+    use wasi::logging::logging;
+    impl logging::Host for () {
+        fn log(
+            &mut self,
+            _level: logging::Level,
+            context: String,
+            message: String,
+        ) -> wasmtime::Result<()> {
+            println!("{}: {}", context, message);
+            wasmtime::Result::Ok(())
+        }
+    }
+
+    use wasi::clocks::monotonic_clock;
+    impl monotonic_clock::Host for () {
+        fn now(&mut self) -> wasmtime::Result<monotonic_clock::Instant> {
+            wasmtime::Result::Ok(monotonic_clock::Instant::from(1u64))
+        }
+    }
+
+    TimerProxy::add_to_linker(&mut runtime.linker, |s| s).unwrap();
+
+    let (timer, _) =
+        TimerProxy::instantiate(&mut runtime.store, &runtime.component, &runtime.linker).unwrap();
+
+    let found = timer.call_bar(&mut runtime.store, "asdf").unwrap();
+    assert_eq!(found, "asdf");
+}
+
+#[test]
 fn test_unary() {
-    bindgen!("unary" in "tests/programs");
+    bindgen!("unary" in "tests/programs/wit");
 
     let mut runtime = Runtime::new("unary");
 

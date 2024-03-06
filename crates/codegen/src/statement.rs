@@ -85,7 +85,7 @@ impl EncodeStatement for ast::Call {
             code_gen.encode_child(*arg)?;
         }
         let item = code_gen.lookup_name(self.ident);
-        code_gen.encode_call(item)?;
+        code_gen.encode_call(item, &self.args, None)?;
         Ok(())
     }
 }
@@ -132,19 +132,18 @@ impl EncodeStatement for ast::Return {
             code_gen.encode_child(expression)?;
 
             let fields = code_gen.fields(expression)?;
-            for field in fields.iter() {
-                if code_gen.spill_return() {
+            if code_gen.spill_return() {
+                for field in fields.iter() {
                     code_gen.read_return_ptr()?;
                     code_gen.field_address(field);
                     code_gen.read_expr_field(expression, field);
                     code_gen.write_mem(field);
-                } else {
+                }
+                code_gen.read_return_ptr()?;
+            } else {
+                for field in fields.iter() {
                     code_gen.read_expr_field(expression, field);
                 }
-            }
-
-            if code_gen.spill_return() {
-                code_gen.read_return_ptr()?;
             }
         }
         code_gen.instruction(&Instruction::Return);
@@ -160,7 +159,8 @@ fn encode_assignment(
     code_gen.encode_child(expression)?;
     let fields = code_gen.fields(expression)?;
     match code_gen.lookup_name(ident) {
-        ItemId::Import(_) => panic!("Assigning to imports isn't allowed!!"),
+        ItemId::ImportFunc(_) => panic!("Assigning to imported function isn't allowed!!"),
+        ItemId::Type(_) => panic!("Assigning to imported type isn't allowed!!"),
         ItemId::Global(global) => {
             // TODO handle composite globals
             for field in fields {

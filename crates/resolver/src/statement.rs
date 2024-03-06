@@ -1,11 +1,9 @@
 use claw_ast as ast;
 
-use crate::{
-    ComponentContext, FunctionResolver, ItemId, LocalInfo, ResolveExpression, ResolvedType,
-    ResolverError,
-};
+use crate::types::{ResolvedType, RESOLVED_BOOL};
+use crate::{FunctionResolver, ItemId, LocalInfo, ResolverError};
 
-pub trait ResolveStatement {
+pub(crate) trait ResolveStatement {
     /// Set up locals
     /// * Add them to resolver.locals
     /// * Identify the local_uses
@@ -15,11 +13,7 @@ pub trait ResolveStatement {
     /// * Links identifiers to their targets in resolver.bindings
     ///
     /// Record expression parents
-    fn setup_resolve(
-        &self,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError>;
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError>;
 }
 
 macro_rules! gen_resolve_statement {
@@ -28,12 +22,11 @@ macro_rules! gen_resolve_statement {
             fn setup_resolve(
                 &self,
                 resolver: &mut FunctionResolver,
-                context: &ComponentContext<'_>,
             ) -> Result<(), ResolverError> {
                 match self {
                     $(ast::Statement::$expr_type(inner) => {
                         let inner: &dyn ResolveStatement = inner;
-                        inner.setup_resolve(resolver, context)
+                        inner.setup_resolve(resolver)
                     },)*
                 }
             }
@@ -44,32 +37,23 @@ macro_rules! gen_resolve_statement {
 gen_resolve_statement!([Let, Assign, Call, If, Return]);
 
 impl ResolveStatement for ast::Let {
-    fn setup_resolve(
-        &self,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError> {
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
         let info = LocalInfo {
             ident: self.ident.to_owned(),
             mutable: self.mutable,
             annotation: self.annotation.to_owned(),
         };
         let local = resolver.locals.push(info);
-        let span = context.component.name_span(self.ident);
+        let span = resolver.component.name_span(self.ident);
         resolver.local_spans.insert(local, span);
         let item = ItemId::Local(local);
-        resolver.define_name(context, self.ident, item)?;
+        resolver.define_name(self.ident, item)?;
 
-        context
-            .component
-            .expr()
-            .get_exp(self.expression)
-            .setup_resolve(self.expression, resolver, context)?;
-
+        resolver.setup_expression(self.expression)?;
         resolver.use_local(local, self.expression);
 
         if let Some(annotation) = self.annotation {
-            resolver.set_local_type(local, ResolvedType::ValType(annotation))
+            resolver.set_local_type(local, ResolvedType::Defined(annotation))
         }
 
         Ok(())
@@ -77,86 +61,41 @@ impl ResolveStatement for ast::Let {
 }
 
 impl ResolveStatement for ast::Assign {
-    fn setup_resolve(
-        &self,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError> {
-        resolver.use_name(context, self.ident)?;
-        context
-            .component
-            .expr()
-            .get_exp(self.expression)
-            .setup_resolve(self.expression, resolver, context)
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
+        let item = resolver.use_name(self.ident)?;
+        if let ItemId::Local(local) = item {
+            resolver.use_local(local, self.expression);
+        }
+        resolver.setup_expression(self.expression)
     }
 }
 
 impl ResolveStatement for ast::Call {
-    fn setup_resolve(
-        &self,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError> {
-        resolver.use_name(context, self.ident)?;
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
+        resolver.use_name(self.ident)?;
         for arg in self.args.iter() {
-            context
-                .component
-                .expr()
-                .get_exp(*arg)
-                .setup_resolve(*arg, resolver, context)?;
+            resolver.setup_expression(*arg)?;
         }
         Ok(())
     }
 }
 
-pub const RESOLVED_BOOL: ResolvedType = ResolvedType::Primitive(ast::PrimitiveType::Bool);
-
 impl ResolveStatement for ast::If {
-    fn setup_resolve(
-        &self,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError> {
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
         resolver.set_expr_type(self.condition, RESOLVED_BOOL);
-
-        // Resolve condition in current context
-        context
-            .component
-            .expr()
-            .get_exp(self.condition)
-            .setup_resolve(self.condition, resolver, context)?;
-        // Take a checkpoint at the state of the mappings before this block
-        let checkpoint = resolver.mapping.checkpoint();
-        // Resolve all of the inner statements
-        for statement in self.block.iter() {
-            context
-                .component
-                .get_statement(*statement)
-                .setup_resolve(resolver, context)?;
-        }
-        // Restore the state of the mappings from before the block
-        resolver.mapping.restore(checkpoint);
-        Ok(())
+        resolver.setup_expression(self.condition)?;
+        resolver.setup_block(&self.block)
     }
 }
 
 impl ResolveStatement for ast::Return {
-    fn setup_resolve(
-        &self,
-        resolver: &mut FunctionResolver,
-        context: &ComponentContext<'_>,
-    ) -> Result<(), ResolverError> {
-        let return_type = context.func(resolver.id).return_type;
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
+        let return_type = resolver.function.results;
         match (return_type, self.expression) {
             (Some(return_type), Some(expression)) => {
-                let rtype = ResolvedType::ValType(return_type);
+                let rtype = ResolvedType::Defined(return_type);
                 resolver.set_expr_type(expression, rtype);
-
-                context
-                    .component
-                    .expr()
-                    .get_exp(expression)
-                    .setup_resolve(expression, resolver, context)?;
+                resolver.setup_expression(expression)?;
             }
             (Some(_), None) => panic!(
                 "Return statements must contain an expression when function has a return type"

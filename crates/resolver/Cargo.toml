@@ -15,3 +15,4 @@ miette = { workspace = true }
 thiserror = { workspace = true }
 claw-common = { workspace = true }
 claw-ast = { workspace = true }
+wit-parser = { workspace = true }

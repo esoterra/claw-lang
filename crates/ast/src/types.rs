@@ -6,11 +6,14 @@ use super::{Component, NameId};
 pub struct TypeId(u32);
 entity_impl!(TypeId, "type");
 
+#[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct TypeDefId(u32);
+entity_impl!(TypeDefId, "typedef");
+
 /// The type for all values
 #[derive(Debug, Hash, Clone)]
 pub enum ValType {
-    // Result Type
-    Result { ok: TypeId, err: TypeId },
+    Result(ResultType),
     Primitive(PrimitiveType),
 }
 
@@ -37,25 +40,22 @@ pub enum PrimitiveType {
     String,
 }
 
+#[derive(Debug, Hash, Clone)]
+pub struct ResultType {
+    pub ok: TypeId,
+    pub err: TypeId,
+}
+
 impl ValType {
     pub fn eq(&self, other: &Self, comp: &Component) -> bool {
         match (self, other) {
-            (
-                ValType::Result {
-                    ok: l_ok,
-                    err: l_err,
-                },
-                ValType::Result {
-                    ok: r_ok,
-                    err: r_err,
-                },
-            ) => {
-                let l_ok = comp.get_type(*l_ok);
-                let r_ok = comp.get_type(*r_ok);
+            (ValType::Result(left), ValType::Result(right)) => {
+                let l_ok = comp.get_type(left.ok);
+                let r_ok = comp.get_type(right.ok);
                 let ok_eq = l_ok.eq(r_ok, comp);
 
-                let l_err = comp.get_type(*l_err);
-                let r_err = comp.get_type(*r_err);
+                let l_err = comp.get_type(left.err);
+                let r_err = comp.get_type(right.err);
                 let err_eq = l_err.eq(r_err, comp);
 
                 ok_eq && err_eq
@@ -68,21 +68,16 @@ impl ValType {
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum TypeDefinition {
-    // TODO
+    Record(RecordTypeDef),
+}
+
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+pub struct RecordTypeDef {
+    fields: Vec<(NameId, TypeId)>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct FnType {
-    pub arguments: Vec<(NameId, TypeId)>,
-    pub return_type: Option<TypeId>,
-}
-
-impl super::FnTypeInfo for FnType {
-    fn get_args(&self) -> &[(NameId, TypeId)] {
-        self.arguments.as_slice()
-    }
-
-    fn get_return_type(&self) -> Option<TypeId> {
-        self.return_type
-    }
+    pub params: Vec<(NameId, TypeId)>,
+    pub results: Option<TypeId>,
 }

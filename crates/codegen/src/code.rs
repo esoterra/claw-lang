@@ -4,30 +4,49 @@ use ast::{ExpressionId, FunctionId, NameId, StatementId};
 use claw_ast as ast;
 
 use crate::{
-    function::{FunctionGenerator, ParamInfo, ReturnInfo},
+    builders::module::{ModuleBuilder, ModuleDataIndex, ModuleFunctionIndex},
+    expression::EncodeExpression,
+    function::{self, EncodedFuncs, EncodedFunction},
+    imports::{self, EncodedImports},
+    statement::EncodeStatement,
     types::{EncodeType, FieldInfo, Signedness},
-    ComponentGenerator, EncodeExpression, EncodeStatement, GenerationError, ModuleDataIndex,
-    ModuleFunctionIndex,
+    GenerationError,
 };
-use claw_resolver::{FunctionResolver, ItemId, LocalId, ParamId, ResolvedComponent, ResolvedType};
+use claw_resolver::{
+    types::ResolvedType, ImportFuncId, ImportType, ImportTypeId, ItemId, LocalId, ParamId,
+    ResolvedComponent, ResolvedFunction,
+};
 use cranelift_entity::EntityRef;
 use wasm_encoder as enc;
 
 pub struct CodeGenerator<'gen> {
-    id: FunctionId,
+    // Parent output (currently just for data segments)
+    mod_builder: &'gen mut ModuleBuilder,
+
+    // Context
     comp: &'gen ResolvedComponent,
-    parent: &'gen mut ComponentGenerator,
+    imports: &'gen EncodedImports,
+    functions: &'gen EncodedFuncs,
+    func_idx_for_import: &'gen HashMap<ImportFuncId, ModuleFunctionIndex>,
+    func_idx_for_func: &'gen HashMap<FunctionId, ModuleFunctionIndex>,
 
-    builder: enc::Function,
     realloc: ModuleFunctionIndex,
+    // Function structs
+    function: &'gen ast::Function,
+    resolved_func: &'gen ResolvedFunction,
+    encoded_func: &'gen EncodedFunction,
 
-    params: Vec<ParamInfo>,
-    return_info: ReturnInfo,
-    return_index: Option<u32>,
-    index_for_local: HashMap<LocalId, CoreLocalId>,
-    index_for_expr: HashMap<ExpressionId, CoreLocalId>,
+    // Internal output
+    builder: enc::Function,
+
+    // Tracking state
     #[allow(dead_code)]
     local_space: Vec<enc::ValType>,
+    return_index: Option<u32>,
+    call_params_index: u32,
+    call_results_index: u32,
+    index_for_local: HashMap<LocalId, CoreLocalId>,
+    index_for_expr: HashMap<ExpressionId, CoreLocalId>,
 }
 pub struct CoreLocalId(u32);
 
@@ -38,50 +57,55 @@ impl From<u32> for CoreLocalId {
 }
 
 impl<'gen> CodeGenerator<'gen> {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
-        code_gen: &'gen mut ComponentGenerator,
+        mod_builder: &'gen mut ModuleBuilder,
         comp: &'gen ResolvedComponent,
-        func_gen: FunctionGenerator,
-        realloc: ModuleFunctionIndex,
+        imports: &'gen EncodedImports,
+        functions: &'gen EncodedFuncs,
+        func_idx_for_import: &'gen HashMap<ImportFuncId, ModuleFunctionIndex>,
+        func_idx_for_func: &'gen HashMap<FunctionId, ModuleFunctionIndex>,
+        encoded_func: &'gen EncodedFunction,
         id: FunctionId,
+        realloc: ModuleFunctionIndex,
     ) -> Result<Self, GenerationError> {
-        let resolver = &comp.resolved_funcs[&id];
+        let function = &comp.component.functions[id];
+        let resolved_func = &comp.funcs[&id];
 
-        // Layout parameters
-        let FunctionGenerator {
-            params,
-            param_types,
-            return_type,
-        } = func_gen;
-        let mut local_space = param_types;
-
+        let mut local_space = encoded_func.flat_params.clone();
         let locals_start = local_space.len();
 
-        let return_index = if return_type.spill() {
-            let index = local_space.len();
-            local_space.push(enc::ValType::I32);
-            Some(index as u32)
-        } else {
-            None
-        };
+        // If the result spills, allocate it a local right after the flat params
+        let return_index = encoded_func.results.as_ref().and_then(|info| {
+            if info.spill.spill() {
+                let index = local_space.len();
+                local_space.push(enc::ValType::I32);
+                Some(index as u32)
+            } else {
+                None
+            }
+        });
+
+        let call_params_index = local_space.len() as u32;
+        local_space.push(enc::ValType::I32);
+        let call_results_index = local_space.len() as u32;
+        local_space.push(enc::ValType::I32);
 
         // Layout locals
         let mut index_for_local = HashMap::new();
-        let mut locals = Vec::with_capacity(resolver.locals.len());
-        for (id, _local) in resolver.locals.iter() {
-            let rtype = resolver.get_resolved_local_type(id, &comp.component)?;
+        let mut locals = Vec::with_capacity(resolved_func.locals.len());
+        for (id, _local) in resolved_func.locals.iter() {
+            let rtype = resolved_func.local_type(id, &comp.component)?;
             let local_id = CoreLocalId((local_space.len() + locals.len()) as u32);
             index_for_local.insert(id, local_id);
-            rtype.append_flattened(&comp.component, &mut locals);
+            rtype.append_flattened(comp, &mut locals);
         }
         local_space.extend(locals);
 
         // Layout expressions
-        let resolver = &comp.resolved_funcs[&id];
         let mut index_for_expr = HashMap::new();
         let mut allocator =
-            ExpressionAllocator::new(comp, resolver, &mut local_space, &mut index_for_expr);
-        let function = &comp.component.functions[id];
+            ExpressionAllocator::new(comp, resolved_func, &mut local_space, &mut index_for_expr);
         for statement in function.body.iter() {
             let statement = comp.component.get_statement(*statement);
             statement.alloc_expr_locals(&mut allocator)?;
@@ -96,13 +120,13 @@ impl<'gen> CodeGenerator<'gen> {
             builder.instruction(&enc::Instruction::I32Const(0));
             builder.instruction(&enc::Instruction::I32Const(0));
 
-            let result_type = comp.component.functions[id].return_type.unwrap();
+            let result_type = comp.component.functions[id].results.unwrap();
             // align
-            let align = result_type.align(&comp.component);
+            let align = result_type.align(comp);
             let align = 2u32.pow(align);
             builder.instruction(&enc::Instruction::I32Const(align as i32));
             // new size
-            let size = result_type.mem_size(&comp.component);
+            let size = result_type.mem_size(comp);
             builder.instruction(&enc::Instruction::I32Const(size as i32));
             // call allocator
             builder.instruction(&enc::Instruction::Call(realloc.into()));
@@ -111,17 +135,23 @@ impl<'gen> CodeGenerator<'gen> {
         }
 
         Ok(Self {
-            id,
-            parent: code_gen,
+            mod_builder,
             comp,
-            builder,
+            imports,
+            functions,
             realloc,
-            params,
-            return_info: return_type,
+            func_idx_for_import,
+            func_idx_for_func,
+            function,
+            resolved_func,
+            encoded_func,
+            builder,
+            local_space,
             return_index,
+            call_params_index,
+            call_results_index,
             index_for_local,
             index_for_expr,
-            local_space,
         })
     }
 
@@ -144,12 +174,13 @@ impl<'gen> CodeGenerator<'gen> {
             .instruction(&enc::Instruction::I32Const(constant));
     }
 
-    pub fn get_resolved_type(
+    pub fn expression_type(
         &self,
         expression: ExpressionId,
     ) -> Result<ResolvedType, GenerationError> {
-        let resolver = &self.comp.resolved_funcs[&self.id];
-        let type_id = resolver.get_resolved_type(expression, &self.comp.component)?;
+        let type_id = self
+            .resolved_func
+            .expression_type(expression, &self.comp.component)?;
         Ok(type_id)
     }
 
@@ -157,13 +188,14 @@ impl<'gen> CodeGenerator<'gen> {
         &self,
         expression: ExpressionId,
     ) -> Result<Option<ast::PrimitiveType>, GenerationError> {
-        let rtype = self.get_resolved_type(expression)?;
+        let rtype = self.expression_type(expression)?;
         let ptype = match rtype {
             ResolvedType::Primitive(ptype) => Some(ptype),
-            ResolvedType::ValType(type_id) => {
+            ResolvedType::Import(_) => todo!(),
+            ResolvedType::Defined(type_id) => {
                 let valtype = self.comp.component.get_type(type_id);
                 match valtype {
-                    ast::ValType::Result { .. } => None,
+                    ast::ValType::Result(_) => None,
                     ast::ValType::Primitive(ptype) => Some(*ptype),
                 }
             }
@@ -172,8 +204,8 @@ impl<'gen> CodeGenerator<'gen> {
     }
 
     pub fn one_field(&self, expression: ExpressionId) -> Result<FieldInfo, GenerationError> {
-        let rtype = self.get_resolved_type(expression)?;
-        let mut fields = rtype.fields(&self.comp.component);
+        let rtype = self.expression_type(expression)?;
+        let mut fields = rtype.fields(self.comp);
         assert_eq!(
             fields.len(),
             1,
@@ -183,48 +215,230 @@ impl<'gen> CodeGenerator<'gen> {
     }
 
     pub fn fields(&self, expression: ExpressionId) -> Result<Vec<FieldInfo>, GenerationError> {
-        let rtype = self.get_resolved_type(expression)?;
-        Ok(rtype.fields(&self.comp.component))
+        let rtype = self.expression_type(expression)?;
+        Ok(rtype.fields(self.comp))
     }
 
     pub fn lookup_name(&self, ident: NameId) -> ItemId {
-        let resolver = &self.comp.resolved_funcs[&self.id];
-        resolver.bindings[&ident]
+        self.resolved_func.bindings[&ident]
+    }
+
+    pub fn lookup_name_str(&self, ident: NameId) -> &str {
+        self.comp.component.get_name(ident)
+    }
+
+    pub fn lookup_import_type(&self, id: ImportTypeId) -> &ImportType {
+        &self.comp.imports.types[id]
     }
 
     pub fn spill_return(&self) -> bool {
-        self.return_info.spill()
+        self.encoded_func
+            .results
+            .as_ref()
+            .map(|r| r.spill())
+            .unwrap_or(false)
     }
 
-    pub fn allocate(&mut self) -> Result<(), GenerationError> {
-        self.instruction(&enc::Instruction::Call(self.realloc.into()));
+    pub fn allocate(&mut self) {
+        self.instruction(&enc::Instruction::Call(self.realloc.into()))
+    }
+
+    pub fn encode_call(
+        &mut self,
+        item: ItemId,
+        args: &[ExpressionId],
+        expression: Option<ExpressionId>,
+    ) -> Result<(), GenerationError> {
+        match item {
+            ItemId::ImportFunc(id) => self.encode_import_call(id, args, expression),
+            ItemId::Function(id) => self.encode_func_call(id, args, expression),
+            _ => panic!(""),
+        }
+    }
+
+    fn encode_import_call(
+        &mut self,
+        id: ImportFuncId,
+        args: &[ExpressionId],
+        expression: Option<ExpressionId>,
+    ) -> Result<(), GenerationError> {
+        let enc_import_func = self.imports.funcs.get(&id).unwrap();
+        // Prepare arguments
+        if let Some(spilled_params) = &enc_import_func.spill_params {
+            self.prepare_import_spilled_args(spilled_params, args)?;
+        } else {
+            // Push all the field values onto the stack
+            for arg in args.iter().copied() {
+                let fields = self.fields(arg)?;
+                for field in fields.iter() {
+                    self.read_expr_field(arg, field);
+                }
+            }
+        }
+        // Prepare return area
+        if let Some(spilled_results) = &enc_import_func.spill_results {
+            self.prepare_import_return_area(spilled_results);
+        }
+        // Encode call instruction
+        let index = self.func_idx_for_import.get(&id);
+        let index = *index.unwrap();
+        self.instruction(&enc::Instruction::Call(index.into()));
+        // Write expression output if needed
+        if let Some(expression) = expression {
+            let fields = self.fields(expression)?;
+            for field in fields.iter() {
+                if enc_import_func.spill_results.is_some() {
+                    // spilled value is read from return area
+                    self.read_return_area(field);
+                } else {
+                    // value is already on stack
+                }
+                self.write_expr_field(expression, field);
+            }
+        }
         Ok(())
     }
 
-    pub fn encode_call(&mut self, item: ItemId) -> Result<(), GenerationError> {
-        let index = match item {
-            ItemId::Import(import) => self.parent.func_idx_for_import[&import],
-            ItemId::Function(function) => self.parent.func_idx_for_func[&function],
-            _ => panic!(""),
-        };
+    fn prepare_import_spilled_args(
+        &mut self,
+        spilled_params: &imports::SpilledParams,
+        args: &[ExpressionId],
+    ) -> Result<(), GenerationError> {
+        // Allocate spilled parameters
+        self.const_i32(0);
+        self.const_i32(0);
+        self.const_i32(2i32.pow(spilled_params.align));
+        self.const_i32(spilled_params.size as i32);
+        self.allocate();
+        self.local_set(self.call_params_index);
+        // Write params into memory
+        assert_eq!(spilled_params.params.len(), args.len());
+        let args_iter = args.iter().copied();
+        let params_iter = spilled_params.params.iter();
+        for (arg, param_info) in args_iter.zip(params_iter) {
+            let fields = self.fields(arg)?;
+            for field in fields.iter() {
+                self.local_get(self.call_params_index);
+                let mem_offset = param_info.mem_offset + field.mem_offset;
+                self.const_i32(mem_offset as i32);
+                self.instruction(&enc::Instruction::I32Add);
+                self.read_expr_field(arg, field);
+                self.write_mem(field);
+            }
+        }
+        // Push param pointer onto stack
+        self.local_get(self.call_params_index);
+        Ok(())
+    }
+
+    fn prepare_import_return_area(&mut self, spilled_results: &imports::SpilledResults) {
+        // Allocate spilled results
+        self.const_i32(0);
+        self.const_i32(0);
+        self.const_i32(2i32.pow(spilled_results.align));
+        self.const_i32(spilled_results.size as i32);
+        self.allocate();
+        self.local_set(self.call_results_index);
+        // Push result pointer onto stack
+        self.local_get(self.call_results_index);
+    }
+
+    fn read_return_area(&mut self, field: &FieldInfo) {
+        self.local_get(self.call_results_index);
+        self.read_mem_field(field);
+    }
+
+    fn encode_func_call(
+        &mut self,
+        id: FunctionId,
+        args: &[ExpressionId],
+        expression: Option<ExpressionId>,
+    ) -> Result<(), GenerationError> {
+        let encoded_func = self.functions.funcs.get(&id).unwrap();
+        // Prepare arguments
+        if let Some(spilled_params) = &encoded_func.spill_params {
+            self.prepare_function_spilled_args(spilled_params, &encoded_func.params, args)?;
+        } else {
+            // Push all the field values onto the stack
+            for arg in args.iter().copied() {
+                let fields = self.fields(arg)?;
+                for field in fields.iter() {
+                    self.read_expr_field(arg, field);
+                }
+            }
+        }
+
+        // Encode call instruction
+        let index = self.func_idx_for_func.get(&id);
+        let index = *index.unwrap();
         self.instruction(&enc::Instruction::Call(index.into()));
+        // Write expression output if needed
+        if let Some(expression) = expression {
+            let fields = self.fields(expression)?;
+            if let Some(results) = &encoded_func.results {
+                if results.spill() {
+                    // Save the results pointer
+                    self.local_set(self.call_results_index);
+                    // Write the fields from return area
+                    for field in fields.iter() {
+                        self.read_return_area(field);
+                        self.write_expr_field(expression, field);
+                    }
+                } else {
+                    // Write the fields from the stack
+                    for field in fields.iter() {
+                        self.write_expr_field(expression, field);
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn prepare_function_spilled_args(
+        &mut self,
+        spilled_params: &function::SpilledParams,
+        params: &[function::ParamInfo],
+        args: &[ExpressionId],
+    ) -> Result<(), GenerationError> {
+        // Allocate spilled parameters
+        self.const_i32(0);
+        self.const_i32(0);
+        self.const_i32(2i32.pow(spilled_params.align));
+        self.const_i32(spilled_params.size as i32);
+        self.allocate();
+        self.local_set(self.call_params_index);
+        // Write params into memory
+        assert_eq!(params.len(), args.len());
+        let args_iter = args.iter().copied();
+        let params_iter = params.iter();
+        for (arg, param_info) in args_iter.zip(params_iter) {
+            let fields = self.fields(arg)?;
+            for field in fields.iter() {
+                self.local_get(self.call_params_index);
+                let mem_offset = param_info.mem_offset + field.mem_offset;
+                self.const_i32(mem_offset as i32);
+                self.instruction(&enc::Instruction::I32Add);
+                self.read_expr_field(arg, field);
+                self.write_mem(field);
+            }
+        }
+        // Push param pointer onto stack
+        self.local_get(self.call_params_index);
         Ok(())
     }
 
     pub fn read_param_field(&mut self, param: ParamId, field: &FieldInfo) {
-        let param_info = &self.params[param.index()];
-        match param_info {
-            ParamInfo::Local(local_info) => {
-                let local_index = local_info.index_offset + field.index_offset;
-                self.local_get(local_index);
-            }
-            ParamInfo::Spilled(spilled_info) => {
-                let mem_index = spilled_info.mem_offset + field.mem_offset;
-                self.builder.instruction(&enc::Instruction::LocalGet(0));
-                self.const_i32(mem_index as i32);
-                self.builder.instruction(&enc::Instruction::I32Add);
-                self.load_field(field);
-            }
+        let param_info = &self.encoded_func.params[param.index()];
+        if self.encoded_func.spill_params.is_some() {
+            let mem_index = param_info.mem_offset + field.mem_offset;
+            self.builder.instruction(&enc::Instruction::LocalGet(0));
+            self.const_i32(mem_index as i32);
+            self.builder.instruction(&enc::Instruction::I32Add);
+            self.load_field(field);
+        } else {
+            let local_index = param_info.index_offset + field.index_offset;
+            self.local_get(local_index);
         }
     }
 
@@ -276,7 +490,7 @@ impl<'gen> CodeGenerator<'gen> {
     }
 
     pub fn encode_const_bytes(&mut self, data: &[u8]) -> ModuleDataIndex {
-        self.parent.module.data(data)
+        self.mod_builder.data(data)
     }
 
     pub fn encode_const_int(&mut self, int: u64, field: &FieldInfo) {
@@ -342,23 +556,19 @@ impl<'gen> CodeGenerator<'gen> {
         self.builder.instruction(&instruction);
     }
 
-    pub fn finalize(mut self) -> Result<(), GenerationError> {
-        let function = &self.comp.component.functions[self.id];
-        for statement in function.body.iter() {
+    pub fn finalize(mut self) -> Result<enc::Function, GenerationError> {
+        for statement in self.function.body.iter() {
             self.encode_statement(*statement)?;
         }
         self.builder.instruction(&enc::Instruction::End);
-
-        let mod_func_idx = self.parent.func_idx_for_func[&self.id];
-        self.parent.module.code(mod_func_idx, self.builder);
-        Ok(())
+        Ok(self.builder)
     }
 }
 
 pub struct ExpressionAllocator<'a> {
     // Context
     comp: &'a ResolvedComponent,
-    resolver: &'a FunctionResolver,
+    func: &'a ResolvedFunction,
     // State
     local_space: &'a mut Vec<enc::ValType>,
     index_for_expr: &'a mut HashMap<ExpressionId, CoreLocalId>,
@@ -367,13 +577,13 @@ pub struct ExpressionAllocator<'a> {
 impl<'a> ExpressionAllocator<'a> {
     pub fn new(
         comp: &'a ResolvedComponent,
-        resolver: &'a FunctionResolver,
+        func: &'a ResolvedFunction,
         local_space: &'a mut Vec<enc::ValType>,
         index_for_expr: &'a mut HashMap<ExpressionId, CoreLocalId>,
     ) -> Self {
         Self {
             comp,
-            resolver,
+            func,
             local_space,
             index_for_expr,
         }
@@ -386,12 +596,13 @@ impl<'a> ExpressionAllocator<'a> {
         self.index_for_expr.insert(expression, index);
         // Allocate locals
         let rtype = self
-            .resolver
-            .get_resolved_type(expression, &self.comp.component)?;
-        rtype.append_flattened(&self.comp.component, self.local_space);
+            .func
+            .expression_type(expression, &self.comp.component)?;
+        rtype.append_flattened(self.comp, self.local_space);
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn alloc_extra(&mut self, valtype: enc::ValType) -> Result<(), GenerationError> {
         self.local_space.push(valtype);
         Ok(())

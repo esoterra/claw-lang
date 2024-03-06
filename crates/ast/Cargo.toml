@@ -13,3 +13,4 @@ repository = { workspace = true }
 miette = { workspace = true }
 claw-common = { workspace = true }
 cranelift-entity = { workspace = true }
+wit-parser = { workspace = true }

@@ -26,6 +26,7 @@ logos = { workspace = true }
 wasm-encoder ={ workspace = true }
 cranelift-entity = { workspace = true }
 wat = { workspace = true }
+wit-parser = { workspace = true }
 
 [dev-dependencies]
 pretty_assertions = { workspace = true }
@@ -67,3 +68,4 @@ wat = "1.200.0"
 pretty_assertions = "1.1.0"
 wasmtime = { version = "15.0.0", features = ["component-model"]}
 wasmprinter = "0.2.75"
+wit-parser = "0.200.0"
