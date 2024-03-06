@@ -29,7 +29,7 @@ jobs:
       run: cargo fmt --check
 
     - name: Lint
-      run: cargo clippy -D warnings
+      run: cargo clippy -- -D warnings
 
     - name: Run tests
       run: cargo test --workspace
