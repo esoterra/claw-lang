@@ -2,8 +2,8 @@
 
 #### Table of Contents
 
-[Code of Conduct](#code-of-conduct)
-[Getting Started Contributing](#getting-started-contributing)
+* [Code of Conduct](#code-of-conduct)
+* [Getting Started Contributing](#getting-started-contributing)
 
 ## Code of Conduct
 
