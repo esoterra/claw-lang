@@ -2,7 +2,11 @@
 .vscode
 
 # So that files from debugging don't get committed
-# Only applies to wat/wasm files in root
+# Only applies to claw, wat, and wasm files in root
 # Not e.g. crates/codegen/allocator.wat
 *.wat
 *.wasm
+*.claw
+
+# The compiled publish script
+publish
