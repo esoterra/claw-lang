@@ -98,7 +98,7 @@ impl ImportResolver {
 
         let alias = match alias {
             Some(alias) => comp.get_name(alias),
-            None => name
+            None => name,
         };
         let import_func = ImportFunction {
             alias: alias.to_owned(),

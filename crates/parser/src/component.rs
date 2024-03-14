@@ -63,11 +63,14 @@ fn parse_plain_import(
             let _ = input.next();
             Some(parse_ident(input, comp)?)
         }
-        _ => None
+        _ => None,
     };
     input.assert_next(Token::Colon, "Plain imports must annotate their type")?;
     let external_type = parse_external_type(input, comp)?;
-    input.assert_next(Token::Semicolon, "Plain imports must be ended by semicolons")?;
+    input.assert_next(
+        Token::Semicolon,
+        "Plain imports must be ended by semicolons",
+    )?;
 
     Ok(PlainImport {
         ident,
