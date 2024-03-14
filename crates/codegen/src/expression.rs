@@ -408,10 +408,10 @@ fn encode_binary_arithmetic(
         (ast::BinaryOp::Equals, enc::ValType::F32, _) => enc::Instruction::F32Eq,
         (ast::BinaryOp::Equals, enc::ValType::F64, _) => enc::Instruction::F64Eq,
         // Not equal
-        (ast::BinaryOp::NotEquals, enc::ValType::I32, _) => enc::Instruction::I32Eq,
-        (ast::BinaryOp::NotEquals, enc::ValType::I64, _) => enc::Instruction::I64Eq,
-        (ast::BinaryOp::NotEquals, enc::ValType::F32, _) => enc::Instruction::F32Eq,
-        (ast::BinaryOp::NotEquals, enc::ValType::F64, _) => enc::Instruction::F64Eq,
+        (ast::BinaryOp::NotEquals, enc::ValType::I32, _) => enc::Instruction::I32Ne,
+        (ast::BinaryOp::NotEquals, enc::ValType::I64, _) => enc::Instruction::I64Ne,
+        (ast::BinaryOp::NotEquals, enc::ValType::F32, _) => enc::Instruction::F32Ne,
+        (ast::BinaryOp::NotEquals, enc::ValType::F64, _) => enc::Instruction::F64Ne,
         // Bitwise and
         (ast::BinaryOp::BitAnd, enc::ValType::I32, _) => enc::Instruction::I32And,
         (ast::BinaryOp::BitAnd, enc::ValType::I64, _) => enc::Instruction::I64And,
