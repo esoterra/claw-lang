@@ -156,6 +156,7 @@ impl<'gen> ImportEncoder<'gen> {
         // Import the loose functions
         for id in self.resolved_comp.imports.loose_funcs.iter().copied() {
             let import_func = &self.resolved_comp.imports.funcs[id];
+            let import_alias = import_func.alias.as_str();
             let import_name = import_func.name.as_str();
 
             let type_idx = self.encode_func_type(import_func);
@@ -166,7 +167,7 @@ impl<'gen> ImportEncoder<'gen> {
             self.funcs.insert(id, enc_import_func);
 
             self.inline_export_args.push((
-                import_name.to_owned(),
+                import_alias.to_owned(),
                 InlineExportItem::Func(core_func_idx),
             ));
         }

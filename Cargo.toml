@@ -62,10 +62,10 @@ clap = { version = "3.0.0-rc.7", features = ["derive"] }
 thiserror = "1.0.30"
 miette = { version = "7.1.0", features = ["fancy"] }
 logos = "0.13.0"
-wasm-encoder = "0.38"
-cranelift-entity = "0.104.0"
-wat = "1.200.0"
+wasm-encoder = "0.201"
+cranelift-entity = "0.105.3"
+wat = "1.201.0"
 pretty_assertions = "1.1.0"
-wasmtime = { version = "15.0.0", features = ["component-model"]}
+wasmtime = "18"
 wasmprinter = "0.2.75"
-wit-parser = "0.200.0"
+wit-parser = "0.201.0"

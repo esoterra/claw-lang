@@ -95,9 +95,11 @@ pub fn resolve(
     for (name, import) in imports.mapping.iter() {
         match import {
             ImportItemId::Type(rtype) => {
+                dbg!(name, import);
                 mappings.insert(name.to_owned(), ItemId::Type(*rtype));
             }
             ImportItemId::Func(func) => {
+                dbg!(name, import);
                 mappings.insert(name.to_owned(), ItemId::ImportFunc(*func));
             }
         }

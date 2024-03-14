@@ -145,6 +145,7 @@ pub enum Import {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PlainImport {
     pub ident: NameId,
+    pub alias: Option<NameId>,
     pub external_type: ExternalType,
 }
 

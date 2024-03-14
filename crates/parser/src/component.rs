@@ -45,7 +45,7 @@ fn parse_import(
     let import = match token {
         Token::LBrace => Import::ImportFrom(parse_import_from(input, comp)?),
         Token::Identifier(_) => Import::Plain(parse_plain_import(input, comp)?),
-        _ => return Err(input.unexpected_token("TODO")),
+        _ => return Err(input.unexpected_token("Invalid import")),
     };
 
     Ok(comp.imports.push(import))
@@ -55,14 +55,23 @@ fn parse_plain_import(
     input: &mut ParseInput,
     comp: &mut ast::Component,
 ) -> Result<PlainImport, ParserError> {
-    input.assert_next(Token::Import, "Import")?;
+    input.assert_next(Token::Import, "Import item")?;
     let ident = parse_ident(input, comp)?;
-    input.assert_next(Token::Colon, "Colon")?;
+    let alias = match input.peek()?.token {
+        Token::As => {
+            // Consume the `as`
+            let _ = input.next();
+            Some(parse_ident(input, comp)?)
+        }
+        _ => None
+    };
+    input.assert_next(Token::Colon, "Plain imports must annotate their type")?;
     let external_type = parse_external_type(input, comp)?;
-    input.assert_next(Token::Semicolon, "Semicolon")?;
+    input.assert_next(Token::Semicolon, "Plain imports must be ended by semicolons")?;
 
     Ok(PlainImport {
         ident,
+        alias,
         external_type,
     })
 }

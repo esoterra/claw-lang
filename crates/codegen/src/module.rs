@@ -125,8 +125,8 @@ impl<'gen> ModuleGenerator<'gen> {
         encoded_import_func: &EncodedImportFunc,
     ) -> ModuleFunctionIndex {
         let type_idx = encoded_import_func.encode_mod_type(&mut self.module);
-        let import_name = import_func.name.as_str();
-        self.module.import_func("claw", import_name, type_idx)
+        let import_alias = import_func.alias.as_str();
+        self.module.import_func("claw", import_alias, type_idx)
     }
 
     fn encode_globals(&mut self) -> Result<(), GenerationError> {
