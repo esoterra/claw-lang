@@ -204,7 +204,7 @@ dependencies = [
 
 [[package]]
 name = "claw-ast"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "claw-common",
  "cranelift-entity",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "claw-cli"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "clap",
  "claw-ast",
@@ -236,7 +236,7 @@ dependencies = [
 
 [[package]]
 name = "claw-codegen"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "claw-ast",
  "claw-resolver",
@@ -249,7 +249,7 @@ dependencies = [
 
 [[package]]
 name = "claw-common"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "miette",
  "thiserror",
@@ -257,7 +257,7 @@ dependencies = [
 
 [[package]]
 name = "claw-parser"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "claw-ast",
  "claw-common",
@@ -270,7 +270,7 @@ dependencies = [
 
 [[package]]
 name = "claw-resolver"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "claw-ast",
  "claw-common",
@@ -282,7 +282,7 @@ dependencies = [
 
 [[package]]
 name = "compile-claw"
-version = "0.2.4"
+version = "0.2.5"
 dependencies = [
  "claw-codegen",
  "claw-common",
