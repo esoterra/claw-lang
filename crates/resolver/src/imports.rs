@@ -106,7 +106,6 @@ impl ImportResolver {
             params,
             results,
         };
-        dbg!(&import_func);
 
         let import_func_id = self.funcs.push(import_func);
         let import_item_id = ImportItemId::Func(import_func_id);
