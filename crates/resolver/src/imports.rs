@@ -28,7 +28,9 @@ pub enum ImportItemId {
 pub struct ImportFuncId(u32);
 entity_impl!(ImportFuncId, "import-func");
 
+#[derive(Clone, Debug)]
 pub struct ImportFunction {
+    pub alias: String,
     pub name: String,
     pub params: Vec<(String, ResolvedType)>,
     pub results: Option<ResolvedType>,
@@ -69,7 +71,7 @@ impl ImportResolver {
     pub fn resolve_plain_import(&mut self, import: &ast::PlainImport, comp: &ast::Component) {
         match &import.external_type {
             ast::ExternalType::Function(fn_type) => {
-                self.resolve_plain_import_func(import.ident, fn_type, comp);
+                self.resolve_plain_import_func(import.ident, import.alias, fn_type, comp);
             }
         };
     }
@@ -77,6 +79,7 @@ impl ImportResolver {
     fn resolve_plain_import_func(
         &mut self,
         name: NameId,
+        alias: Option<NameId>,
         fn_type: &ast::FnType,
         comp: &ast::Component,
     ) {
@@ -93,15 +96,21 @@ impl ImportResolver {
 
         let results = fn_type.results.map(ResolvedType::Defined);
 
+        let alias = match alias {
+            Some(alias) => comp.get_name(alias),
+            None => name,
+        };
         let import_func = ImportFunction {
+            alias: alias.to_owned(),
             name: name.to_owned(),
             params,
             results,
         };
+        dbg!(&import_func);
 
         let import_func_id = self.funcs.push(import_func);
         let import_item_id = ImportItemId::Func(import_func_id);
-        self.mapping.insert(name.to_owned(), import_item_id);
+        self.mapping.insert(alias.to_owned(), import_item_id);
         self.loose_funcs.push(import_func_id);
     }
 
@@ -205,6 +214,7 @@ impl<'ctx> InterfaceResolver<'ctx> {
         };
 
         let import_func = ImportFunction {
+            alias: name.to_owned(), // TODO fix
             name: name.to_owned(),
             params,
             results,
