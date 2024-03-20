@@ -116,7 +116,7 @@ fn generate_exports(
 
 // ValType
 
-pub fn gen_allocator() -> Vec<u8> {
-    let wat = include_str!("../allocator.wat");
-    wat::parse_str(wat).unwrap()
+pub fn gen_allocator() -> &'static [u8] {
+    let allocator_wasm = include_bytes!(concat!(env!("OUT_DIR"), "/allocator.wasm"));
+    allocator_wasm
 }
