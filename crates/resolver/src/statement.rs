@@ -34,7 +34,7 @@ macro_rules! gen_resolve_statement {
     }
 }
 
-gen_resolve_statement!([Let, Assign, Call, If, Return]);
+gen_resolve_statement!([Let, Assign, Call, If, For, Return]);
 
 impl ResolveStatement for ast::Let {
     fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
@@ -85,6 +85,33 @@ impl ResolveStatement for ast::If {
         resolver.set_expr_type(self.condition, RESOLVED_BOOL);
         resolver.setup_expression(self.condition)?;
         resolver.setup_block(&self.block)
+    }
+}
+
+impl ResolveStatement for ast::For {
+    fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
+        let info = LocalInfo {
+            ident: self.ident.to_owned(),
+            mutable: false,
+            annotation: self.annotation.to_owned(),
+        };
+        let local = resolver.locals.push(info);
+        let span = resolver.component.name_span(self.ident);
+        resolver.local_spans.insert(local, span);
+        let item = ItemId::Local(local);
+        resolver.define_name(self.ident, item)?;
+
+        resolver.setup_expression(self.range_lower)?;
+        resolver.setup_expression(self.range_upper)?;
+
+        resolver.use_local(local, self.range_lower);
+        resolver.use_local(local, self.range_upper);
+
+        if let Some(annotation) = self.annotation {
+            resolver.set_local_type(local, ResolvedType::Defined(annotation))
+        }
+
+        Ok(())
     }
 }
 

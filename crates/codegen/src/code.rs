@@ -572,6 +572,7 @@ pub struct ExpressionAllocator<'a> {
     // State
     local_space: &'a mut Vec<enc::ValType>,
     index_for_expr: &'a mut HashMap<ExpressionId, CoreLocalId>,
+    index_for_statement: &'a mut HashMap<StatementId, CoreLocalId>,
 }
 
 impl<'a> ExpressionAllocator<'a> {
@@ -580,12 +581,14 @@ impl<'a> ExpressionAllocator<'a> {
         func: &'a ResolvedFunction,
         local_space: &'a mut Vec<enc::ValType>,
         index_for_expr: &'a mut HashMap<ExpressionId, CoreLocalId>,
+        index_for_statement: &'a mut HashMap<StatementId, CoreLocalId>,
     ) -> Self {
         Self {
             comp,
             func,
             local_space,
             index_for_expr,
+            index_for_statement,
         }
     }
 
@@ -599,12 +602,6 @@ impl<'a> ExpressionAllocator<'a> {
             .func
             .expression_type(expression, &self.comp.component)?;
         rtype.append_flattened(self.comp, self.local_space);
-        Ok(())
-    }
-
-    #[allow(dead_code)]
-    pub fn alloc_extra(&mut self, valtype: enc::ValType) -> Result<(), GenerationError> {
-        self.local_space.push(valtype);
         Ok(())
     }
 

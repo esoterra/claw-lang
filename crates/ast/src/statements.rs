@@ -12,6 +12,7 @@ pub enum Statement {
     Assign(Assign),
     Call(Call),
     If(If),
+    For(For),
     Return(Return),
 }
 
@@ -32,6 +33,15 @@ pub struct Assign {
 #[derive(Debug, PartialEq, Clone)]
 pub struct If {
     pub condition: ExpressionId,
+    pub block: Vec<StatementId>,
+}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct For {
+    pub ident: NameId,
+    pub annotation: Option<TypeId>,
+    pub range_lower: ExpressionId,
+    pub range_upper: ExpressionId,
     pub block: Vec<StatementId>,
 }
 

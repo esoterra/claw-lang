@@ -116,6 +116,33 @@ impl EncodeStatement for ast::If {
     }
 }
 
+impl EncodeStatement for ast::For {
+    fn alloc_expr_locals(
+        &self,
+        allocator: &mut ExpressionAllocator,
+    ) -> Result<(), GenerationError> {
+        allocator.alloc_child(self.range_lower)?;
+        allocator.alloc_child(self.range_upper)?;
+        for statement in self.block.iter() {
+            allocator.alloc_statement(*statement)?;
+        }
+        Ok(())
+    }
+
+    fn encode(&self, code_gen: &mut CodeGenerator) -> Result<(), GenerationError> {
+        code_gen.encode_child(self.condition)?;
+        let fields = code_gen.fields(self.condition)?;
+        assert_eq!(fields.len(), 1);
+        code_gen.read_expr_field(self.condition, &fields[0]);
+        code_gen.instruction(&Instruction::If(enc::BlockType::Empty));
+        for statement in self.block.iter() {
+            code_gen.encode_statement(*statement)?;
+        }
+        code_gen.instruction(&Instruction::End);
+        Ok(())
+    }
+}
+
 impl EncodeStatement for ast::Return {
     fn alloc_expr_locals(
         &self,
