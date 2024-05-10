@@ -236,8 +236,8 @@ impl<'ctx> InterfaceResolver<'ctx> {
             wit::Type::S16 => ResolvedType::Primitive(PType::S16),
             wit::Type::S32 => ResolvedType::Primitive(PType::S32),
             wit::Type::S64 => ResolvedType::Primitive(PType::S64),
-            wit::Type::Float32 => ResolvedType::Primitive(PType::F32),
-            wit::Type::Float64 => ResolvedType::Primitive(PType::F64),
+            wit::Type::F32 => ResolvedType::Primitive(PType::F32),
+            wit::Type::F64 => ResolvedType::Primitive(PType::F64),
             wit::Type::Char => todo!(),
             wit::Type::String => ResolvedType::Primitive(PType::String),
             wit::Type::Id(id) => {

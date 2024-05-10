@@ -65,6 +65,7 @@ impl ModuleBuilder {
             maximum: None,
             memory64: false,
             shared: false,
+            page_size_log2: None,
         };
         let mem_ty = enc::EntityType::Memory(mem_type);
         self.imports.import(module, field, mem_ty);
@@ -108,6 +109,7 @@ impl ModuleBuilder {
     ) -> ModuleGlobalIndex {
         let global_type = enc::GlobalType {
             mutable,
+            shared: false,
             val_type: valtype,
         };
         self.globals.global(global_type, init_expr);

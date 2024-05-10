@@ -324,8 +324,8 @@ pub fn ptype_to_pvaltype(ptype: ast::PrimitiveType) -> enc::PrimitiveValType {
         PType::S32 => enc::PrimitiveValType::S32,
         PType::S16 => enc::PrimitiveValType::S16,
         PType::S8 => enc::PrimitiveValType::S8,
-        PType::F32 => enc::PrimitiveValType::Float32,
-        PType::F64 => enc::PrimitiveValType::Float64,
+        PType::F32 => enc::PrimitiveValType::F32,
+        PType::F64 => enc::PrimitiveValType::F64,
         PType::Bool => enc::PrimitiveValType::Bool,
         PType::String => enc::PrimitiveValType::String,
     }
