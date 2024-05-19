@@ -135,7 +135,6 @@ impl Component {
     }
 }
 
-///
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Import {
     Plain(PlainImport),
@@ -158,13 +157,11 @@ pub struct ImportFrom {
     pub interface: String,
 }
 
-///
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub enum ExternalType {
     Function(FnType),
 }
 
-///
 #[derive(Debug)]
 pub struct Function {
     pub exported: bool,
@@ -174,7 +171,6 @@ pub struct Function {
     pub body: Vec<StatementId>,
 }
 
-///
 #[derive(Debug, Clone)]
 pub struct Global {
     pub exported: bool,
