@@ -11,6 +11,10 @@
     <a href="https://crates.io/crates/claw-cli"><img src="https://img.shields.io/crates/d/claw-cli.svg?style=flat-square" alt="Download" /></a>
     <a href="https://docs.rs/claw-cli"><img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square" alt="docs.rs docs" /></a>
   </p>
+
+  <p>
+    <a href="https://techforpalestine.org/learn-more"><img src="https://badge.techforpalestine.org/default" alt="build status" /></a>
+  </p>
 </div>
 
 Claw is a programming language that compiles to Wasm Components.
