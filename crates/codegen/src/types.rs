@@ -40,6 +40,7 @@ pub trait EncodeType {
 
     fn to_comp_valtype(&self, comp: &ResolvedComponent) -> enc::ComponentValType;
 
+    #[allow(dead_code)]
     fn mem_arg(&self, comp: &ResolvedComponent) -> enc::MemArg {
         enc::MemArg {
             align: self.align(comp),
