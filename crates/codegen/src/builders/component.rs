@@ -48,10 +48,10 @@ impl ComponentBuilder {
         self.next_mod_idx()
     }
 
-    pub fn module_bytes(&mut self, bytes: Vec<u8>) -> ComponentModuleIndex {
+    pub fn module_bytes(&mut self, bytes: &[u8]) -> ComponentModuleIndex {
         self.component.section(&enc::RawSection {
             id: enc::ComponentSectionId::CoreModule.into(),
-            data: bytes.as_slice(),
+            data: bytes,
         });
         self.next_mod_idx()
     }

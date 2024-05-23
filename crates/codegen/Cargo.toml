@@ -17,3 +17,6 @@ claw-resolver = { workspace = true }
 wasm-encoder = { workspace = true }
 cranelift-entity = { workspace = true }
 wat = { workspace = true }
+
+[build-dependencies]
+wat = { workspace = true }
