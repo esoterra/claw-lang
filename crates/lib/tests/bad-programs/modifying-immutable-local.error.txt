@@ -1,0 +1,11 @@
+  x Assigned to immutable variable "a"
+   ,-[modifying-immutable-local.claw:2:9]
+ 1 | func foo() {
+ 2 |     let a: u32 = 1;
+   :         |
+   :         `-- Defined here
+ 3 |     a = 2;
+   :     |
+   :     `-- Assigned here
+ 4 | }
+   `----

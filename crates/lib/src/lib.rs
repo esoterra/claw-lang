@@ -1,19 +1,43 @@
-use claw_codegen::generate;
-use claw_common::{make_source, OkPretty};
-use claw_parser::{parse, tokenize};
-use claw_resolver::{resolve, wit::ResolvedWit};
+use claw_codegen::{generate, GenerationError};
+use claw_common::make_source;
+use claw_parser::{parse, tokenize, LexerError, ParserError};
+use claw_resolver::{resolve, wit::ResolvedWit, ResolverError};
 use wit_parser::Resolve;
 
-pub fn compile(source_name: String, source_code: &str, wit: Resolve) -> Option<Vec<u8>> {
+use miette::Diagnostic;
+use thiserror::Error;
+
+#[derive(Error, Debug, Diagnostic)]
+pub enum Error {
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Lexer(#[from] LexerError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Parser(#[from] ParserError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Resolver(#[from] ResolverError),
+
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Generator(#[from] GenerationError),
+}
+
+pub fn compile(source_name: String, source_code: &str, wit: Resolve) -> Result<Vec<u8>, Error> {
     let src = make_source(source_name.as_str(), source_code);
 
-    let tokens = tokenize(src.clone(), source_code).ok_pretty()?;
+    let tokens = tokenize(src.clone(), source_code)?;
 
-    let ast = parse(src.clone(), tokens).ok_pretty()?;
+    let ast = parse(src.clone(), tokens)?;
 
     let wit = ResolvedWit::new(wit);
 
-    let resolved = resolve(src, ast, wit).ok_pretty()?;
+    let resolved = resolve(src, ast, wit)?;
 
-    generate(&resolved).ok_pretty()
+    let output = generate(&resolved)?;
+
+    Ok(output)
 }

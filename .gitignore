@@ -6,7 +6,6 @@
 # Not e.g. crates/codegen/allocator.wat
 *.wat
 *.wasm
-*.claw
 
 # The compiled publish script
 publish

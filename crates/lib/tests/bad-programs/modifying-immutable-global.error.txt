@@ -1,0 +1,12 @@
+  x Assigned to immutable variable "a"
+   ,-[modifying-immutable-global.claw:1:5]
+ 1 | let a: u32 = 1;
+   :     |
+   :     `-- Defined here
+ 2 | 
+ 3 | func foo() {
+ 4 |     a = 2;
+   :     |
+   :     `-- Assigned here
+ 5 | }
+   `----

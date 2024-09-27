@@ -1,0 +1,7 @@
+  x Unable to tokenize input
+   ,-[invalid-token.claw:1:10]
+ 1 | func foo($a: u32) -> u32 {
+   :          |
+   :          `-- Here
+ 2 |     return $a;
+   `----

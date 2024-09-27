@@ -63,9 +63,42 @@ impl ResolveStatement for ast::Let {
 impl ResolveStatement for ast::Assign {
     fn setup_resolve(&self, resolver: &mut FunctionResolver) -> Result<(), ResolverError> {
         let item = resolver.use_name(self.ident)?;
-        if let ItemId::Local(local) = item {
-            resolver.use_local(local, self.expression);
+
+        match item {
+            ItemId::Global(global) => {
+                let global = resolver.component.globals.get(global).unwrap();
+                resolver.set_expr_type(self.expression, ResolvedType::Defined(global.type_id));
+
+                if global.mutable == false {
+                    return Err(ResolverError::AssignedToImmutable {
+                        src: resolver.component.src.clone(),
+                        defined_span: resolver.component.name_span(global.ident),
+                        assigned_span: resolver.component.name_span(self.ident),
+                        ident: resolver.component.get_name(self.ident).to_string(),
+                    });
+                }
+            }
+            ItemId::Param(param) => {
+                let param_type = *resolver.params.get(param).unwrap();
+                resolver.set_expr_type(self.expression, ResolvedType::Defined(param_type));
+            }
+            ItemId::Local(local) => {
+                resolver.use_local(local, self.expression);
+
+                let local = resolver.locals.get(local).unwrap();
+
+                if local.mutable == false {
+                    return Err(ResolverError::AssignedToImmutable {
+                        src: resolver.component.src.clone(),
+                        defined_span: resolver.component.name_span(local.ident),
+                        assigned_span: resolver.component.name_span(self.ident),
+                        ident: resolver.component.get_name(self.ident).to_string(),
+                    });
+                }
+            }
+            _ => {}
         }
+
         resolver.setup_expression(self.expression)
     }
 }

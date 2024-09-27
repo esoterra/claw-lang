@@ -1,0 +1,7 @@
+  x Global variables must be initialized starting with '='
+   ,-[global-without-initialization.claw:1:11]
+ 1 | let a: u32;
+   :           |
+   :           `-- Found Semicolon
+ 2 | 
+   `----

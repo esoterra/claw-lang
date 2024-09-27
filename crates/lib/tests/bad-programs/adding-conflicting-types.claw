@@ -1,0 +1,5 @@
+func foo() {
+    let a: u32 = 1;
+    let b: u64 = 2;
+    let c = a + b;
+}

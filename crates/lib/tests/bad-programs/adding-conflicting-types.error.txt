@@ -1,0 +1,8 @@
+  x Conflicting types inferred for expression type1 != type0
+   ,-[adding-conflicting-types.claw:4:17]
+ 3 |     let b: u64 = 2;
+ 4 |     let c = a + b;
+   :                 |
+   :                 `-- This bit
+ 5 | }
+   `----

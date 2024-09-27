@@ -1,0 +1,8 @@
+  x Conflicting types inferred for expression type0 != type1
+   ,-[param-local-type-mismatch.claw:2:18]
+ 1 | func foo(a: u32) {
+ 2 |     let b: u64 = a;
+   :                  |
+   :                  `-- This bit
+ 3 | }
+   `----
