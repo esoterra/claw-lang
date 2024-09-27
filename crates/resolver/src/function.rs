@@ -329,7 +329,7 @@ impl<'ctx> FunctionResolver<'ctx> {
         let span = self.local_spans.get(&local).unwrap();
         let report = miette!(
             labels = vec![LabeledSpan::at(*span, "here")],
-           "Resolved type of local"
+            "Resolved type of local"
         );
         println!("{:?}", report.with_source_code(self.src.clone()));
     }
