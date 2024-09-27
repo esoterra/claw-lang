@@ -21,7 +21,7 @@ use thiserror::Error;
 
 use component::parse_component;
 
-pub use lexer::tokenize;
+pub use lexer::{tokenize, LexerError};
 
 #[derive(Error, Debug, Diagnostic)]
 pub enum ParserError {
@@ -76,7 +76,12 @@ impl ParseInput {
     }
 
     pub fn unexpected_token(&self, description: &str) -> ParserError {
-        let data = &self.tokens[self.index - 1];
+        let index = if self.index == 0 {
+            self.index
+        } else {
+            self.index - 1
+        };
+        let data = &self.tokens[index];
         ParserError::UnexpectedToken {
             src: self.src.clone(),
             span: data.span,

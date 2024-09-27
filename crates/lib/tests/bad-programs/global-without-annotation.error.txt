@@ -1,0 +1,7 @@
+  x Global variables must have explicit types annotated starting with ':'
+   ,-[global-without-annotation.claw:1:7]
+ 1 | let a = 0;
+   :       |
+   :       `-- Found Assign
+ 2 | 
+   `----

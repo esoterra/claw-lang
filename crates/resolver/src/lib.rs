@@ -67,6 +67,16 @@ pub enum ResolverError {
         span: SourceSpan,
         ident: String,
     },
+    #[error("Assigned to immutable variable \"{ident}\"")]
+    AssignedToImmutable {
+        #[source_code]
+        src: Source,
+        #[label("Defined here")]
+        defined_span: SourceSpan,
+        #[label("Assigned here")]
+        assigned_span: SourceSpan,
+        ident: String,
+    },
     #[error("Function call with wrong number of arguments \"{ident}\"")]
     CallArgumentsMismatch {
         #[source_code]

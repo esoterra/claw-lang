@@ -6,9 +6,7 @@ use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 use std::collections::{HashMap, VecDeque};
 
 #[cfg(test)]
-use miette::{Diagnostic, Report, SourceSpan};
-#[cfg(test)]
-use thiserror::Error;
+use miette::{miette, LabeledSpan};
 
 use crate::expression::*;
 use crate::imports::ImportResolver;
@@ -247,7 +245,7 @@ impl<'ctx> FunctionResolver<'ctx> {
                         parent.on_child_resolved(next_type, *parent_id, self)?;
                     } else {
                         #[cfg(test)]
-                        self.notify_ophaned_expression(expression);
+                        self.notify_orphaned_expression(expression);
                     }
                 }
                 ResolverItem::Local(local) => {
@@ -288,83 +286,53 @@ impl<'ctx> FunctionResolver<'ctx> {
 
     #[cfg(test)]
     fn notify_skipped_expression(&self, expression: ExpressionId) {
-        let src = self.src.clone();
         let span = self.component.expr().get_span(expression);
-        let notification = Notification::ExpressionSkipped { src, span };
-        println!("{:?}", Report::new(notification));
+        let report = miette!(
+            labels = vec![LabeledSpan::at(span, "here")],
+            "Skipping already resolved expression"
+        );
+        println!("{:?}", report.with_source_code(self.src.clone()));
     }
 
     #[cfg(test)]
     fn notify_resolved_expression(&self, expression: ExpressionId) {
-        let src = self.src.clone();
         let span = self.component.expr().get_span(expression);
-        let notification = Notification::ExpressionResolved { src, span };
-        println!("{:?}", Report::new(notification));
+        let report = miette!(
+            labels = vec![LabeledSpan::at(span, "here")],
+            "Resolved type of expression"
+        );
+        println!("{:?}", report.with_source_code(self.src.clone()));
     }
 
     #[cfg(test)]
-    fn notify_ophaned_expression(&self, expression: ExpressionId) {
-        let src = self.src.clone();
+    fn notify_orphaned_expression(&self, expression: ExpressionId) {
         let span = self.component.expr().get_span(expression);
-        let notification = Notification::ExpressionOrphan { src, span };
-        println!("{:?}", Report::new(notification));
+        let report = miette!(
+            labels = vec![LabeledSpan::at(span, "here")],
+            "No parent exists to be updated for"
+        );
+        println!("{:?}", report.with_source_code(self.src.clone()));
     }
 
     #[cfg(test)]
     fn notify_skipped_local(&self, local: LocalId) {
-        let src = self.src.clone();
-        let span = *self.local_spans.get(&local).unwrap();
-        let notification = Notification::LocalSkipped { src, span };
-        println!("{:?}", Report::new(notification));
+        let span = self.local_spans.get(&local).unwrap();
+        let report = miette!(
+            labels = vec![LabeledSpan::at(*span, "here")],
+            "Skipping already resolved local"
+        );
+        println!("{:?}", report.with_source_code(self.src.clone()));
     }
 
     #[cfg(test)]
     fn notify_resolved_local(&self, local: LocalId) {
-        let src = self.src.clone();
-        let span = *self.local_spans.get(&local).unwrap();
-        let notification = Notification::LocalResolved { src, span };
-        println!("{:?}", Report::new(notification));
+        let span = self.local_spans.get(&local).unwrap();
+        let report = miette!(
+            labels = vec![LabeledSpan::at(*span, "here")],
+            "Resolved type of local"
+        );
+        println!("{:?}", report.with_source_code(self.src.clone()));
     }
-}
-
-#[cfg(test)]
-#[derive(Error, Debug, Diagnostic)]
-pub enum Notification {
-    #[error("Skipping already resolved expression")]
-    ExpressionSkipped {
-        #[source_code]
-        src: Source,
-        #[label("here")]
-        span: SourceSpan,
-    },
-    #[error("Resolved type of expression")]
-    ExpressionResolved {
-        #[source_code]
-        src: Source,
-        #[label("here")]
-        span: SourceSpan,
-    },
-    #[error("No parent exists to be updated for")]
-    ExpressionOrphan {
-        #[source_code]
-        src: Source,
-        #[label("here")]
-        span: SourceSpan,
-    },
-    #[error("Skipping already resolved local")]
-    LocalSkipped {
-        #[source_code]
-        src: Source,
-        #[label("here")]
-        span: SourceSpan,
-    },
-    #[error("Resolved type of local")]
-    LocalResolved {
-        #[source_code]
-        src: Source,
-        #[label("here")]
-        span: SourceSpan,
-    },
 }
 
 pub struct ResolvedFunction {

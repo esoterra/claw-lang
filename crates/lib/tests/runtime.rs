@@ -1,3 +1,4 @@
+use claw_common::UnwrapPretty;
 use compile_claw::compile;
 
 use std::fs;
@@ -20,7 +21,7 @@ impl Runtime {
         let input = fs::read_to_string(path).unwrap();
         let mut wit = Resolve::new();
         wit.push_path("./tests/programs/wit").unwrap();
-        let component_bytes = compile(name.to_owned(), &input, wit).unwrap();
+        let component_bytes = compile(name.to_owned(), &input, wit).unwrap_pretty();
 
         println!("{}", wasmprinter::print_bytes(&component_bytes).unwrap());
 

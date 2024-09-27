@@ -1,0 +1,8 @@
+  x Failed to resolve name "b"
+   ,-[using-unbound-name.claw:2:13]
+ 1 | func foo() {
+ 2 |     let a = b;
+   :             |
+   :             `-- Name referenced here
+ 3 | }
+   `----
