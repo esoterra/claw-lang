@@ -76,7 +76,7 @@ fn generate_exports(
 ) -> Result<(), GenerationError> {
     let comp = &resolved_comp.component;
 
-    for function in resolved_comp.component.functions.values() {
+    for (_, function) in resolved_comp.component.iter_functions() {
         if function.exported {
             let name = comp.get_name(function.ident);
             // Alias module instance export into component

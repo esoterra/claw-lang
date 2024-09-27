@@ -96,7 +96,7 @@ impl ResolveExpression for ast::Identifier {
         let item = resolver.use_name(self.ident)?;
         match item {
             ItemId::Global(global) => {
-                let global = resolver.component.globals.get(global).unwrap();
+                let global = resolver.component.get_global(global);
                 resolver.set_expr_type(expression, ResolvedType::Defined(global.type_id));
             }
             ItemId::Param(param) => {
@@ -175,7 +175,7 @@ impl ResolveExpression for ast::Call {
                 (params.collect(), results)
             }
             ItemId::Function(func) => {
-                let func = &resolver.component.functions[func];
+                let func = &resolver.component.get_function(func);
                 let params = func
                     .params
                     .iter()

@@ -55,7 +55,7 @@ impl<'gen> FunctionEncoder<'gen> {
 
     pub fn encode(mut self) -> Result<EncodedFuncs, GenerationError> {
         // Encode function
-        for (id, function) in self.resolved_comp.component.functions.iter() {
+        for (id, function) in self.resolved_comp.component.iter_functions() {
             let func = self.encode_func(function)?;
             self.funcs.insert(id, func);
         }

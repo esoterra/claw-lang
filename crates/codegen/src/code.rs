@@ -69,7 +69,7 @@ impl<'gen> CodeGenerator<'gen> {
         id: FunctionId,
         realloc: ModuleFunctionIndex,
     ) -> Result<Self, GenerationError> {
-        let function = &comp.component.functions[id];
+        let function = &comp.component.get_function(id);
         let resolved_func = &comp.funcs[&id];
 
         let mut local_space = encoded_func.flat_params.clone();
@@ -120,7 +120,7 @@ impl<'gen> CodeGenerator<'gen> {
             builder.instruction(&enc::Instruction::I32Const(0));
             builder.instruction(&enc::Instruction::I32Const(0));
 
-            let result_type = comp.component.functions[id].results.unwrap();
+            let result_type = comp.component.get_function(id).results.unwrap();
             // align
             let align = result_type.align(comp);
             let align = 2u32.pow(align);
@@ -161,7 +161,7 @@ impl<'gen> CodeGenerator<'gen> {
     }
 
     pub fn encode_child(&mut self, expression: ExpressionId) -> Result<(), GenerationError> {
-        let expr = self.comp.component.expr().get_exp(expression);
+        let expr = self.comp.component.get_expression(expression);
         expr.encode(expression, self)
     }
 
@@ -609,7 +609,7 @@ impl<'a> ExpressionAllocator<'a> {
     }
 
     pub fn alloc_child(&mut self, expression: ExpressionId) -> Result<(), GenerationError> {
-        let expr = self.comp.component.expr().get_exp(expression);
+        let expr = self.comp.component.get_expression(expression);
         expr.alloc_expr_locals(expression, self)
     }
 

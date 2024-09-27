@@ -141,8 +141,7 @@ impl<'ctx> FunctionResolver<'ctx> {
         expression: ExpressionId,
     ) -> Result<(), ResolverError> {
         self.component
-            .expr()
-            .get_exp(expression)
+            .get_expression(expression)
             .setup_resolve(expression, self)
     }
 
@@ -218,7 +217,7 @@ impl<'ctx> FunctionResolver<'ctx> {
                     // Apply the inferred type and detect conflicts
                     if let Some(existing_type) = self.expression_types.get(&expression) {
                         if !next_type.type_eq(existing_type, self.component) {
-                            let span = self.component.expr().get_span(expression);
+                            let span = self.component.expression_span(expression);
                             return Err(ResolverError::TypeConflict {
                                 src: self.src.clone(),
                                 span,
@@ -237,11 +236,11 @@ impl<'ctx> FunctionResolver<'ctx> {
                     #[cfg(test)]
                     self.notify_resolved_expression(expression);
 
-                    let expression_val = self.component.expr().get_exp(expression);
+                    let expression_val = self.component.get_expression(expression);
                     expression_val.on_resolved(next_type, expression, self)?;
 
                     if let Some(parent_id) = self.expr_parent_map.get(&expression) {
-                        let parent = self.component.expr().get_exp(*parent_id);
+                        let parent = self.component.get_expression(*parent_id);
                         parent.on_child_resolved(next_type, *parent_id, self)?;
                     } else {
                         #[cfg(test)]
@@ -286,7 +285,7 @@ impl<'ctx> FunctionResolver<'ctx> {
 
     #[cfg(test)]
     fn notify_skipped_expression(&self, expression: ExpressionId) {
-        let span = self.component.expr().get_span(expression);
+        let span = self.component.expression_span(expression);
         let report = miette!(
             labels = vec![LabeledSpan::at(span, "here")],
             "Skipping already resolved expression"
@@ -296,7 +295,7 @@ impl<'ctx> FunctionResolver<'ctx> {
 
     #[cfg(test)]
     fn notify_resolved_expression(&self, expression: ExpressionId) {
-        let span = self.component.expr().get_span(expression);
+        let span = self.component.expression_span(expression);
         let report = miette!(
             labels = vec![LabeledSpan::at(span, "here")],
             "Resolved type of expression"
@@ -306,7 +305,7 @@ impl<'ctx> FunctionResolver<'ctx> {
 
     #[cfg(test)]
     fn notify_orphaned_expression(&self, expression: ExpressionId) {
-        let span = self.component.expr().get_span(expression);
+        let span = self.component.expression_span(expression);
         let report = miette!(
             labels = vec![LabeledSpan::at(span, "here")],
             "No parent exists to be updated for"
@@ -363,7 +362,7 @@ impl ResolvedFunction {
             None => {
                 let span = self.local_spans.get(&local).unwrap().to_owned();
                 Err(ResolverError::Base {
-                    src: context.src.clone(),
+                    src: context.source(),
                     span,
                 })
             }
@@ -379,9 +378,9 @@ impl ResolvedFunction {
         match rtype {
             Some(rtype) => Ok(*rtype),
             None => {
-                let span = context.expr().get_span(expression);
+                let span = context.expression_span(expression);
                 Err(ResolverError::Base {
-                    src: context.src.clone(),
+                    src: context.source(),
                     span,
                 })
             }
