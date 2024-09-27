@@ -246,8 +246,12 @@ pub enum Import {
 /// ```
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct PlainImport {
+    /// The name of the item to import.
     pub ident: NameId,
+    /// The name given to the imported item.
+    /// Defaults to the specified name if omitted.
     pub alias: Option<NameId>,
+    /// The type of the imported item.
     pub external_type: ExternalType,
 }
 
@@ -261,7 +265,9 @@ pub struct ImportFrom {
     /// The first name is the imported item's name
     /// The second optional name is an alias
     pub items: Vec<(NameId, Option<NameId>)>,
+    /// The package being imported from
     pub package: PackageName,
+    /// Which interface from the package to import
     pub interface: String,
 }
 
@@ -282,10 +288,20 @@ pub enum ExternalType {
 /// ```
 #[derive(Debug, Clone)]
 pub struct Global {
+    /// Whether the global is exported.
+    ///
+    /// Indicated by the keyword `export` in front
+    /// of the global item.
     pub exported: bool,
+    /// Whether the global is mutable.
+    ///
+    /// Indicated by the `mut` keyword before after `let`.
     pub mutable: bool,
+    /// The name of the global.
     pub ident: NameId,
+    /// The type of the global.
     pub type_id: TypeId,
+    /// The initialization expression for the global.
     pub init_value: ExpressionId,
 }
 
@@ -298,9 +314,21 @@ pub struct Global {
 /// ```
 #[derive(Debug)]
 pub struct Function {
+    /// Whether the global is exported.
+    ///
+    /// Indicated by the keyword `export` in front
+    /// of the function item.
     pub exported: bool,
+    /// The name of the function.
     pub ident: NameId,
+    /// The function's parameters.
+    ///
+    /// Each parameter has a name and type.
     pub params: Vec<(NameId, TypeId)>,
+    /// The result type of the function.
+    ///
+    /// Result type is unit if omitted.
     pub results: Option<TypeId>,
+    /// The body of the function.
     pub body: Vec<StatementId>,
 }
