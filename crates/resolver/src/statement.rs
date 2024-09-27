@@ -69,7 +69,7 @@ impl ResolveStatement for ast::Assign {
                 let global = resolver.component.globals.get(global).unwrap();
                 resolver.set_expr_type(self.expression, ResolvedType::Defined(global.type_id));
 
-                if global.mutable == false {
+                if !global.mutable {
                     return Err(ResolverError::AssignedToImmutable {
                         src: resolver.component.src.clone(),
                         defined_span: resolver.component.name_span(global.ident),
@@ -87,7 +87,7 @@ impl ResolveStatement for ast::Assign {
 
                 let local = resolver.locals.get(local).unwrap();
 
-                if local.mutable == false {
+                if !local.mutable {
                     return Err(ResolverError::AssignedToImmutable {
                         src: resolver.component.src.clone(),
                         defined_span: resolver.component.name_span(local.ident),
