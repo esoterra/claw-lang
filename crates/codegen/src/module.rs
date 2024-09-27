@@ -63,7 +63,7 @@ impl<'gen> ModuleGenerator<'gen> {
         self.encode_globals()?;
 
         // Encode functions
-        for (id, function) in self.resolved_comp.component.functions.iter() {
+        for (id, function) in self.resolved_comp.component.iter_functions() {
             let encoded_func = self.functions.funcs.get(&id).unwrap();
             let func_idx = self.encode_func(function, encoded_func)?;
             self.func_idx_for_func.insert(id, func_idx);
@@ -88,7 +88,7 @@ impl<'gen> ModuleGenerator<'gen> {
         }
 
         // Encode post returns
-        for (id, function) in self.resolved_comp.component.functions.iter() {
+        for (id, function) in self.resolved_comp.component.iter_functions() {
             // Encode function
             let ident = function.ident;
             let encoded_func = self.functions.funcs.get(&id).unwrap();
@@ -130,7 +130,7 @@ impl<'gen> ModuleGenerator<'gen> {
     }
 
     fn encode_globals(&mut self) -> Result<(), GenerationError> {
-        for (id, global) in self.comp.globals.iter() {
+        for (id, global) in self.comp.iter_globals() {
             let valtypes = global.type_id.flatten(self.resolved_comp);
             assert_eq!(valtypes.len(), 1, "Cannot use non-primitive globals");
             let valtype = valtypes[0];

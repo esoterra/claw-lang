@@ -113,19 +113,19 @@ pub fn resolve(
         }
     }
 
-    for (id, global) in comp.globals.iter() {
+    for (id, global) in comp.iter_globals() {
         let name = comp.get_name(global.ident);
         mappings.insert(name.to_owned(), ItemId::Global(id));
     }
-    for (id, function) in comp.functions.iter() {
+    for (id, function) in comp.iter_functions() {
         let name = comp.get_name(function.ident);
         mappings.insert(name.to_owned(), ItemId::Function(id));
     }
 
     let mut global_vals: HashMap<GlobalId, ast::Literal> = HashMap::new();
 
-    for (id, global) in comp.globals.iter() {
-        let global_val = match comp.expr().get_exp(global.init_value) {
+    for (id, global) in comp.iter_globals() {
+        let global_val = match comp.get_expression(global.init_value) {
             ast::Expression::Literal(literal) => literal.clone(),
             _ => panic!("Only literal expressions allowed in global initializer"),
         };
@@ -134,7 +134,7 @@ pub fn resolve(
 
     let mut funcs: HashMap<FunctionId, ResolvedFunction> = HashMap::new();
 
-    for (id, function) in comp.functions.iter() {
+    for (id, function) in comp.iter_functions() {
         let resolver = FunctionResolver::new(src.clone(), &comp, &imports, function, &mappings);
         funcs.insert(id, resolver.resolve()?);
     }

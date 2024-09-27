@@ -55,7 +55,7 @@ impl ImportResolver {
         comp: &ast::Component,
         wit: &wit::ResolvedWit,
     ) -> Result<(), ResolverError> {
-        for (_, import) in comp.imports.iter() {
+        for (_, import) in comp.iter_imports() {
             match import {
                 ast::Import::Plain(import) => {
                     self.resolve_plain_import(import, comp);

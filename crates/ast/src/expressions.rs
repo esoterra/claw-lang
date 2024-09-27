@@ -1,75 +1,9 @@
-use super::{merge, NameId, Span};
-use cranelift_entity::{entity_impl, PrimaryMap};
-use std::collections::HashMap;
+use super::NameId;
+use cranelift_entity::entity_impl;
 
 #[derive(Copy, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct ExpressionId(u32);
 entity_impl!(ExpressionId, "expression");
-
-#[derive(Clone, Debug, Default)]
-pub struct ExpressionData {
-    expressions: PrimaryMap<ExpressionId, Expression>,
-    expression_spans: HashMap<ExpressionId, Span>,
-}
-
-impl ExpressionData {
-    pub fn alloc(&mut self, expression: Expression, span: Span) -> ExpressionId {
-        let id = self.expressions.push(expression);
-        self.expression_spans.insert(id, span);
-        id
-    }
-
-    pub fn get_exp(&self, id: ExpressionId) -> &Expression {
-        self.expressions.get(id).unwrap()
-    }
-
-    pub fn get_span(&self, id: ExpressionId) -> Span {
-        *self.expression_spans.get(&id).unwrap()
-    }
-
-    pub fn expressions(&self) -> &PrimaryMap<ExpressionId, Expression> {
-        &self.expressions
-    }
-
-    pub fn alloc_ident(&mut self, ident: NameId, span: Span) -> ExpressionId {
-        let expr = Expression::Identifier(Identifier { ident });
-        self.alloc(expr, span)
-    }
-
-    pub fn alloc_literal(&mut self, literal: Literal, span: Span) -> ExpressionId {
-        self.alloc(Expression::Literal(literal), span)
-    }
-
-    pub fn alloc_call(
-        &mut self,
-        ident: NameId,
-        args: Vec<ExpressionId>,
-        span: Span,
-    ) -> ExpressionId {
-        let expr = Expression::Call(Call { ident, args });
-        self.alloc(expr, span)
-    }
-
-    pub fn alloc_unary_op(&mut self, op: UnaryOp, inner: ExpressionId, span: Span) -> ExpressionId {
-        let expr = match op {
-            UnaryOp::Negate => Expression::Unary(UnaryExpression { op, inner }),
-        };
-        self.alloc(expr, span)
-    }
-
-    pub fn alloc_bin_op(
-        &mut self,
-        op: BinaryOp,
-        left: ExpressionId,
-        right: ExpressionId,
-    ) -> ExpressionId {
-        let span = merge(&self.get_span(left), &self.get_span(right));
-        self.alloc(
-            Expression::Binary(BinaryExpression { op, left, right }),
-            span,
-        )
-    }
-}
 
 pub trait ContextEq<Context> {
     fn context_eq(&self, other: &Self, context: &Context) -> bool;
@@ -87,15 +21,15 @@ pub enum Expression {
 
 impl ContextEq<super::Component> for ExpressionId {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
-        let self_span = context.expr().get_span(*self);
-        let other_span = context.expr().get_span(*other);
+        let self_span = context.expression_span(*self);
+        let other_span = context.expression_span(*other);
         if self_span != other_span {
             dbg!(self_span, other_span);
             return false;
         }
 
-        let self_expr = context.expr().get_exp(*self);
-        let other_expr = context.expr().get_exp(*other);
+        let self_expr = context.get_expression(*self);
+        let other_expr = context.get_expression(*other);
         if !self_expr.context_eq(other_expr, context) {
             dbg!(self_expr, other_expr);
             return false;
@@ -128,6 +62,12 @@ pub struct Identifier {
     pub ident: NameId,
 }
 
+impl From<Identifier> for Expression {
+    fn from(val: Identifier) -> Self {
+        Expression::Identifier(val)
+    }
+}
+
 impl ContextEq<super::Component> for Identifier {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
         context.get_name(self.ident) == context.get_name(other.ident)
@@ -138,6 +78,12 @@ impl ContextEq<super::Component> for Identifier {
 pub struct EnumLiteral {
     pub enum_name: NameId,
     pub case_name: NameId,
+}
+
+impl From<EnumLiteral> for Expression {
+    fn from(val: EnumLiteral) -> Self {
+        Expression::Enum(val)
+    }
 }
 
 impl ContextEq<super::Component> for EnumLiteral {
@@ -154,6 +100,12 @@ pub enum Literal {
     String(String),
 }
 
+impl From<Literal> for Expression {
+    fn from(val: Literal) -> Self {
+        Expression::Literal(val)
+    }
+}
+
 impl ContextEq<super::Component> for Literal {
     fn context_eq(&self, other: &Self, _context: &super::Component) -> bool {
         self == other
@@ -164,6 +116,12 @@ impl ContextEq<super::Component> for Literal {
 pub struct Call {
     pub ident: NameId,
     pub args: Vec<ExpressionId>,
+}
+
+impl From<Call> for Expression {
+    fn from(val: Call) -> Self {
+        Expression::Call(val)
+    }
 }
 
 impl ContextEq<super::Component> for Call {
@@ -193,10 +151,16 @@ pub struct UnaryExpression {
     pub inner: ExpressionId,
 }
 
+impl From<UnaryExpression> for Expression {
+    fn from(val: UnaryExpression) -> Self {
+        Expression::Unary(val)
+    }
+}
+
 impl ContextEq<super::Component> for UnaryExpression {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
-        let self_inner = context.expr().get_exp(self.inner);
-        let other_inner = context.expr().get_exp(other.inner);
+        let self_inner = context.get_expression(self.inner);
+        let other_inner = context.get_expression(other.inner);
         self_inner.context_eq(other_inner, context)
     }
 }
@@ -242,14 +206,20 @@ pub struct BinaryExpression {
     pub right: ExpressionId,
 }
 
+impl From<BinaryExpression> for Expression {
+    fn from(val: BinaryExpression) -> Self {
+        Expression::Binary(val)
+    }
+}
+
 impl ContextEq<super::Component> for BinaryExpression {
     fn context_eq(&self, other: &Self, context: &super::Component) -> bool {
-        let self_left = context.expr().get_exp(self.left);
-        let other_left = context.expr().get_exp(other.left);
+        let self_left = context.get_expression(self.left);
+        let other_left = context.get_expression(other.left);
         let left_eq = self_left.context_eq(other_left, context);
 
-        let self_right = context.expr().get_exp(self.right);
-        let other_right = context.expr().get_exp(other.right);
+        let self_right = context.get_expression(self.right);
+        let other_right = context.get_expression(other.right);
         let right_eq = self_right.context_eq(other_right, context);
 
         left_eq && right_eq

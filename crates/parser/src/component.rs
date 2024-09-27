@@ -48,7 +48,7 @@ fn parse_import(
         _ => return Err(input.unexpected_token("Invalid import")),
     };
 
-    Ok(comp.imports.push(import))
+    Ok(comp.push_import(import))
 }
 
 fn parse_plain_import(
@@ -162,7 +162,7 @@ fn parse_global(
         init_value,
     };
 
-    Ok(comp.globals.push(global))
+    Ok(comp.push_global(global))
 }
 
 fn parse_func(
@@ -184,7 +184,7 @@ fn parse_func(
         body,
     };
 
-    Ok(comp.functions.push(function))
+    Ok(comp.push_function(function))
 }
 
 fn parse_params(

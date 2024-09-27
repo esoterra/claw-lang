@@ -58,8 +58,14 @@ fn parse_let(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId
     let expression = parse_expression(input, comp)?;
     let end_span = input.assert_next(Token::Semicolon, "Semicolon ';'")?;
 
+    let statement = ast::Let {
+        mutable,
+        ident,
+        annotation,
+        expression,
+    };
     let span = merge(&start_span, &end_span);
-    Ok(comp.alloc_let(mutable, ident, annotation, expression, span))
+    Ok(comp.new_statement(ast::Statement::Let(statement), span))
 }
 
 fn parse_return(input: &mut ParseInput, comp: &mut Component) -> Result<StatementId, ParserError> {
