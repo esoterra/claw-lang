@@ -8,12 +8,14 @@ use claw_resolver::{
     ImportFuncId, ImportFunction, ImportItemId, ImportType, ImportTypeId, ResolvedInterface,
 };
 
+use claw_ast as ast;
 use claw_resolver::{ResolvedComponent, ResolvedType};
 use wasm_encoder as enc;
 
 pub struct ImportEncoder<'gen> {
     builder: &'gen mut ComponentBuilder,
-    resolved_comp: &'gen ResolvedComponent,
+    comp: &'gen ast::Component,
+    rcomp: &'gen ResolvedComponent,
     memory: ComponentCoreMemoryIndex,
     realloc: ComponentCoreFunctionIndex,
 
@@ -50,11 +52,15 @@ pub struct SpilledResults {
 }
 
 impl EncodedImportFunc {
-    pub fn new(import_func: &ImportFunction, comp: &ResolvedComponent) -> Self {
+    pub fn new(
+        import_func: &ImportFunction,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+    ) -> Self {
         // Encode Params
         let mut core_params = Vec::new();
         for (_, rtype) in import_func.params.iter() {
-            rtype.append_flattened(comp, &mut core_params);
+            rtype.append_flattened(comp, rcomp, &mut core_params);
         }
         let spill_params = core_params.len() > MAX_FLAT_PARAMS as usize;
         let spill_params = if spill_params {
@@ -65,11 +71,11 @@ impl EncodedImportFunc {
             let mut align = 0;
             let mut params = Vec::new();
             for (_, rtype) in import_func.params.iter() {
-                let param_align = rtype.align(comp);
+                let param_align = rtype.align(comp, rcomp);
                 mem_offset = align_to(mem_offset, param_align);
                 align = std::cmp::max(align, param_align);
                 params.push(ParamInfo { mem_offset });
-                mem_offset += rtype.mem_size(comp);
+                mem_offset += rtype.mem_size(comp, rcomp);
             }
             let size = mem_offset;
             Some(SpilledParams {
@@ -83,14 +89,14 @@ impl EncodedImportFunc {
         // Encode results
         let mut core_results = Vec::new();
         let spill_results = if let Some(rtype) = import_func.results {
-            rtype.append_flattened(comp, &mut core_results);
+            rtype.append_flattened(comp, rcomp, &mut core_results);
             let spill_results = core_results.len() > MAX_FLAT_RESULTS as usize;
             match spill_results {
                 true => {
                     core_params.push(enc::ValType::I32);
                     core_results.clear();
-                    let size = rtype.mem_size(comp);
-                    let align = rtype.align(comp);
+                    let size = rtype.mem_size(comp, rcomp);
+                    let align = rtype.align(comp, rcomp);
                     Some(SpilledResults { size, align })
                 }
                 false => None,
@@ -117,7 +123,8 @@ impl EncodedImportFunc {
 impl<'gen> ImportEncoder<'gen> {
     pub fn new(
         builder: &'gen mut ComponentBuilder,
-        resolved_comp: &'gen ResolvedComponent,
+        comp: &'gen ast::Component,
+        rcomp: &'gen ResolvedComponent,
         memory: ComponentCoreMemoryIndex,
         realloc: ComponentCoreFunctionIndex,
     ) -> Self {
@@ -126,7 +133,8 @@ impl<'gen> ImportEncoder<'gen> {
 
         Self {
             builder,
-            resolved_comp,
+            comp,
+            rcomp,
             memory,
             realloc,
             funcs,
@@ -135,7 +143,7 @@ impl<'gen> ImportEncoder<'gen> {
     }
 
     pub fn encode(mut self) -> Result<EncodedImports, GenerationError> {
-        for interface in self.resolved_comp.imports.interfaces.iter() {
+        for interface in self.rcomp.imports.interfaces.iter() {
             self.encode_interface(interface)?;
         }
 
@@ -154,8 +162,8 @@ impl<'gen> ImportEncoder<'gen> {
 
     fn encode_loose_funcs(&mut self) {
         // Import the loose functions
-        for id in self.resolved_comp.imports.loose_funcs.iter().copied() {
-            let import_func = &self.resolved_comp.imports.funcs[id];
+        for id in self.rcomp.imports.loose_funcs.iter().copied() {
+            let import_func = &self.rcomp.imports.funcs[id];
             let import_alias = import_func.alias.as_str();
             let import_name = import_func.name.as_str();
 
@@ -163,7 +171,7 @@ impl<'gen> ImportEncoder<'gen> {
             let func_idx = self.builder.import_func(import_name, type_idx);
             let core_func_idx = self.builder.lower_func(func_idx, self.memory, self.realloc);
 
-            let enc_import_func = EncodedImportFunc::new(import_func, self.resolved_comp);
+            let enc_import_func = EncodedImportFunc::new(import_func, self.comp, self.rcomp);
             self.funcs.insert(id, enc_import_func);
 
             self.inline_export_args.push((
@@ -193,11 +201,10 @@ impl<'gen> ImportEncoder<'gen> {
     }
 
     fn rtype_to_comp_valtype(&self, rtype: ResolvedType) -> enc::ComponentValType {
-        let comp = &self.resolved_comp;
         match rtype {
-            ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp),
+            ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(self.comp, self.rcomp),
             ResolvedType::Import(_) => todo!(),
-            ResolvedType::Defined(type_id) => type_id.to_comp_valtype(comp),
+            ResolvedType::Defined(type_id) => type_id.to_comp_valtype(self.comp, self.rcomp),
         }
     }
 }
@@ -252,7 +259,7 @@ impl<'a, 'b, 'c> ImportInterfaceEncoder<'a, 'b, 'c> {
     fn encode_rtype(&mut self, rtype: ResolvedType) {
         match rtype {
             ResolvedType::Import(id) => {
-                let import_type = &self.parent.resolved_comp.imports.types[id];
+                let import_type = &self.parent.rcomp.imports.types[id];
                 match import_type {
                     ImportType::Enum(enum_type) => {
                         // Define type
@@ -280,12 +287,13 @@ impl<'a, 'b, 'c> ImportInterfaceEncoder<'a, 'b, 'c> {
     }
 
     fn encode_func(&mut self, id: ImportFuncId) {
-        let import_func = &self.parent.resolved_comp.imports.funcs[id];
+        let import_func = &self.parent.rcomp.imports.funcs[id];
         let func_type_id = self.encode_func_type(import_func);
         let ty = enc::ComponentTypeRef::Func(func_type_id);
         self.instance_type.export(&import_func.name, ty);
 
-        let enc_import_func = EncodedImportFunc::new(import_func, self.parent.resolved_comp);
+        let enc_import_func =
+            EncodedImportFunc::new(import_func, self.parent.comp, self.parent.rcomp);
         self.parent.funcs.insert(id, enc_import_func);
     }
 
@@ -328,7 +336,7 @@ impl<'a, 'b, 'c> ImportInterfaceEncoder<'a, 'b, 'c> {
             match item {
                 ImportItemId::Type(_) => {}
                 ImportItemId::Func(id) => {
-                    let import_func = &self.parent.resolved_comp.imports.funcs[*id];
+                    let import_func = &self.parent.rcomp.imports.funcs[*id];
                     let func_idx = self
                         .parent
                         .builder
@@ -349,14 +357,17 @@ impl<'a, 'b, 'c> ImportInterfaceEncoder<'a, 'b, 'c> {
     }
 
     fn rtype_to_comp_valtype(&self, rtype: ResolvedType) -> enc::ComponentValType {
-        let comp = &self.parent.resolved_comp;
         match rtype {
-            ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp),
+            ResolvedType::Primitive(ptype) => {
+                ptype.to_comp_valtype(self.parent.comp, self.parent.rcomp)
+            }
             ResolvedType::Import(itype) => {
                 let index = *self.exported_ids.get(&itype).unwrap();
                 enc::ComponentValType::Type(index)
             }
-            ResolvedType::Defined(type_id) => type_id.to_comp_valtype(comp),
+            ResolvedType::Defined(type_id) => {
+                type_id.to_comp_valtype(self.parent.comp, self.parent.rcomp)
+            }
         }
     }
 }

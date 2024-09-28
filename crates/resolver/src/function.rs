@@ -1,6 +1,6 @@
 use ast::{ExpressionId, NameId, Span, StatementId, TypeId};
 use claw_ast as ast;
-use claw_common::{Source, StackMap};
+use claw_common::StackMap;
 
 use cranelift_entity::{entity_impl, EntityList, ListPool, PrimaryMap};
 use std::collections::{HashMap, VecDeque};
@@ -15,7 +15,6 @@ use crate::types::ResolvedType;
 use crate::{ItemId, ResolverError};
 
 pub(crate) struct FunctionResolver<'ctx> {
-    pub(crate) src: Source,
     pub(crate) component: &'ctx ast::Component,
     pub(crate) imports: &'ctx ImportResolver,
     pub(crate) function: &'ctx ast::Function,
@@ -72,7 +71,6 @@ entity_impl!(LocalId, "local");
 
 impl<'ctx> FunctionResolver<'ctx> {
     pub(crate) fn new(
-        src: Source,
         component: &'ctx ast::Component,
         imports: &'ctx ImportResolver,
         function: &'ctx ast::Function,
@@ -88,7 +86,6 @@ impl<'ctx> FunctionResolver<'ctx> {
         }
 
         FunctionResolver {
-            src,
             component,
             imports,
             function,
@@ -183,7 +180,7 @@ impl<'ctx> FunctionResolver<'ctx> {
         let span = self.component.name_span(ident);
         let ident = self.component.get_name(ident).to_owned();
         Err(ResolverError::NameError {
-            src: self.src.clone(),
+            src: self.component.source(),
             span,
             ident,
         })
@@ -219,7 +216,7 @@ impl<'ctx> FunctionResolver<'ctx> {
                         if !next_type.type_eq(existing_type, self.component) {
                             let span = self.component.expression_span(expression);
                             return Err(ResolverError::TypeConflict {
-                                src: self.src.clone(),
+                                src: self.component.source(),
                                 span,
                                 type_a: *existing_type,
                                 type_b: next_type,
@@ -290,7 +287,7 @@ impl<'ctx> FunctionResolver<'ctx> {
             labels = vec![LabeledSpan::at(span, "here")],
             "Skipping already resolved expression"
         );
-        println!("{:?}", report.with_source_code(self.src.clone()));
+        println!("{:?}", report.with_source_code(self.component.source()));
     }
 
     #[cfg(test)]
@@ -300,7 +297,7 @@ impl<'ctx> FunctionResolver<'ctx> {
             labels = vec![LabeledSpan::at(span, "here")],
             "Resolved type of expression"
         );
-        println!("{:?}", report.with_source_code(self.src.clone()));
+        println!("{:?}", report.with_source_code(self.component.source()));
     }
 
     #[cfg(test)]
@@ -310,7 +307,7 @@ impl<'ctx> FunctionResolver<'ctx> {
             labels = vec![LabeledSpan::at(span, "here")],
             "No parent exists to be updated for"
         );
-        println!("{:?}", report.with_source_code(self.src.clone()));
+        println!("{:?}", report.with_source_code(self.component.source()));
     }
 
     #[cfg(test)]
@@ -320,7 +317,7 @@ impl<'ctx> FunctionResolver<'ctx> {
             labels = vec![LabeledSpan::at(*span, "here")],
             "Skipping already resolved local"
         );
-        println!("{:?}", report.with_source_code(self.src.clone()));
+        println!("{:?}", report.with_source_code(self.component.source()));
     }
 
     #[cfg(test)]
@@ -330,7 +327,7 @@ impl<'ctx> FunctionResolver<'ctx> {
             labels = vec![LabeledSpan::at(*span, "here")],
             "Resolved type of local"
         );
-        println!("{:?}", report.with_source_code(self.src.clone()));
+        println!("{:?}", report.with_source_code(self.component.source()));
     }
 }
 
@@ -354,7 +351,7 @@ impl ResolvedFunction {
     pub fn local_type(
         &self,
         local: LocalId,
-        context: &ast::Component,
+        comp: &ast::Component,
     ) -> Result<ResolvedType, ResolverError> {
         let rtype = self.local_types.get(&local);
         match rtype {
@@ -362,7 +359,7 @@ impl ResolvedFunction {
             None => {
                 let span = self.local_spans.get(&local).unwrap().to_owned();
                 Err(ResolverError::Base {
-                    src: context.source(),
+                    src: comp.source(),
                     span,
                 })
             }
@@ -372,15 +369,15 @@ impl ResolvedFunction {
     pub fn expression_type(
         &self,
         expression: ExpressionId,
-        context: &ast::Component,
+        comp: &ast::Component,
     ) -> Result<ResolvedType, ResolverError> {
         let rtype = self.expression_types.get(&expression);
         match rtype {
             Some(rtype) => Ok(*rtype),
             None => {
-                let span = context.expression_span(expression);
+                let span = comp.expression_span(expression);
                 Err(ResolverError::Base {
-                    src: context.source(),
+                    src: comp.source(),
                     span,
                 })
             }

@@ -5,13 +5,15 @@ use crate::types::{ResolvedType, RESOLVED_BOOL};
 use crate::{FunctionResolver, ItemId, ResolverError};
 
 pub(crate) trait ResolveExpression {
-    /// Setup must
-    /// * Call `define_name` when introducing new names
-    /// * Call `use_name` when using a name
-    /// * Call `setup_child` on each expression that is a child of this one.
+    /// Walk the AST from this node down setting up the resolver.
     ///
-    /// Setup may
-    /// * Call `set_implied_type` if the type of an expression is known.
+    /// Implementations must
+    /// * Call [FunctionResolver::define_name] when introducing new names
+    /// * Call [FunctionResolver::use_name] when using a name
+    /// * Call [FunctionResolver::setup_child_expression] on each expression that is a child of this one.
+    ///
+    /// Implementations may
+    /// * Call [FunctionResolver::set_expr_type] if the type of an expression is known.
     fn setup_resolve(
         &self,
         expression: ExpressionId,
