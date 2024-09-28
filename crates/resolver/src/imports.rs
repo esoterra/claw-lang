@@ -282,3 +282,5 @@ impl<'ctx> InterfaceResolver<'ctx> {
         rtype
     }
 }
+
+pub struct ResolvedImports {}

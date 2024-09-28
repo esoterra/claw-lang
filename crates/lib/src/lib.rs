@@ -31,13 +31,13 @@ pub fn compile(source_name: String, source_code: &str, wit: Resolve) -> Result<V
 
     let tokens = tokenize(src.clone(), source_code)?;
 
-    let ast = parse(src.clone(), tokens)?;
+    let comp = parse(src.clone(), tokens)?;
 
     let wit = ResolvedWit::new(wit);
 
-    let resolved = resolve(src, ast, wit)?;
+    let rcomp = resolve(&comp, wit)?;
 
-    let output = generate(&resolved)?;
+    let output = generate(&comp, &rcomp)?;
 
     Ok(output)
 }

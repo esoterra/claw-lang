@@ -15,16 +15,17 @@ use crate::{
 };
 
 pub(crate) fn generate(
-    resolved_comp: &ResolvedComponent,
+    comp: &ast::Component,
+    rcomp: &ResolvedComponent,
     imports: &EncodedImports,
     functions: &EncodedFuncs,
 ) -> Result<enc::Module, GenerationError> {
-    ModuleGenerator::new(resolved_comp, imports, functions).generate()
+    ModuleGenerator::new(comp, rcomp, imports, functions).generate()
 }
 
 pub struct ModuleGenerator<'gen> {
-    pub resolved_comp: &'gen ResolvedComponent,
     pub comp: &'gen ast::Component,
+    pub rcomp: &'gen ResolvedComponent,
     imports: &'gen EncodedImports,
     functions: &'gen EncodedFuncs,
     pub module: ModuleBuilder,
@@ -35,13 +36,14 @@ pub struct ModuleGenerator<'gen> {
 
 impl<'gen> ModuleGenerator<'gen> {
     fn new(
-        resolved_comp: &'gen ResolvedComponent,
+        comp: &'gen ast::Component,
+        rcomp: &'gen ResolvedComponent,
         imports: &'gen EncodedImports,
         functions: &'gen EncodedFuncs,
     ) -> Self {
         Self {
-            resolved_comp,
-            comp: &resolved_comp.component,
+            comp,
+            rcomp,
             imports,
             functions,
             module: Default::default(),
@@ -54,7 +56,7 @@ impl<'gen> ModuleGenerator<'gen> {
         // There is only ever one memory, memory zero
         let (_memory, realloc, clear) = self.encode_import_allocator();
 
-        for (id, import_func) in self.resolved_comp.imports.funcs.iter() {
+        for (id, import_func) in self.rcomp.imports.funcs.iter() {
             let encoded_import_func = self.imports.funcs.get(&id).unwrap();
             let func_idx = self.encode_import_func(import_func, encoded_import_func);
             self.func_idx_for_import.insert(id, func_idx);
@@ -63,7 +65,7 @@ impl<'gen> ModuleGenerator<'gen> {
         self.encode_globals()?;
 
         // Encode functions
-        for (id, function) in self.resolved_comp.component.iter_functions() {
+        for (id, function) in self.comp.iter_functions() {
             let encoded_func = self.functions.funcs.get(&id).unwrap();
             let func_idx = self.encode_func(function, encoded_func)?;
             self.func_idx_for_func.insert(id, func_idx);
@@ -73,7 +75,8 @@ impl<'gen> ModuleGenerator<'gen> {
             let id = *id;
             let code_gen = CodeGenerator::new(
                 &mut self.module,
-                self.resolved_comp,
+                self.comp,
+                self.rcomp,
                 self.imports,
                 self.functions,
                 &self.func_idx_for_import,
@@ -88,7 +91,7 @@ impl<'gen> ModuleGenerator<'gen> {
         }
 
         // Encode post returns
-        for (id, function) in self.resolved_comp.component.iter_functions() {
+        for (id, function) in self.comp.iter_functions() {
             // Encode function
             let ident = function.ident;
             let encoded_func = self.functions.funcs.get(&id).unwrap();
@@ -131,11 +134,11 @@ impl<'gen> ModuleGenerator<'gen> {
 
     fn encode_globals(&mut self) -> Result<(), GenerationError> {
         for (id, global) in self.comp.iter_globals() {
-            let valtypes = global.type_id.flatten(self.resolved_comp);
+            let valtypes = global.type_id.flatten(self.comp, self.rcomp);
             assert_eq!(valtypes.len(), 1, "Cannot use non-primitive globals");
             let valtype = valtypes[0];
 
-            let init_expr = if let Some(init_value) = self.resolved_comp.global_vals.get(&id) {
+            let init_expr = if let Some(init_value) = self.rcomp.global_vals.get(&id) {
                 let valtype = self.comp.get_type(global.type_id);
                 match valtype {
                     ast::ValType::Result(_) => todo!(),
@@ -174,13 +177,12 @@ impl<'gen> ModuleGenerator<'gen> {
         function: &ast::Function,
         encoded_func: &EncodedFunction,
     ) -> Result<ModuleFunctionIndex, GenerationError> {
-        let comp = &self.resolved_comp.component;
         let type_idx = encoded_func.encode_mod_type(&mut self.module);
         let func_idx = self.module.function(type_idx);
 
         if function.exported {
             let ident = function.ident;
-            let name = comp.get_name(ident);
+            let name = self.comp.get_name(ident);
             // Export function from module
             self.module.export_func(name, func_idx);
         }

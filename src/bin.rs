@@ -38,16 +38,16 @@ impl Compile {
 
         let tokens = tokenize(src.clone(), &file_string).ok_pretty()?;
 
-        let ast = parse(src.clone(), tokens).ok_pretty()?;
+        let comp = parse(src.clone(), tokens).ok_pretty()?;
 
         let mut wit = Resolve::new();
         if let Some(wit_path) = self.wit {
             wit.push_path(wit_path).unwrap();
         }
         let wit = ResolvedWit::new(wit);
-        let resolved = resolve(src, ast, wit).ok_pretty()?;
+        let rcomp = resolve(&comp, wit).ok_pretty()?;
 
-        let wasm = generate(&resolved).ok_pretty()?;
+        let wasm = generate(&comp, &rcomp).ok_pretty()?;
 
         match fs::write(&self.output, wasm) {
             Ok(_) => println!("Done"),

@@ -22,8 +22,6 @@ pub use imports::*;
 pub use types::*;
 
 pub struct ResolvedComponent {
-    pub src: Source,
-    pub component: ast::Component,
     pub wit: ResolvedWit,
     pub global_vals: HashMap<GlobalId, ast::Literal>,
     pub imports: ImportResolver,
@@ -94,14 +92,13 @@ pub enum ResolverError {
 }
 
 pub fn resolve(
-    src: Source,
-    comp: ast::Component,
+    comp: &ast::Component,
     wit: wit::ResolvedWit,
 ) -> Result<ResolvedComponent, ResolverError> {
     let mut mappings: HashMap<String, ItemId> = Default::default();
 
     let mut imports = ImportResolver::default();
-    imports.resolve_imports(&comp, &wit)?;
+    imports.resolve_imports(comp, &wit)?;
     for (name, import) in imports.mapping.iter() {
         match import {
             ImportItemId::Type(rtype) => {
@@ -135,13 +132,11 @@ pub fn resolve(
     let mut funcs: HashMap<FunctionId, ResolvedFunction> = HashMap::new();
 
     for (id, function) in comp.iter_functions() {
-        let resolver = FunctionResolver::new(src.clone(), &comp, &imports, function, &mappings);
+        let resolver = FunctionResolver::new(comp, &imports, function, &mappings);
         funcs.insert(id, resolver.resolve()?);
     }
 
     Ok(ResolvedComponent {
-        src,
-        component: comp,
         wit,
         global_vals,
         imports,

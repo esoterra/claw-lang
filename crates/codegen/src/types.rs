@@ -20,118 +20,151 @@ fn string_append_fields(out: &mut Vec<FieldInfo>) {
 pub const STRING_CONTENTS_ALIGNMENT: u32 = 0;
 
 pub trait EncodeType {
-    fn flat_size(&self, comp: &ResolvedComponent) -> u32;
+    fn flat_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32;
 
-    fn append_flattened(&self, comp: &ResolvedComponent, out: &mut Vec<enc::ValType>);
+    fn append_flattened(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<enc::ValType>,
+    );
 
-    fn flatten(&self, comp: &ResolvedComponent) -> Vec<enc::ValType> {
+    fn flatten(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> Vec<enc::ValType> {
         let mut out = Vec::new();
-        self.append_flattened(comp, &mut out);
+        self.append_flattened(comp, rcomp, &mut out);
         out
     }
 
-    fn append_fields(&self, comp: &ResolvedComponent, out: &mut Vec<FieldInfo>);
+    fn append_fields(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<FieldInfo>,
+    );
 
-    fn fields(&self, comp: &ResolvedComponent) -> Vec<FieldInfo> {
+    fn fields(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> Vec<FieldInfo> {
         let mut out = Vec::new();
-        self.append_fields(comp, &mut out);
+        self.append_fields(comp, rcomp, &mut out);
         out
     }
 
-    fn to_comp_valtype(&self, comp: &ResolvedComponent) -> enc::ComponentValType;
+    fn to_comp_valtype(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+    ) -> enc::ComponentValType;
 
     #[allow(dead_code)]
-    fn mem_arg(&self, comp: &ResolvedComponent) -> enc::MemArg {
+    fn mem_arg(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> enc::MemArg {
         enc::MemArg {
-            align: self.align(comp),
+            align: self.align(comp, rcomp),
             offset: 0,
             memory_index: 0,
         }
     }
 
-    fn align(&self, comp: &ResolvedComponent) -> u32;
+    fn align(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32;
 
-    fn mem_size(&self, comp: &ResolvedComponent) -> u32;
+    fn mem_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32;
 }
 
 impl EncodeType for ResolvedType {
-    fn flat_size(&self, comp: &ResolvedComponent) -> u32 {
+    fn flat_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
         match *self {
-            ResolvedType::Primitive(ptype) => ptype.flat_size(comp),
+            ResolvedType::Primitive(ptype) => ptype.flat_size(comp, rcomp),
             ResolvedType::Import(id) => {
-                let import_type = &comp.imports.types[id];
-                import_type.flat_size(comp)
+                let import_type = &rcomp.imports.types[id];
+                import_type.flat_size(comp, rcomp)
             }
-            ResolvedType::Defined(type_id) => type_id.flat_size(comp),
+            ResolvedType::Defined(type_id) => type_id.flat_size(comp, rcomp),
         }
     }
 
-    fn append_flattened(&self, comp: &ResolvedComponent, out: &mut Vec<enc::ValType>) {
+    fn append_flattened(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<enc::ValType>,
+    ) {
         match *self {
-            ResolvedType::Primitive(ptype) => ptype.append_flattened(comp, out),
+            ResolvedType::Primitive(ptype) => ptype.append_flattened(comp, rcomp, out),
             ResolvedType::Import(id) => {
-                let import_type = &comp.imports.types[id];
-                import_type.append_flattened(comp, out)
+                let import_type = &rcomp.imports.types[id];
+                import_type.append_flattened(comp, rcomp, out)
             }
-            ResolvedType::Defined(type_id) => type_id.append_flattened(comp, out),
+            ResolvedType::Defined(type_id) => type_id.append_flattened(comp, rcomp, out),
         }
     }
 
-    fn append_fields(&self, comp: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
+    fn append_fields(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<FieldInfo>,
+    ) {
         match *self {
-            ResolvedType::Primitive(ptype) => ptype.append_fields(comp, out),
+            ResolvedType::Primitive(ptype) => ptype.append_fields(comp, rcomp, out),
             ResolvedType::Import(id) => {
-                let import_type = &comp.imports.types[id];
-                import_type.append_fields(comp, out)
+                let import_type = &rcomp.imports.types[id];
+                import_type.append_fields(comp, rcomp, out)
             }
-            ResolvedType::Defined(type_id) => type_id.append_fields(comp, out),
+            ResolvedType::Defined(type_id) => type_id.append_fields(comp, rcomp, out),
         }
     }
 
-    fn to_comp_valtype(&self, comp: &ResolvedComponent) -> enc::ComponentValType {
+    fn to_comp_valtype(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+    ) -> enc::ComponentValType {
         match *self {
-            ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp),
+            ResolvedType::Primitive(ptype) => ptype.to_comp_valtype(comp, rcomp),
             ResolvedType::Import(id) => {
-                let import_type = &comp.imports.types[id];
-                import_type.to_comp_valtype(comp)
+                let import_type = &rcomp.imports.types[id];
+                import_type.to_comp_valtype(comp, rcomp)
             }
-            ResolvedType::Defined(type_id) => type_id.to_comp_valtype(comp),
+            ResolvedType::Defined(type_id) => type_id.to_comp_valtype(comp, rcomp),
         }
     }
 
-    fn align(&self, comp: &ResolvedComponent) -> u32 {
+    fn align(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
         match *self {
-            ResolvedType::Primitive(ptype) => ptype.align(comp),
+            ResolvedType::Primitive(ptype) => ptype.align(comp, rcomp),
             ResolvedType::Import(id) => {
-                let import_type = &comp.imports.types[id];
-                import_type.align(comp)
+                let import_type = &rcomp.imports.types[id];
+                import_type.align(comp, rcomp)
             }
-            ResolvedType::Defined(type_id) => type_id.align(comp),
+            ResolvedType::Defined(type_id) => type_id.align(comp, rcomp),
         }
     }
 
-    fn mem_size(&self, comp: &ResolvedComponent) -> u32 {
+    fn mem_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
         match *self {
-            ResolvedType::Primitive(ptype) => ptype.mem_size(comp),
+            ResolvedType::Primitive(ptype) => ptype.mem_size(comp, rcomp),
             ResolvedType::Import(id) => {
-                let import_type = &comp.imports.types[id];
-                import_type.mem_size(comp)
+                let import_type = &rcomp.imports.types[id];
+                import_type.mem_size(comp, rcomp)
             }
-            ResolvedType::Defined(type_id) => type_id.mem_size(comp),
+            ResolvedType::Defined(type_id) => type_id.mem_size(comp, rcomp),
         }
     }
 }
 
 impl EncodeType for ImportType {
-    fn flat_size(&self, _comp: &ResolvedComponent) -> u32 {
+    fn flat_size(&self, _: &ast::Component, _: &ResolvedComponent) -> u32 {
         1
     }
 
-    fn append_flattened(&self, _comp: &ResolvedComponent, out: &mut Vec<enc::ValType>) {
+    fn append_flattened(
+        &self,
+        _: &ast::Component,
+        _: &ResolvedComponent,
+        out: &mut Vec<enc::ValType>,
+    ) {
         out.push(enc::ValType::I32);
     }
 
-    fn append_fields(&self, _comp: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
+    fn append_fields(&self, _: &ast::Component, _: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
         out.push(FieldInfo {
             stack_type: enc::ValType::I32,
             signedness: Signedness::Unsigned,
@@ -143,104 +176,137 @@ impl EncodeType for ImportType {
         })
     }
 
-    fn to_comp_valtype(&self, _comp: &ResolvedComponent) -> enc::ComponentValType {
+    fn to_comp_valtype(&self, _: &ast::Component, _: &ResolvedComponent) -> enc::ComponentValType {
         todo!()
     }
 
-    fn align(&self, _comp: &ResolvedComponent) -> u32 {
+    fn align(&self, _: &ast::Component, _: &ResolvedComponent) -> u32 {
         1
     }
 
-    fn mem_size(&self, _comp: &ResolvedComponent) -> u32 {
+    fn mem_size(&self, _: &ast::Component, _: &ResolvedComponent) -> u32 {
         1
     }
 }
 
 impl EncodeType for TypeId {
-    fn flat_size(&self, comp: &ResolvedComponent) -> u32 {
-        let valtype = comp.component.get_type(*self);
-        valtype.flat_size(comp)
+    fn flat_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
+        let valtype = comp.get_type(*self);
+        valtype.flat_size(comp, rcomp)
     }
 
-    fn append_flattened(&self, comp: &ResolvedComponent, out: &mut Vec<enc::ValType>) {
-        let valtype = comp.component.get_type(*self);
-        valtype.append_flattened(comp, out);
+    fn append_flattened(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<enc::ValType>,
+    ) {
+        let valtype = comp.get_type(*self);
+        valtype.append_flattened(comp, rcomp, out);
     }
 
-    fn append_fields(&self, comp: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
-        let valtype = comp.component.get_type(*self);
-        valtype.append_fields(comp, out);
+    fn append_fields(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<FieldInfo>,
+    ) {
+        let valtype = comp.get_type(*self);
+        valtype.append_fields(comp, rcomp, out);
     }
 
-    fn to_comp_valtype(&self, comp: &ResolvedComponent) -> enc::ComponentValType {
-        let valtype = comp.component.get_type(*self);
-        valtype.to_comp_valtype(comp)
+    fn to_comp_valtype(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+    ) -> enc::ComponentValType {
+        let valtype = comp.get_type(*self);
+        valtype.to_comp_valtype(comp, rcomp)
     }
 
-    fn align(&self, comp: &ResolvedComponent) -> u32 {
-        let valtype = comp.component.get_type(*self);
-        valtype.align(comp)
+    fn align(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
+        let valtype = comp.get_type(*self);
+        valtype.align(comp, rcomp)
     }
 
-    fn mem_size(&self, comp: &ResolvedComponent) -> u32 {
-        let valtype = comp.component.get_type(*self);
-        valtype.mem_size(comp)
+    fn mem_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
+        let valtype = comp.get_type(*self);
+        valtype.mem_size(comp, rcomp)
     }
 }
 
 impl EncodeType for ast::ValType {
-    fn flat_size(&self, comp: &ResolvedComponent) -> u32 {
+    fn flat_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
         match *self {
             ast::ValType::Result(_) => todo!(),
-            ast::ValType::Primitive(ptype) => ptype.flat_size(comp),
+            ast::ValType::Primitive(ptype) => ptype.flat_size(comp, rcomp),
         }
     }
 
-    fn append_flattened(&self, comp: &ResolvedComponent, out: &mut Vec<enc::ValType>) {
+    fn append_flattened(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<enc::ValType>,
+    ) {
         match *self {
             ast::ValType::Result(_) => todo!(),
-            ast::ValType::Primitive(ptype) => ptype.append_flattened(comp, out),
+            ast::ValType::Primitive(ptype) => ptype.append_flattened(comp, rcomp, out),
         }
     }
 
-    fn append_fields(&self, comp: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
+    fn append_fields(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+        out: &mut Vec<FieldInfo>,
+    ) {
         match *self {
             ast::ValType::Result(_) => todo!(),
-            ast::ValType::Primitive(ptype) => ptype.append_fields(comp, out),
+            ast::ValType::Primitive(ptype) => ptype.append_fields(comp, rcomp, out),
         }
     }
 
-    fn to_comp_valtype(&self, comp: &ResolvedComponent) -> enc::ComponentValType {
+    fn to_comp_valtype(
+        &self,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
+    ) -> enc::ComponentValType {
         match *self {
             ast::ValType::Result(_) => todo!(),
-            ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(comp),
+            ast::ValType::Primitive(ptype) => ptype.to_comp_valtype(comp, rcomp),
         }
     }
 
-    fn align(&self, comp: &ResolvedComponent) -> u32 {
+    fn align(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
         match *self {
             ast::ValType::Result(_) => todo!(),
-            ast::ValType::Primitive(ptype) => ptype.align(comp),
+            ast::ValType::Primitive(ptype) => ptype.align(comp, rcomp),
         }
     }
 
-    fn mem_size(&self, comp: &ResolvedComponent) -> u32 {
+    fn mem_size(&self, comp: &ast::Component, rcomp: &ResolvedComponent) -> u32 {
         match *self {
             ast::ValType::Result(_) => todo!(),
-            ast::ValType::Primitive(ptype) => ptype.mem_size(comp),
+            ast::ValType::Primitive(ptype) => ptype.mem_size(comp, rcomp),
         }
     }
 }
 
 impl EncodeType for ast::PrimitiveType {
-    fn flat_size(&self, _comp: &ResolvedComponent) -> u32 {
+    fn flat_size(&self, _: &ast::Component, _: &ResolvedComponent) -> u32 {
         match *self {
             ast::PrimitiveType::String => 2,
             _ => 1,
         }
     }
 
-    fn append_flattened(&self, _comp: &ResolvedComponent, out: &mut Vec<enc::ValType>) {
+    fn append_flattened(
+        &self,
+        _: &ast::Component,
+        _: &ResolvedComponent,
+        out: &mut Vec<enc::ValType>,
+    ) {
         let valtype = match *self {
             ast::PrimitiveType::Bool
             | ast::PrimitiveType::U8
@@ -260,7 +326,7 @@ impl EncodeType for ast::PrimitiveType {
         out.push(valtype);
     }
 
-    fn append_fields(&self, _comp: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
+    fn append_fields(&self, _: &ast::Component, _: &ResolvedComponent, out: &mut Vec<FieldInfo>) {
         let field = match self {
             ast::PrimitiveType::Bool => BOOL_FIELD,
             ast::PrimitiveType::U8 => U8_FIELD,
@@ -281,15 +347,15 @@ impl EncodeType for ast::PrimitiveType {
         out.push(field);
     }
 
-    fn to_comp_valtype(&self, _comp: &ResolvedComponent) -> enc::ComponentValType {
+    fn to_comp_valtype(&self, _: &ast::Component, _: &ResolvedComponent) -> enc::ComponentValType {
         enc::ComponentValType::Primitive(ptype_to_pvaltype(*self))
     }
 
-    fn align(&self, _comp: &ResolvedComponent) -> u32 {
+    fn align(&self, _: &ast::Component, _: &ResolvedComponent) -> u32 {
         ptype_align(*self)
     }
 
-    fn mem_size(&self, _comp: &ResolvedComponent) -> u32 {
+    fn mem_size(&self, _: &ast::Component, _: &ResolvedComponent) -> u32 {
         ptype_mem_size(*self)
     }
 }

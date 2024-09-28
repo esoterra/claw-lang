@@ -15,7 +15,8 @@ use crate::{
 };
 
 pub struct FunctionEncoder<'gen> {
-    resolved_comp: &'gen ResolvedComponent,
+    comp: &'gen ast::Component,
+    rcomp: &'gen ResolvedComponent,
 
     funcs: HashMap<FunctionId, EncodedFunction>,
 }
@@ -44,18 +45,15 @@ pub struct ParamInfo {
 }
 
 impl<'gen> FunctionEncoder<'gen> {
-    pub fn new(resolved_comp: &'gen ResolvedComponent) -> Self {
+    pub fn new(comp: &'gen ast::Component, rcomp: &'gen ResolvedComponent) -> Self {
         let funcs = HashMap::new();
 
-        Self {
-            resolved_comp,
-            funcs,
-        }
+        Self { comp, rcomp, funcs }
     }
 
     pub fn encode(mut self) -> Result<EncodedFuncs, GenerationError> {
         // Encode function
-        for (id, function) in self.resolved_comp.component.iter_functions() {
+        for (id, function) in self.comp.iter_functions() {
             let func = self.encode_func(function)?;
             self.funcs.insert(id, func);
         }
@@ -67,19 +65,18 @@ impl<'gen> FunctionEncoder<'gen> {
         &mut self,
         function: &ast::Function,
     ) -> Result<EncodedFunction, GenerationError> {
-        let comp = &self.resolved_comp.component;
         let params = function
             .params
             .iter()
             .map(|(name, type_id)| {
-                let name = comp.get_name(*name).to_owned();
+                let name = self.comp.get_name(*name).to_owned();
                 let rtype = ResolvedType::Defined(*type_id);
                 (name, rtype)
             })
             .collect();
         let results = function.results.map(ResolvedType::Defined);
 
-        let func = EncodedFunction::new(params, results, self.resolved_comp);
+        let func = EncodedFunction::new(params, results, self.comp, self.rcomp);
         Ok(func)
     }
 }
@@ -88,14 +85,15 @@ impl EncodedFunction {
     pub fn new(
         params: Vec<(String, ResolvedType)>,
         results: Option<ResolvedType>,
-        comp: &ResolvedComponent,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
     ) -> Self {
         // Layout parameters
-        let (spill_params, params, flat_params) = prepare_params(params, comp);
+        let (spill_params, params, flat_params) = prepare_params(params, comp, rcomp);
         // Layout return types
         let results = results.map(|results| ResultsInfo {
             rtype: results,
-            spill: ResultSpillInfo::new(results, comp),
+            spill: ResultSpillInfo::new(results, comp, rcomp),
         });
 
         Self {
@@ -110,16 +108,17 @@ impl EncodedFunction {
     pub fn encode_comp_type(
         &self,
         builder: &mut ComponentBuilder,
-        comp: &ResolvedComponent,
+        comp: &ast::Component,
+        rcomp: &ResolvedComponent,
     ) -> ComponentTypeIndex {
         let params = self
             .params
             .iter()
-            .map(|info| (info.name.as_str(), info.rtype.to_comp_valtype(comp)));
+            .map(|info| (info.name.as_str(), info.rtype.to_comp_valtype(comp, rcomp)));
         let result = self
             .results
             .as_ref()
-            .map(|info| info.rtype.to_comp_valtype(comp));
+            .map(|info| info.rtype.to_comp_valtype(comp, rcomp));
         builder.func_type(params, result)
     }
 
@@ -135,7 +134,8 @@ impl EncodedFunction {
 
 fn prepare_params(
     params: Vec<(String, ResolvedType)>,
-    comp: &ResolvedComponent,
+    comp: &ast::Component,
+    rcomp: &ResolvedComponent,
 ) -> (Option<SpilledParams>, Vec<ParamInfo>, Vec<enc::ValType>) {
     // Flatten parameters
     let mut flat_params = Vec::new();
@@ -145,7 +145,7 @@ fn prepare_params(
 
     for (name, rtype) in params {
         let index_offset = flat_params.len() as u32;
-        let alignment = rtype.align(comp);
+        let alignment = rtype.align(comp, rcomp);
         mem_offset = align_to(mem_offset, alignment);
         align = std::cmp::max(align, alignment);
         let info = ParamInfo {
@@ -155,8 +155,8 @@ fn prepare_params(
             mem_offset,
         };
         param_info.push(info);
-        rtype.append_flattened(comp, &mut flat_params);
-        mem_offset += rtype.mem_size(comp);
+        rtype.append_flattened(comp, rcomp, &mut flat_params);
+        mem_offset += rtype.mem_size(comp, rcomp);
     }
     // Either generate as locals or spill to memory based on flattened size
     let spill = flat_params.len() > MAX_FLAT_PARAMS as usize;
@@ -188,11 +188,11 @@ pub enum ResultSpillInfo {
 }
 
 impl ResultSpillInfo {
-    pub fn new(rtype: ResolvedType, comp: &ResolvedComponent) -> Self {
-        if rtype.flat_size(comp) > MAX_FLAT_RESULTS as u32 {
+    pub fn new(rtype: ResolvedType, comp: &ast::Component, rcomp: &ResolvedComponent) -> Self {
+        if rtype.flat_size(comp, rcomp) > MAX_FLAT_RESULTS as u32 {
             ResultSpillInfo::Spilled
         } else {
-            let result_types = rtype.flatten(comp);
+            let result_types = rtype.flatten(comp, rcomp);
             assert_eq!(result_types.len(), 1);
             let valtype = result_types[0];
             ResultSpillInfo::Flat { valtype }

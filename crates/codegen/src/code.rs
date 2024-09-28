@@ -24,7 +24,8 @@ pub struct CodeGenerator<'gen> {
     mod_builder: &'gen mut ModuleBuilder,
 
     // Context
-    comp: &'gen ResolvedComponent,
+    comp: &'gen ast::Component,
+    rcomp: &'gen ResolvedComponent,
     imports: &'gen EncodedImports,
     functions: &'gen EncodedFuncs,
     func_idx_for_import: &'gen HashMap<ImportFuncId, ModuleFunctionIndex>,
@@ -60,7 +61,8 @@ impl<'gen> CodeGenerator<'gen> {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         mod_builder: &'gen mut ModuleBuilder,
-        comp: &'gen ResolvedComponent,
+        comp: &'gen ast::Component,
+        rcomp: &'gen ResolvedComponent,
         imports: &'gen EncodedImports,
         functions: &'gen EncodedFuncs,
         func_idx_for_import: &'gen HashMap<ImportFuncId, ModuleFunctionIndex>,
@@ -69,8 +71,8 @@ impl<'gen> CodeGenerator<'gen> {
         id: FunctionId,
         realloc: ModuleFunctionIndex,
     ) -> Result<Self, GenerationError> {
-        let function = &comp.component.get_function(id);
-        let resolved_func = &comp.funcs[&id];
+        let function = &comp.get_function(id);
+        let resolved_func = &rcomp.funcs[&id];
 
         let mut local_space = encoded_func.flat_params.clone();
         let locals_start = local_space.len();
@@ -95,19 +97,24 @@ impl<'gen> CodeGenerator<'gen> {
         let mut index_for_local = HashMap::new();
         let mut locals = Vec::with_capacity(resolved_func.locals.len());
         for (id, _local) in resolved_func.locals.iter() {
-            let rtype = resolved_func.local_type(id, &comp.component)?;
+            let rtype = resolved_func.local_type(id, comp)?;
             let local_id = CoreLocalId((local_space.len() + locals.len()) as u32);
             index_for_local.insert(id, local_id);
-            rtype.append_flattened(comp, &mut locals);
+            rtype.append_flattened(comp, rcomp, &mut locals);
         }
         local_space.extend(locals);
 
         // Layout expressions
         let mut index_for_expr = HashMap::new();
-        let mut allocator =
-            ExpressionAllocator::new(comp, resolved_func, &mut local_space, &mut index_for_expr);
+        let mut allocator = ExpressionAllocator::new(
+            comp,
+            rcomp,
+            resolved_func,
+            &mut local_space,
+            &mut index_for_expr,
+        );
         for statement in function.body.iter() {
-            let statement = comp.component.get_statement(*statement);
+            let statement = comp.get_statement(*statement);
             statement.alloc_expr_locals(&mut allocator)?;
         }
 
@@ -120,13 +127,13 @@ impl<'gen> CodeGenerator<'gen> {
             builder.instruction(&enc::Instruction::I32Const(0));
             builder.instruction(&enc::Instruction::I32Const(0));
 
-            let result_type = comp.component.get_function(id).results.unwrap();
+            let result_type = comp.get_function(id).results.unwrap();
             // align
-            let align = result_type.align(comp);
+            let align = result_type.align(comp, rcomp);
             let align = 2u32.pow(align);
             builder.instruction(&enc::Instruction::I32Const(align as i32));
             // new size
-            let size = result_type.mem_size(comp);
+            let size = result_type.mem_size(comp, rcomp);
             builder.instruction(&enc::Instruction::I32Const(size as i32));
             // call allocator
             builder.instruction(&enc::Instruction::Call(realloc.into()));
@@ -137,6 +144,7 @@ impl<'gen> CodeGenerator<'gen> {
         Ok(Self {
             mod_builder,
             comp,
+            rcomp,
             imports,
             functions,
             realloc,
@@ -156,12 +164,12 @@ impl<'gen> CodeGenerator<'gen> {
     }
 
     pub fn encode_statement(&mut self, statement: StatementId) -> Result<(), GenerationError> {
-        let stmt = self.comp.component.get_statement(statement);
+        let stmt = self.comp.get_statement(statement);
         stmt.encode(self)
     }
 
     pub fn encode_child(&mut self, expression: ExpressionId) -> Result<(), GenerationError> {
-        let expr = self.comp.component.get_expression(expression);
+        let expr = self.comp.get_expression(expression);
         expr.encode(expression, self)
     }
 
@@ -178,9 +186,7 @@ impl<'gen> CodeGenerator<'gen> {
         &self,
         expression: ExpressionId,
     ) -> Result<ResolvedType, GenerationError> {
-        let type_id = self
-            .resolved_func
-            .expression_type(expression, &self.comp.component)?;
+        let type_id = self.resolved_func.expression_type(expression, self.comp)?;
         Ok(type_id)
     }
 
@@ -193,7 +199,7 @@ impl<'gen> CodeGenerator<'gen> {
             ResolvedType::Primitive(ptype) => Some(ptype),
             ResolvedType::Import(_) => todo!(),
             ResolvedType::Defined(type_id) => {
-                let valtype = self.comp.component.get_type(type_id);
+                let valtype = self.comp.get_type(type_id);
                 match valtype {
                     ast::ValType::Result(_) => None,
                     ast::ValType::Primitive(ptype) => Some(*ptype),
@@ -205,7 +211,7 @@ impl<'gen> CodeGenerator<'gen> {
 
     pub fn one_field(&self, expression: ExpressionId) -> Result<FieldInfo, GenerationError> {
         let rtype = self.expression_type(expression)?;
-        let mut fields = rtype.fields(self.comp);
+        let mut fields = rtype.fields(self.comp, self.rcomp);
         assert_eq!(
             fields.len(),
             1,
@@ -216,7 +222,7 @@ impl<'gen> CodeGenerator<'gen> {
 
     pub fn fields(&self, expression: ExpressionId) -> Result<Vec<FieldInfo>, GenerationError> {
         let rtype = self.expression_type(expression)?;
-        Ok(rtype.fields(self.comp))
+        Ok(rtype.fields(self.comp, self.rcomp))
     }
 
     pub fn lookup_name(&self, ident: NameId) -> ItemId {
@@ -224,11 +230,11 @@ impl<'gen> CodeGenerator<'gen> {
     }
 
     pub fn lookup_name_str(&self, ident: NameId) -> &str {
-        self.comp.component.get_name(ident)
+        self.comp.get_name(ident)
     }
 
     pub fn lookup_import_type(&self, id: ImportTypeId) -> &ImportType {
-        &self.comp.imports.types[id]
+        &self.rcomp.imports.types[id]
     }
 
     pub fn spill_return(&self) -> bool {
@@ -567,7 +573,8 @@ impl<'gen> CodeGenerator<'gen> {
 
 pub struct ExpressionAllocator<'a> {
     // Context
-    comp: &'a ResolvedComponent,
+    comp: &'a ast::Component,
+    rcomp: &'a ResolvedComponent,
     func: &'a ResolvedFunction,
     // State
     local_space: &'a mut Vec<enc::ValType>,
@@ -576,13 +583,15 @@ pub struct ExpressionAllocator<'a> {
 
 impl<'a> ExpressionAllocator<'a> {
     pub fn new(
-        comp: &'a ResolvedComponent,
+        comp: &'a ast::Component,
+        rcomp: &'a ResolvedComponent,
         func: &'a ResolvedFunction,
         local_space: &'a mut Vec<enc::ValType>,
         index_for_expr: &'a mut HashMap<ExpressionId, CoreLocalId>,
     ) -> Self {
         Self {
             comp,
+            rcomp,
             func,
             local_space,
             index_for_expr,
@@ -595,10 +604,8 @@ impl<'a> ExpressionAllocator<'a> {
         let index = CoreLocalId(index);
         self.index_for_expr.insert(expression, index);
         // Allocate locals
-        let rtype = self
-            .func
-            .expression_type(expression, &self.comp.component)?;
-        rtype.append_flattened(self.comp, self.local_space);
+        let rtype = self.func.expression_type(expression, self.comp)?;
+        rtype.append_flattened(self.comp, self.rcomp, self.local_space);
         Ok(())
     }
 
@@ -609,12 +616,12 @@ impl<'a> ExpressionAllocator<'a> {
     }
 
     pub fn alloc_child(&mut self, expression: ExpressionId) -> Result<(), GenerationError> {
-        let expr = self.comp.component.get_expression(expression);
+        let expr = self.comp.get_expression(expression);
         expr.alloc_expr_locals(expression, self)
     }
 
     pub fn alloc_statement(&mut self, statement: StatementId) -> Result<(), GenerationError> {
-        let statement = self.comp.component.get_statement(statement);
+        let statement = self.comp.get_statement(statement);
         statement.alloc_expr_locals(self)
     }
 }
