@@ -66,7 +66,13 @@ impl ResolveStatement for ast::Assign {
 
         match item {
             ItemId::Global(global) => {
-                let global = resolver.component.get_global(global);
+                let global = resolver.component.get_global(global).ok_or_else(|| {
+                    ResolverError::UndefinedGlobal {
+                        src: resolver.component.source(),
+                        span: resolver.component.name_span(self.ident),
+                        ident: resolver.component.get_name(self.ident).to_string(),
+                    }
+                })?;
                 resolver.set_expr_type(self.expression, ResolvedType::Defined(global.type_id));
 
                 if !global.mutable {
